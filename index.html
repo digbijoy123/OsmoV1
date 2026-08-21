@@ -902,6 +902,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     let data=null;
     try{data=await response.json();}catch(_){}
     if(!response.ok){
+      if(response.status===503 && data && /not configured/i.test(data.error||'')){
+        throw new Error('AI_NOT_CONFIGURED');
+      }
       throw new Error(data&&data.error?data.error:`AI backend returned HTTP ${response.status}`);
     }
     if(!data||typeof data.reply!=='string'||!data.reply.trim()) throw new Error('AI returned an empty response');
@@ -931,10 +934,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       speak(reply);
     }catch(err){
       console.error(err);
-      log('AI ERROR · '+(err&&err.message?err.message:String(err)));
-      if(devAI) devAI.textContent='ERROR';
-      if(devStage) devStage.textContent='AI ERROR';
-      setState('confused','AI backend error');
+      const message=err&&err.message?err.message:String(err);
+      if(message==='AI_NOT_CONFIGURED'){
+        log('AI · backend not configured · using local fallback');
+        if(devAI) devAI.textContent='NOT CONNECTED · LOCAL FALLBACK';
+        if(devStage) devStage.textContent='LOCAL FALLBACK';
+        setState('curious','AI offline · local brain active');
+      }else{
+        log('AI ERROR · '+message);
+        if(devAI) devAI.textContent='ERROR';
+        if(devStage) devStage.textContent='AI ERROR';
+        setState('confused','AI backend error');
+      }
       speak(localFallback(text));
     }
   }
@@ -978,7 +989,7 @@ function devLog(type,msg,data){
 }
 function devStageSet(s){if(devStage)devStage.textContent=s;devLog("STAGE",s)}
 if(devBrowser)devBrowser.textContent=navigator.userAgent.includes("Chrome")?"Chrome":"Other";
-if(devAI)devAI.textContent="READY · /api/robo";
+if(devAI)devAI.textContent="NOT CONNECTED · LOCAL FALLBACK";
 if(devStt)devStt.textContent=(window.SpeechRecognition||window.webkitSpeechRecognition)?"SUPPORTED":"UNSUPPORTED";
 if(devMic)devMic.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
 if(devMicPermission)devMicPermission.textContent="UNKNOWN · tap ENABLE CAM + MIC";
