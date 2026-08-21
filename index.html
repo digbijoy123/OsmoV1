@@ -686,11 +686,87 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   async function startCamera(){
-    if(!navigator.mediaDevices?.getUserMedia) throw new Error('Camera API unavailable');
-    cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30,max:30}},audio:false});
-    $('#camera').srcObject=cameraStream;
-    $('#cameraBox').classList.remove('empty');
-    await $('#camera').play().catch(()=>{});
+    if(!navigator.mediaDevices?.getUserMedia){
+      throw new Error('Camera API unavailable');
+    }
+
+    // Camera-only lifecycle: stop any stale camera stream first.
+    if(cameraStream){
+      cameraStream.getTracks().forEach(t=>t.stop());
+      cameraStream=null;
+    }
+
+    const video=$('#camera');
+    const box=$('#cameraBox');
+
+    // These are required for reliable inline camera playback on Android.
+    video.autoplay=true;
+    video.playsInline=true;
+    video.muted=true;
+
+    let stream;
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({
+        video:{
+          facingMode:{ideal:'user'},
+          width:{ideal:1280},
+          height:{ideal:720},
+          frameRate:{ideal:30,max:30}
+        },
+        audio:false
+      });
+    }catch(firstErr){
+      log('CAM · preferred request failed · '+(firstErr?.name||'unknown'));
+      // Fallback to the simplest possible camera request.
+      stream=await navigator.mediaDevices.getUserMedia({
+        video:true,
+        audio:false
+      });
+    }
+
+    const track=stream.getVideoTracks()[0];
+    if(!track){
+      stream.getTracks().forEach(t=>t.stop());
+      throw new Error('Camera permission granted but no video track returned');
+    }
+
+    cameraStream=stream;
+    video.srcObject=stream;
+    box.classList.remove('empty');
+
+    log('CAM · stream acquired · '+(track.label||'video track'));
+
+    try{
+      await video.play();
+      log('CAM · LIVE · '+video.videoWidth+'x'+video.videoHeight);
+      if(devCamera)devCamera.textContent='LIVE · '+video.videoWidth+'x'+video.videoHeight;
+    }catch(playErr){
+      log('CAM · PLAY FAILED · '+(playErr?.name||'unknown')+' · '+(playErr?.message||''));
+      if(devCamera)devCamera.textContent='ERROR · PLAY FAILED';
+
+      // The enableMedia/cameraBox click is a user gesture, so retry once
+      // after explicitly restoring the inline playback properties.
+      video.muted=true;
+      video.playsInline=true;
+      video.autoplay=true;
+      try{
+        await video.play();
+        log('CAM · LIVE AFTER PLAY RETRY · '+video.videoWidth+'x'+video.videoHeight);
+        if(devCamera)devCamera.textContent='LIVE · '+video.videoWidth+'x'+video.videoHeight;
+      }catch(retryErr){
+        stream.getTracks().forEach(t=>t.stop());
+        cameraStream=null;
+        box.classList.add('empty');
+        throw new Error('Camera stream opened but video playback failed: '+(retryErr?.message||retryErr?.name||'unknown'));
+      }
+    }
+
+    track.onended=()=>{
+      log('CAM · TRACK ENDED');
+      if(devCamera)devCamera.textContent='ENDED';
+    };
+    track.onmute=()=>log('CAM · TRACK MUTED');
+    track.onunmute=()=>log('CAM · TRACK UNMUTED');
   }
 
   async function enableMedia(){
@@ -714,87 +790,85 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   $('#mediaBtn').addEventListener('click',enableMedia);
   $('#cameraBox').addEventListener('click',enableMedia);
 
-  /* ---------- Speech recognition (stable Chrome/Android pipeline) ---------- */
+  /* ---------- Speech recognition (v2.12 hardened pipeline) ---------- */
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  let sttSession=0,sttHadResult=false,sttHadSpeech=false,sttRetryUsed=false;
-  let sttLastErrorCode="",sttNoMatch=false,sttWatchdog=null;
+  let sttSession=0;
+  let sttHadResult=false;
+  let sttHadSpeech=false;
+  let sttRetryUsed=false;
+  let sttLastErrorCode="";
+  let sttNoMatch=false;
+  let sttWatchdog=null;
 
   function buildRecognition(){
-    if(!SR)return null;
+    if(!SR) return null;
     const r=new SR();
+    /* Keep recognition aligned with the last known-good Android/Chrome build.
+       Do not opt into experimental local recognition here. */
     r.continuous=false;
     r.interimResults=true;
     r.maxAlternatives=1;
     r.lang='en-US';
 
-    const sttEvent=(name,detail='')=>{
-      log('STT · '+name+(detail?' · '+detail:''));
-      devLog('STT',name+(detail?' · '+detail:''));
-    };
+    const sttEvent=(name,detail='')=>log('STT · '+name+(detail?' · '+detail:''));
+    r.onaudiostart=()=>{sttHadSpeech=false;sttEvent('audio start');setVoiceStatus('MIC ACTIVE · STT LISTENING');};
+    r.onsoundstart=()=>{sttEvent('sound detected');setVoiceStatus('SOUND DETECTED · STT ACTIVE');};
+    r.onspeechstart=()=>{sttHadSpeech=true;sttEvent('speech detected');setVoiceStatus('VOICE DETECTED · TRANSCRIBING');};
+    r.onspeechend=()=>{sttEvent('speech ended');};
+    r.onsoundend=()=>{sttEvent('sound ended');};
+    r.onaudioend=()=>{sttEvent('audio ended');};
+    r.onnomatch=()=>{sttNoMatch=true;sttEvent('NO MATCH · speech detected but no words recognized');setVoiceStatus('STT NO MATCH · Chrome heard speech but returned no words');if(devStage)devStage.textContent='NO MATCH · NO TRANSCRIPT';};
 
     r.onstart=()=>{
-      listening=true;sttStarting=false;sttHadResult=false;sttHadSpeech=false;
-      sttLastErrorCode='';sttNoMatch=false;clearTimeout(sttWatchdog);
+      listening=true; sttStarting=false; sttHadResult=false; sttHadSpeech=false; sttLastErrorCode=''; sttNoMatch=false;
+      clearTimeout(sttWatchdog);
       sttWatchdog=setTimeout(()=>{
-        if(listening&&!sttHadResult){
-          sttEvent('WATCHDOG · no transcript after 12s');
-          setVoiceStatus('STT WAITING · no transcript returned');
-          if(devStage)devStage.textContent='LISTENING · NO TRANSCRIPT YET';
+        if(listening && sttHadSpeech && !sttHadResult){
+          sttEvent('WATCHDOG · speech detected but no transcript after 12s');
+          setVoiceStatus('STT WAITING · Chrome heard you but has not returned text');
         }
       },12000);
       micBtn.classList.add('listening');
       setState('listening','listening · capturing speech');
       setVoiceStatus('MIC ACTIVE · STT LISTENING');
-      sttEvent('SESSION START #'+sttSession);
-    };
-
-    r.onaudiostart=()=>{sttEvent('AUDIOSTART');if(devStage)devStage.textContent='AUDIO INPUT ACTIVE';};
-    r.onsoundstart=()=>{sttEvent('SOUNDSTART');if(devStage)devStage.textContent='SOUND DETECTED';};
-    r.onspeechstart=()=>{sttHadSpeech=true;sttEvent('SPEECHSTART');if(devStage)devStage.textContent='VOICE DETECTED';};
-    r.onspeechend=()=>{sttEvent('SPEECHEND');if(devStage)devStage.textContent='VOICE ENDED';};
-    r.onsoundend=()=>sttEvent('SOUNDEND');
-    r.onaudioend=()=>sttEvent('AUDIOEND');
-
-    r.onnomatch=()=>{
-      sttNoMatch=true;
-      sttEvent('NO MATCH · speech detected but no words recognized');
-      if(devStage)devStage.textContent='NO MATCH · NO TRANSCRIPT';
-      setVoiceStatus('STT NO MATCH · Chrome heard speech but returned no words');
+      sttEvent('session start #'+sttSession);
     };
 
     r.onresult=(e)=>{
-      let interim='',finalText='';
-      for(let i=e.resultIndex;i<e.results.length;i++){
-        const result=e.results[i],alt=result&&result[0];
-        if(!alt)continue;
-        const tx=(alt.transcript||'').trim();
-        if(!tx)continue;
-        if(result.isFinal)finalText+=(finalText?' ':'')+tx;
-        else interim+=(interim?' ':'')+tx;
-      }
-      const spoken=(finalText||interim).trim();
-      if(!spoken)return;
       sttHadResult=true;
-      if(devTranscript)devTranscript.textContent=spoken;
+      let interim='',finalText='';
+      const changed=[];
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        const result=e.results[i];
+        const alt=result && result[0];
+        if(!alt) continue;
+        const tx=(alt.transcript||'').trim();
+        if(tx) changed.push({index:i,final:!!result.isFinal,text:tx,confidence:Number(alt.confidence||0)});
+        if(result.isFinal) finalText+=(tx?' '+tx:''); else interim+=(tx?' '+tx:'');
+      }
+      finalText=finalText.trim(); interim=interim.trim();
+      const text=(finalText||interim).trim();
+      if(text){
+        const first=changed[0]||{};
+        sttEvent(first.final?'FINAL RESULT': 'INTERIM RESULT',text+' · confidence '+(first.confidence||0).toFixed(3));
+        showCaption('ROBO HEARS\n'+text,true);
+        if(devTranscript) devTranscript.textContent=text;
+        if(devStage) devStage.textContent=first.final?'FINAL TRANSCRIPT RECEIVED':'INTERIM TRANSCRIPT RECEIVED';
+      }
       if(finalText){
-        sttEvent('FINAL RESULT',finalText);
-        if(devStage)devStage.textContent='FINAL TRANSCRIPT RECEIVED';
-        showCaption('ROBO HEARS\n'+finalText,true);
+        const q=finalText;
         setState('thinking','thinking · processing your words');
-        setTimeout(()=>respond(finalText),350);
-      }else{
-        sttEvent('INTERIM RESULT',interim);
-        if(devStage)devStage.textContent='INTERIM TRANSCRIPT RECEIVED';
-        showCaption('ROBO HEARS\n'+interim,true);
+        setTimeout(()=>respond(q),350);
       }
     };
 
     r.onerror=(e)=>{
-      listening=false;sttStarting=false;micBtn.classList.remove('listening');clearTimeout(sttWatchdog);
-      const code=e?.error||'unknown';
+      listening=false; sttStarting=false; micBtn.classList.remove('listening');
+      clearTimeout(sttWatchdog);
+      const code=e&&e.error?e.error:'unknown';
       sttLastErrorCode=code;
-      devLog('STT ERROR',code+(e?.message?' · '+e.message:''));
-      log('STT · ERROR · '+code+(e?.message?' · '+e.message:''));
+      sttEvent('ERROR',code+(e&&e.message?' · '+e.message:''));
+      setState('confused','voice · '+code);
       const messages={
         'not-allowed':'STT ERROR · microphone permission blocked',
         'service-not-allowed':'STT ERROR · speech service unavailable',
@@ -804,63 +878,58 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         'aborted':'STT stopped · tap mic to try again',
         'language-not-supported':'STT ERROR · language not supported'
       };
-      setState('confused','voice · '+code);
       setVoiceStatus(messages[code]||('STT ERROR · '+code));
-      if(devStage)devStage.textContent='STT ERROR · '+code;
+      if(code==='audio-capture'||code==='not-allowed') $('#mediaText').textContent='MIC ERROR';
+      hideCaption(6000);
     };
 
     r.onend=()=>{
-      listening=false;sttStarting=false;micBtn.classList.remove('listening');clearTimeout(sttWatchdog);
-      sttEvent('ENDED');
-      if(sttHadSpeech&&!sttHadResult&&!sttNoMatch&&!sttLastErrorCode&&!sttRetryUsed){
-        sttRetryUsed=true;
-        sttEvent('NO RESULT · speech detected but returned no transcript');
-        setVoiceStatus('STT NO RESULT · retrying once');
-        if(devStage)devStage.textContent='SPEECH DETECTED · NO TRANSCRIPT';
-        setTimeout(()=>startSTT(true),450);
-        return;
+      listening=false; sttStarting=false; micBtn.classList.remove('listening');
+      clearTimeout(sttWatchdog);
+      sttEvent('ended');
+      if(sttHadSpeech && !sttHadResult && !sttNoMatch && !sttLastErrorCode){
+        sttEvent('NO RESULT · Chrome detected speech but returned no transcript');
+        setVoiceStatus('STT NO RESULT · speech detected, transcript not returned');
+        if(devStage) devStage.textContent='SPEECH DETECTED · NO TRANSCRIPT';
+        /* One clean retry catches stale Chrome recognition sessions without
+           creating an endless restart loop. */
+        if(!sttRetryUsed){
+          sttRetryUsed=true;
+          setTimeout(()=>startSTT(true),450);
+          return;
+        }
       }
       sttRetryUsed=false;
-      if(!talking&&state==='listening')setState('curious','curious · standing by');
+      if(!talking && state==='listening') setState('curious','curious · standing by');
     };
-    return r;
+    return hookRecognitionDiagnostics(r);
   }
 
-  if(SR)recognition=buildRecognition();
+  if(SR) recognition=buildRecognition();
 
   async function startSTT(isRetry=false){
-    if(!recognition){
-      setVoiceStatus('STT UNAVAILABLE · Chrome SpeechRecognition not exposed');
-      if(devStage)devStage.textContent='STT UNSUPPORTED';
-      return;
-    }
+    if(!recognition){setVoiceStatus('STT UNAVAILABLE · Chrome SpeechRecognition not exposed');return;}
     if(listening||sttStarting)return;
     try{
-      sttSession++;sttStarting=true;
+      sttSession++;
+      /* Reuse the same recognizer across sessions, as in the known-good build.
+         Release getUserMedia before SpeechRecognition owns the microphone. */
+      sttStarting=true;
       setVoiceStatus(isRetry?'STT RETRY · speak now…':'MIC HANDOFF · releasing audio input for STT…');
-      devLog('STT',isRetry?'retry session':'microphone handoff');
-
       if(micPermissionStream){micPermissionStream.getTracks().forEach(t=>t.stop());micPermissionStream=null;}
       if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}
       if(micMeterRAF){cancelAnimationFrame(micMeterRAF);micMeterRAF=null;}
       if(micAudioContext){await micAudioContext.close().catch(()=>{});micAudioContext=null;micAnalyser=null;}
-
       await new Promise(r=>setTimeout(r,150));
       setVoiceStatus('STT STARTING · speak now…');
-      devLog('STT','starting SpeechRecognition · en-US');
       recognition.start();
     }catch(e){
       sttStarting=false;
-      devLog('STT ERROR','start exception · '+(e?.name||'Error')+' · '+(e?.message||String(e)));
-      setVoiceStatus('STT START FAILED · '+(e?.message||String(e)));
-      if(devStage)devStage.textContent='STT START FAILED';
+      console.warn(e);log('STT start exception · '+e.message);
+      setVoiceStatus('STT START FAILED · '+e.message);
+      hideCaption(6000);
     }
   }
-
-  /* ---------- Voice diagnostic button behavior ---------- */
-  $('#mediaText').addEventListener('click',()=>{
-    if(micPermissionStream)setVoiceStatus('MIC READY · level meter active · STT waiting');
-  });
 
   /* ---------- AI brain (v2.12) ----------
      Provider-neutral client adapter. The browser talks only to /api/robo.
@@ -1107,6 +1176,25 @@ window.addEventListener("unhandledrejection",e=>{
     }).join(" "));
   };
 });
+
+function hookRecognitionDiagnostics(r){
+  if(!r)return r;
+  const wrap=(name,stage)=>{
+    const old=r[name];
+    r[name]=function(e){
+      devLog("STT",name.replace(/^on/,"").toUpperCase());
+      if(stage)devStageSet(stage);
+      if(typeof old==="function")old.call(this,e);
+    };
+  };
+  wrap("onaudiostart","AUDIO INPUT ACTIVE");
+  wrap("onsoundstart","SOUND DETECTED");
+  wrap("onspeechstart","VOICE DETECTED");
+  wrap("onspeechend","VOICE ENDED");
+  wrap("onsoundend",null);
+  wrap("onaudioend",null);
+  return r;
+}
 
   /* ---------- Orientation test ---------- */
   function setOrientation(land){
