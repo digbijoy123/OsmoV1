@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS — v2.12 camera-fixed</title>
+<title>ROBO AIOS — v2.13 media-stt-fixed</title>
 <style>
 :root{
   --void:#090d15;
@@ -678,14 +678,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }catch(e){ log('MIC · meter unavailable: '+e.message); }
   }
 
-  async function requestMicPermission(){
-    if(!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone API unavailable');
-    const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1},video:false});
-    micPermissionStream=stream;
-    startMicMeter(stream);
-    return stream;
-  }
-
   function stopCamera(){
     if(cameraStream){
       cameraStream.getTracks().forEach(t=>t.stop());
@@ -699,7 +691,16 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     $('#cameraBox')?.classList.add('empty');
   }
 
-  let cameraStartPromise=null;
+  function releaseMicForSTT(){
+    // SpeechRecognition on Android Chrome needs exclusive ownership of the
+    // microphone. Never keep a getUserMedia audio track open while STT runs.
+    if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}
+    if(micPermissionStream){micPermissionStream.getTracks().forEach(t=>t.stop());micPermissionStream=null;}
+    if(micMeterRAF){cancelAnimationFrame(micMeterRAF);micMeterRAF=null;}
+    if(micAnalyser){try{micAnalyser.disconnect();}catch(_){} micAnalyser=null;}
+    if(micAudioContext){micAudioContext.close().catch(()=>{});micAudioContext=null;}
+    micVoiceLevel=0;
+  }
 
   async function startCamera(){
     if(!navigator.mediaDevices?.getUserMedia) throw new Error('Camera API unavailable');
@@ -708,167 +709,157 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const box=$('#cameraBox');
     if(!video || !box) throw new Error('Camera UI unavailable');
 
-    // IMPORTANT: do not start a second camera request while one is already
-    // opening, and do not tear down a working stream just because the button
-    // was tapped again. A second srcObject/load can interrupt video.play()
-    // on Android Chrome.
-    if(cameraStartPromise) return cameraStartPromise;
-
+    // Never tear down a working stream just because the user taps again.
     if(cameraStream){
       const track=cameraStream.getVideoTracks()[0];
-      if(track && track.readyState==='live'){
+      if(track?.readyState==='live'){
         if(video.srcObject!==cameraStream) video.srcObject=cameraStream;
-        if(video.paused){
-          try{ await video.play(); }catch(_){}
-        }
         box.classList.remove('empty');
-        log('CAM · already live · reusing existing stream');
+        if(video.paused){
+          try{await video.play();}catch(e){
+            if(e?.name!=='AbortError') throw e;
+          }
+        }
+        log('CAM · existing live stream reused');
         return cameraStream;
       }
     }
 
-    cameraStartPromise=(async()=>{
-      log('CAM · requesting camera permission');
+    log('CAM · requesting camera permission');
 
-      let stream;
-      try{
-        stream=await navigator.mediaDevices.getUserMedia({
-          video:{
-            facingMode:{ideal:'user'},
-            width:{ideal:1280},
-            height:{ideal:720},
-            frameRate:{ideal:30,max:30}
-          },
-          audio:false
-        });
-      }catch(firstErr){
-        log('CAM · preferred constraints failed · '+(firstErr?.name||'unknown'));
-        stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
-      }
+    let stream;
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({
+        video:{
+          facingMode:{ideal:'user'},
+          width:{ideal:1280},
+          height:{ideal:720},
+          frameRate:{ideal:30,max:30}
+        },
+        audio:false
+      });
+    }catch(firstErr){
+      log('CAM · preferred constraints failed · '+(firstErr?.name||'unknown'));
+      stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+    }
 
-      const track=stream.getVideoTracks()[0];
-      if(!track){
-        stream.getTracks().forEach(t=>t.stop());
-        throw new Error('Camera permission granted but no video track returned');
-      }
+    const track=stream.getVideoTracks()[0];
+    if(!track){
+      stream.getTracks().forEach(t=>t.stop());
+      throw new Error('Camera permission granted but no video track returned');
+    }
 
-      cameraStream=stream;
-      video.autoplay=true;
-      video.playsInline=true;
-      video.muted=true;
-      video.srcObject=stream;
-      box.classList.remove('empty');
+    cameraStream=stream;
+    video.autoplay=true;
+    video.playsInline=true;
+    video.muted=true;
+    video.srcObject=stream;
+    box.classList.remove('empty');
 
-      log('CAM · permission granted · '+(track.label||'video track'));
-      log('CAM · track state '+track.readyState+' · enabled '+track.enabled);
-
-      // Wait for metadata before calling play(). Do not assign srcObject or
-      // call play() again from another handler while this is pending.
-      if(video.readyState < HTMLMediaElement.HAVE_METADATA){
-        await new Promise((resolve,reject)=>{
-          const onMeta=()=>{cleanup();resolve();};
-          const onError=()=>{cleanup();reject(new Error('Camera video element failed to load stream'));};
-          const cleanup=()=>{
-            video.removeEventListener('loadedmetadata',onMeta);
-            video.removeEventListener('error',onError);
-          };
-          video.addEventListener('loadedmetadata',onMeta,{once:true});
-          video.addEventListener('error',onError,{once:true});
-        });
-      }
-
+    const playCamera=async()=>{
       try{
         await video.play();
       }catch(err){
-        // If another load did interrupt playback, give the media element one
-        // controlled retry without replacing the stream.
         if(err?.name==='AbortError'){
-          await new Promise(r=>setTimeout(r,120));
-          if(video.srcObject===stream && !video.ended) await video.play();
+          // Android Chrome can briefly report an interrupted play while the
+          // MediaStream attaches. Retry without replacing srcObject.
+          await new Promise(r=>setTimeout(r,180));
+          if(video.srcObject===stream && track.readyState==='live') await video.play();
         }else{
           throw err;
         }
       }
+    };
 
-      log('CAM · video playing · '+video.videoWidth+'x'+video.videoHeight);
-      if(video.videoWidth>0 && video.videoHeight>0) log('CAM · LIVE');
-
-      video.onloadedmetadata=()=>log('CAM · metadata · '+video.videoWidth+'x'+video.videoHeight);
-      video.onplaying=()=>log('CAM · PLAYING');
-      video.onpause=()=>log('CAM · PAUSED');
-      video.onstalled=()=>log('CAM · STALLED');
-      video.onerror=()=>log('CAM · VIDEO ELEMENT ERROR');
-      track.onended=()=>log('CAM · TRACK ENDED');
-
-      return stream;
-    })();
-
-    try{
-      return await cameraStartPromise;
-    }finally{
-      cameraStartPromise=null;
+    if(video.readyState < HTMLMediaElement.HAVE_METADATA){
+      await new Promise((resolve,reject)=>{
+        const onMeta=()=>{cleanup();resolve();};
+        const onError=()=>{cleanup();reject(new Error('Camera video element failed to load stream'));};
+        const cleanup=()=>{
+          video.removeEventListener('loadedmetadata',onMeta);
+          video.removeEventListener('error',onError);
+        };
+        video.addEventListener('loadedmetadata',onMeta,{once:true});
+        video.addEventListener('error',onError,{once:true});
+      });
     }
+
+    await playCamera();
+
+    log('CAM · video playing · '+video.videoWidth+'x'+video.videoHeight);
+    if(video.videoWidth>0 && video.videoHeight>0) log('CAM · LIVE');
+
+    video.onloadedmetadata=()=>log('CAM · metadata · '+video.videoWidth+'x'+video.videoHeight);
+    video.onplaying=()=>log('CAM · PLAYING');
+    video.onpause=()=>log('CAM · PAUSED');
+    video.onstalled=()=>log('CAM · STALLED');
+    video.onerror=()=>log('CAM · VIDEO ELEMENT ERROR');
+    track.onended=()=>log('CAM · TRACK ENDED');
+
+    return stream;
+  }
+
+  async function requestMicPermission(){
+    if(!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone API unavailable');
+
+    // Permission check only. The temporary audio track is stopped immediately
+    // so it cannot compete with Chrome SpeechRecognition later.
+    const stream=await navigator.mediaDevices.getUserMedia({
+      audio:{
+        echoCancellation:true,
+        noiseSuppression:true,
+        autoGainControl:true,
+        channelCount:1
+      },
+      video:false
+    });
+
+    stream.getTracks().forEach(t=>t.stop());
+    micPermissionStream=null;
+    log('MIC · permission granted · audio track released for STT');
+    return true;
   }
 
   async function enableMedia(){
-    const results=await Promise.allSettled([
-      startCamera(),
-      micPermissionStream ? Promise.resolve(micPermissionStream) : requestMicPermission()
-    ]);
+    // IMPORTANT: camera and microphone are not requested in parallel anymore.
+    // Android Chrome can race two getUserMedia calls and leave the media
+    // element in an interrupted-loading state. Camera is established first,
+    // then microphone permission is checked and immediately released.
+    if(window.__roboMediaStarting) return;
+    window.__roboMediaStarting=true;
 
-    const camResult=results[0];
-    const micResult=results[1];
-    const camOK=camResult.status==='fulfilled';
-    const micOK=micResult.status==='fulfilled';
+    try{
+      setVoiceStatus('MEDIA STARTING · camera first…');
 
-    if(camOK && micOK){
-      $('#mediaDot').className='dot ok';
-      $('#mediaText').textContent='CAM + MIC READY';
-      setVoiceStatus('CAM READY · MIC READY · tap orange mic');
+      await startCamera();
+      log('MEDIA · camera ready');
+
+      try{
+        await requestMicPermission();
+        $('#mediaDot').className='dot ok';
+        $('#mediaText').textContent='CAM + MIC READY';
+        setVoiceStatus('CAM READY · MIC READY · tap orange mic');
+        if(devMicPermission)devMicPermission.textContent='GRANTED';
+      }catch(micErr){
+        $('#mediaDot').className='dot ok';
+        $('#mediaText').textContent='CAM READY · MIC ERROR';
+        log('MIC · permission failed · '+(micErr?.name||'unknown')+' · '+(micErr?.message||''));
+        setVoiceStatus('CAM READY · MIC ERROR · '+(micErr?.message||micErr?.name||'permission blocked'));
+      }
       hideCaption(3000);
-      log('MEDIA · camera + microphone ready');
-      if(devMicPermission)devMicPermission.textContent='GRANTED';
-      return;
-    }
-
-    if(camOK && !micOK){
-      $('#mediaDot').className='dot ok';
-      $('#mediaText').textContent='CAM READY · MIC ERROR';
-      const e=micResult.reason;
-      log('MIC · permission failed · '+(e?.name||'unknown')+' · '+(e?.message||''));
-      setVoiceStatus('CAM READY · MIC ERROR · '+(e?.message||e?.name||'permission blocked'));
+    }catch(err){
+      $('#mediaDot').className='dot';
+      $('#mediaText').textContent='CAMERA ERROR';
+      log('CAM · start failed · '+(err?.name||'unknown')+' · '+(err?.message||''));
+      setVoiceStatus('CAMERA ERROR · '+(err?.message||err?.name||'camera unavailable'));
       hideCaption(6000);
-      return;
+    }finally{
+      window.__roboMediaStarting=false;
     }
-
-    if(!camOK && micOK){
-      $('#mediaDot').className='dot ok';
-      $('#mediaText').textContent='MIC READY · CAM ERROR';
-      const e=camResult.reason;
-      log('CAM · permission/start failed · '+(e?.name||'unknown')+' · '+(e?.message||''));
-      $('#cameraBox').classList.add('empty');
-      setVoiceStatus('MIC READY · CAMERA ERROR · '+(e?.message||e?.name||'permission blocked'));
-      hideCaption(6000);
-      return;
-    }
-
-    const camErr=camResult.reason;
-    const micErr=micResult.reason;
-    $('#mediaDot').className='dot';
-    $('#mediaText').textContent='CAM + MIC ERROR';
-    log('MEDIA · camera failed · '+(camErr?.name||'unknown')+' · '+(camErr?.message||''));
-    log('MEDIA · microphone failed · '+(micErr?.name||'unknown')+' · '+(micErr?.message||''));
-    setVoiceStatus('MEDIA ERROR · '+(camErr?.message||micErr?.message||'permission blocked'));
-    hideCaption(6000);
   }
-  let mediaEnablePromise=null;
-  const enableMediaOnce=()=>{
-    if(mediaEnablePromise) return mediaEnablePromise;
-    mediaEnablePromise=enableMedia().finally(()=>{mediaEnablePromise=null;});
-    return mediaEnablePromise;
-  };
-  $('#mediaBtn').addEventListener('click',enableMediaOnce);
-  $('#cameraBox').addEventListener('click',enableMediaOnce);
+
+  $('#mediaBtn').addEventListener('click',enableMedia);
+  $('#cameraBox').addEventListener('click',enableMedia);
 
   /* ---------- Speech recognition (v2.12 hardened pipeline) ---------- */
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -970,13 +961,26 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         'language-not-supported':'STT ERROR · language not supported'
       };
       setVoiceStatus(messages[code]||('STT ERROR · '+code));
-      if(code==='audio-capture'||code==='not-allowed') $('#mediaText').textContent='MIC ERROR';
+      if(code==='audio-capture'||code==='not-allowed'){
+        releaseMicForSTT();
+        $('#mediaText').textContent='MIC ERROR';
+      }
+      // Android Chrome can report audio-capture while its Google speech
+      // service is still releasing the previous recorder. One delayed retry
+      // is safe; repeated automatic retries are not.
+      if(code==='audio-capture' && !sttRetryUsed){
+        sttRetryUsed=true;
+        setVoiceStatus('STT HANDOFF · releasing Google audio recorder…');
+        setTimeout(()=>startSTT(true),700);
+        return;
+      }
       hideCaption(6000);
     };
 
     r.onend=()=>{
       listening=false; sttStarting=false; micBtn.classList.remove('listening');
       clearTimeout(sttWatchdog);
+      releaseMicForSTT();
       sttEvent('ended');
       if(sttHadSpeech && !sttHadResult && !sttNoMatch && !sttLastErrorCode){
         sttEvent('NO RESULT · Chrome detected speech but returned no transcript');
@@ -1001,27 +1005,47 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   async function startSTT(isRetry=false){
     if(!recognition){setVoiceStatus('STT UNAVAILABLE · Chrome SpeechRecognition not exposed');return;}
     if(listening||sttStarting)return;
+
     try{
       sttSession++;
-      /* Always create a fresh recognition object after a completed session.
-         Chrome Android can retain a stale recognition service connection. */
       recognition=buildRecognition();
       sttStarting=true;
-      setVoiceStatus(isRetry?'STT RETRY · speak now…':'MIC HANDOFF · releasing audio input for STT…');
-      if(micPermissionStream){micPermissionStream.getTracks().forEach(t=>t.stop());micPermissionStream=null;}
-      if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}
-      if(micMeterRAF){cancelAnimationFrame(micMeterRAF);micMeterRAF=null;}
-      if(micAudioContext){await micAudioContext.close().catch(()=>{});micAudioContext=null;micAnalyser=null;}
-      await new Promise(r=>setTimeout(r,220));
-      setVoiceStatus('STT STARTING · speak now…');
+
+      // Stop TTS and every getUserMedia audio resource before asking Google
+      // SpeechRecognition for the microphone. Android Chrome does not reliably
+      // allow both to own the audio input at the same time.
+      if('speechSynthesis' in window) speechSynthesis.cancel();
+      releaseMicForSTT();
+
+      setVoiceStatus(isRetry?'STT RETRY · speak now…':'STT STARTING · microphone released · speak now…');
+
+      // Give Android Chrome a short handoff window after closing the
+      // getUserMedia/AudioContext resources.
+      await new Promise(r=>setTimeout(r,350));
+
+      if(talking){
+        talking=false;
+        micBtn.classList.remove('talking');
+      }
+
       recognition.start();
     }catch(e){
       sttStarting=false;
-      console.warn(e);log('STT start exception · '+e.message);
-      setVoiceStatus('STT START FAILED · '+e.message);
+      console.warn(e);
+      log('STT start exception · '+(e?.name||'unknown')+' · '+(e?.message||''));
+
+      // A failed start can leave a stale audio resource behind. Release it
+      // before reporting the error so the next tap starts cleanly.
+      releaseMicForSTT();
+
+      const msg=e?.name==='InvalidStateError'
+        ? 'STT BUSY · tap mic again'
+        : 'STT START FAILED · '+(e?.message||e?.name||'unknown error');
+      setVoiceStatus(msg);
       hideCaption(6000);
     }
   }
+
 
   /* ---------- AI brain (v2.12) ----------
      Provider-neutral client adapter. The browser talks only to /api/robo.
@@ -1139,12 +1163,14 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   micBtn.addEventListener('click',async()=>{
     lastActivity=performance.now();
     if(listening){try{recognition.stop();}catch(_){ }return;}
+    if('speechSynthesis' in window) speechSynthesis.cancel();
     await startSTT(false);
   });
 
   /* ---------- Voice diagnostic button behavior ---------- */
   $('#mediaText').addEventListener('click',()=>{
-    if(micPermissionStream) setVoiceStatus('MIC READY · level meter active · STT waiting');
+    if(micPermissionStream) releaseMicForSTT();
+    setVoiceStatus('MIC READY · Chrome STT owns the microphone when you tap the orange mic');
   });
 
 
@@ -1351,3 +1377,4 @@ function hookRecognitionDiagnostics(r){
 </script>
 </body>
 </html>
+
