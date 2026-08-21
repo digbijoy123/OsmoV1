@@ -867,9 +867,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }
   }
 
-  /* ---------- AI brain adapter (v2.11) ----------
-     Browser -> /api/robo -> server-side AI provider.
-     No API key is ever placed in this HTML file. */
+  /* ---------- Local brain (v2.11) ----------
+     v2.11 intentionally has NO external AI/API call.
+     The real AI brain is added in v2.12.
+  */
   const conversation=[];
   const MAX_HISTORY=8;
 
@@ -885,69 +886,39 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     return 'curious';
   }
 
-  async function askRoboAI(text){
-    const clean=(text||'').trim();
-    if(!clean) throw new Error('Empty transcript');
-    conversation.push({role:'user',content:clean});
-    while(conversation.length>MAX_HISTORY) conversation.shift();
-    log('AI · request start');
-    if(devAI) devAI.textContent='REQUESTING';
-    if(devStage) devStage.textContent='AI REQUEST ACTIVE';
-    setVoiceStatus('AI THINKING · processing your words…');
-    const response=await fetch('/api/robo',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({messages:conversation})
-    });
-    let data=null;
-    try{data=await response.json();}catch(_){}
-    if(!response.ok){
-      if(response.status===503 && data && /not configured/i.test(data.error||'')){
-        throw new Error('AI_NOT_CONFIGURED');
-      }
-      throw new Error(data&&data.error?data.error:`AI backend returned HTTP ${response.status}`);
-    }
-    if(!data||typeof data.reply!=='string'||!data.reply.trim()) throw new Error('AI returned an empty response');
-    const reply=data.reply.trim();
-    conversation.push({role:'assistant',content:reply});
-    while(conversation.length>MAX_HISTORY) conversation.shift();
-    if(devAI) devAI.textContent='READY';
-    if(devStage) devStage.textContent='AI RESPONSE RECEIVED';
-    log('AI · response received');
-    return reply;
-  }
-
   function localFallback(text){
-    const l=text.toLowerCase();
+    const l=(text||'').toLowerCase().trim();
+    if(!l) return "I didn't catch that.";
     if(/\b(hi|hello|hey)\b/.test(l)) return 'Hey! I heard you clearly.';
     if(/how are you/.test(l)) return "I'm doing great. My voice pipeline is online.";
-    if(/what are you|who are you/.test(l)) return "I'm Robo, your little AI companion.";
-    return "I heard you, but my AI brain is not connected yet. Check the Developer Page for the backend status.";
+    if(/can you hear me/.test(l)) return "Yes. I can hear you clearly.";
+    if(/what are you|who are you/.test(l)) return "I'm Robo, your local AIOS companion.";
+    if(/test/.test(l)) return "Test received. The v2.11 local brain is working.";
+    return "I heard you: " + text.trim();
   }
 
-  async function respond(text){
-    const emotion=inferEmotion(text);
-    setState('thinking','thinking · sending to AI brain');
-    try{
-      const reply=await askRoboAI(text);
-      setState(emotion,emotion+' · AI response');
-      speak(reply);
-    }catch(err){
-      console.error(err);
-      const message=err&&err.message?err.message:String(err);
-      if(message==='AI_NOT_CONFIGURED'){
-        log('AI · backend not configured · using local fallback');
-        if(devAI) devAI.textContent='NOT CONNECTED · LOCAL FALLBACK';
-        if(devStage) devStage.textContent='LOCAL FALLBACK';
-        setState('curious','AI offline · local brain active');
-      }else{
-        log('AI ERROR · '+message);
-        if(devAI) devAI.textContent='ERROR';
-        if(devStage) devStage.textContent='AI ERROR';
-        setState('confused','AI backend error');
-      }
-      speak(localFallback(text));
+  function respond(text){
+    const clean=(text||'').trim();
+    if(!clean){
+      devLog("BRAIN","empty transcript · no response");
+      return;
     }
+
+    const emotion=inferEmotion(clean);
+    conversation.push({role:'user',content:clean});
+    while(conversation.length>MAX_HISTORY) conversation.shift();
+
+    if(devAI) devAI.textContent='LOCAL FALLBACK · NO API';
+    if(devStage) devStage.textContent='LOCAL BRAIN ACTIVE';
+    devLog("BRAIN","local fallback response");
+    setVoiceStatus('LOCAL BRAIN · responding without AI API');
+
+    const reply=localFallback(clean);
+    conversation.push({role:'assistant',content:reply});
+    while(conversation.length>MAX_HISTORY) conversation.shift();
+
+    setState(emotion,emotion+' · local response');
+    speak(reply);
   }
 
   function speak(text){
@@ -989,7 +960,7 @@ function devLog(type,msg,data){
 }
 function devStageSet(s){if(devStage)devStage.textContent=s;devLog("STAGE",s)}
 if(devBrowser)devBrowser.textContent=navigator.userAgent.includes("Chrome")?"Chrome":"Other";
-if(devAI)devAI.textContent="NOT CONNECTED · LOCAL FALLBACK";
+if(devAI)devAI.textContent="LOCAL FALLBACK · NO API";
 if(devStt)devStt.textContent=(window.SpeechRecognition||window.webkitSpeechRecognition)?"SUPPORTED":"UNSUPPORTED";
 if(devMic)devMic.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
 if(devMicPermission)devMicPermission.textContent="UNKNOWN · tap ENABLE CAM + MIC";
@@ -1016,7 +987,7 @@ function runDevChecks(){
     ["3D emoji canvas",!!$("#face")],
     ["Media permission API",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
     ["On-device STT API",!!(window.SpeechRecognition&&"processLocally" in SpeechRecognition.prototype)],
-    ["AI adapter",!!window.fetch]
+    ["AI API (v2.12)",false]
   ];
   $("#devChecks").innerHTML=list.map(x=>`<div class="devCheck ${x[1]?"ok":"fail"}"><span>${x[0]}</span><b>${x[1]?"PASS":"FAIL"}</b></div>`).join("");
   list.forEach(x=>devLog("CHECK",x[0]+": "+(x[1]?"PASS":"FAIL")));
@@ -1078,8 +1049,10 @@ window.addEventListener("unhandledrejection",e=>{
   console[level]=(...args)=>{
     original(...args);
     devLog(level.toUpperCase(),args.map(x=>{
-      try{return typeof x==="string"?x:JSON.stringify(x)}
-      catch(_){return String(x)}
+      try{
+        if(x instanceof Error) return x.name+": "+x.message;
+        return typeof x==="string"?x:JSON.stringify(x)
+      }catch(_){return String(x)}
     }).join(" "));
   };
 });
@@ -1151,9 +1124,10 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.11 booted");
+  log("ROBO AIOS v2.11 booted · local brain only");
   log("3D floating emoji renderer online");
   log("camera + mic waiting for user permission");
+  log("AI API intentionally disabled · scheduled for v2.12");
   log("natural idle emotion cycle → ON");
 
   /* Developer convenience: desktop starts in portrait simulator. */
