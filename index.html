@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS — v2.11</title>
+<title>ROBO AIOS — v2.12</title>
 <style>
 :root{
   --void:#090d15;
@@ -181,7 +181,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.11</small></div>
+          <div class="brand">ROBO <small>v2.12</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -246,7 +246,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.11</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.12</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -714,7 +714,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   $('#mediaBtn').addEventListener('click',enableMedia);
   $('#cameraBox').addEventListener('click',enableMedia);
 
-  /* ---------- Speech recognition (v2.11 hardened pipeline) ---------- */
+  /* ---------- Speech recognition (v2.12 hardened pipeline) ---------- */
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   let sttSession=0;
   let sttHadResult=false;
@@ -867,12 +867,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }
   }
 
-  /* ---------- Local brain (v2.11) ----------
-     v2.11 intentionally has NO external AI/API call.
-     The real AI brain is added in v2.12.
+  /* ---------- AI brain (v2.12) ----------
+     Provider-neutral client adapter. The browser talks only to /api/robo.
+     Secrets stay server-side in Vercel Environment Variables.
   */
   const conversation=[];
-  const MAX_HISTORY=8;
+  const MAX_HISTORY=10;
+  let aiRequestInFlight=false;
 
   function inferEmotion(text){
     const l=(text||'').toLowerCase();
@@ -892,33 +893,79 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(/\b(hi|hello|hey)\b/.test(l)) return 'Hey! I heard you clearly.';
     if(/how are you/.test(l)) return "I'm doing great. My voice pipeline is online.";
     if(/can you hear me/.test(l)) return "Yes. I can hear you clearly.";
-    if(/what are you|who are you/.test(l)) return "I'm Robo, your local AIOS companion.";
-    if(/test/.test(l)) return "Test received. The v2.11 local brain is working.";
+    if(/what are you|who are you/.test(l)) return "I'm Robo, your AIOS companion.";
+    if(/test/.test(l)) return "Test received. The v2.12 brain pipeline is working.";
     return "I heard you: " + text.trim();
   }
 
-  function respond(text){
+  async function callRoboBrain(messages){
+    const started=performance.now();
+    devLog("AI","request sent · provider adapter");
+    const res=await fetch('/api/robo',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({messages})
+    });
+    let data=null;
+    try{data=await res.json();}catch(_){data=null;}
+    const ms=Math.round(performance.now()-started);
+    if(!res.ok){
+      const code=data?.code||'AI_HTTP_ERROR';
+      const message=data?.error||`AI request failed (${res.status})`;
+      devLog("AI ERROR",`${code} · ${message} · ${ms}ms`);
+      const err=new Error(message); err.code=code; err.status=res.status; throw err;
+    }
+    if(!data?.text){
+      devLog("AI ERROR",`AI_EMPTY_RESPONSE · ${ms}ms`);
+      const err=new Error('AI returned no text'); err.code='AI_EMPTY_RESPONSE'; throw err;
+    }
+    devLog("AI","response received · "+ms+'ms · '+(data.provider||'unknown'));
+    return data;
+  }
+
+  async function respond(text){
     const clean=(text||'').trim();
     if(!clean){
       devLog("BRAIN","empty transcript · no response");
+      return;
+    }
+    if(aiRequestInFlight){
+      devLog("AI","request skipped · previous request still running");
       return;
     }
 
     const emotion=inferEmotion(clean);
     conversation.push({role:'user',content:clean});
     while(conversation.length>MAX_HISTORY) conversation.shift();
+    aiRequestInFlight=true;
+    if(devAI) devAI.textContent='CONNECTING · PROVIDER ADAPTER';
+    if(devStage) devStage.textContent='AI REQUEST ACTIVE';
+    setVoiceStatus('ROBO THINKING · contacting AI brain…');
+    setState('thinking','thinking · Robo is processing');
 
-    if(devAI) devAI.textContent='LOCAL FALLBACK · NO API';
-    if(devStage) devStage.textContent='LOCAL BRAIN ACTIVE';
-    devLog("BRAIN","local fallback response");
-    setVoiceStatus('LOCAL BRAIN · responding without AI API');
-
-    const reply=localFallback(clean);
-    conversation.push({role:'assistant',content:reply});
-    while(conversation.length>MAX_HISTORY) conversation.shift();
-
-    setState(emotion,emotion+' · local response');
-    speak(reply);
+    try{
+      const data=await callRoboBrain(conversation);
+      const reply=String(data.text).trim();
+      conversation.push({role:'assistant',content:reply});
+      while(conversation.length>MAX_HISTORY) conversation.shift();
+      if(devAI) devAI.textContent=(data.provider||'OPENAI').toUpperCase()+' · CONNECTED';
+      if(devStage) devStage.textContent='AI RESPONSE RECEIVED';
+      setState(emotion,emotion+' · AI response');
+      speak(reply);
+    }catch(err){
+      // v2.12 remains usable before an API key is installed.
+      const fallback=localFallback(clean);
+      conversation.push({role:'assistant',content:fallback});
+      while(conversation.length>MAX_HISTORY) conversation.shift();
+      if(devAI) devAI.textContent=err.code==='AI_NOT_CONFIGURED'?'NOT CONNECTED · LOCAL FALLBACK':'AI ERROR · LOCAL FALLBACK';
+      if(devStage) devStage.textContent='LOCAL FALLBACK';
+      devLog("BRAIN","local fallback response after AI failure");
+      setVoiceStatus(err.code==='AI_NOT_CONFIGURED'?'LOCAL FALLBACK · AI key not configured':'LOCAL FALLBACK · AI unavailable');
+      setState(emotion,emotion+' · local fallback');
+      speak(fallback);
+    }finally{
+      aiRequestInFlight=false;
+    }
   }
 
   function speak(text){
@@ -960,7 +1007,7 @@ function devLog(type,msg,data){
 }
 function devStageSet(s){if(devStage)devStage.textContent=s;devLog("STAGE",s)}
 if(devBrowser)devBrowser.textContent=navigator.userAgent.includes("Chrome")?"Chrome":"Other";
-if(devAI)devAI.textContent="LOCAL FALLBACK · NO API";
+if(devAI)devAI.textContent="NOT CONNECTED · ADD API KEY";
 if(devStt)devStt.textContent=(window.SpeechRecognition||window.webkitSpeechRecognition)?"SUPPORTED":"UNSUPPORTED";
 if(devMic)devMic.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
 if(devMicPermission)devMicPermission.textContent="UNKNOWN · tap ENABLE CAM + MIC";
@@ -987,10 +1034,19 @@ function runDevChecks(){
     ["3D emoji canvas",!!$("#face")],
     ["Media permission API",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
     ["On-device STT API",!!(window.SpeechRecognition&&"processLocally" in SpeechRecognition.prototype)],
-    ["AI API (v2.12)","NOT CONNECTED"]
+    ["AI adapter route",true],
+    ["AI API key",false]
   ];
-  $("#devChecks").innerHTML=list.map(x=>`<div class="devCheck ${x[1]?"ok":"fail"}"><span>${x[0]}</span><b>${x[1]?"PASS":"FAIL"}</b></div>`).join("");
-  list.forEach(x=>devLog("CHECK",x[0]+": "+(x[1]?"PASS":"FAIL")));
+  $("#devChecks").innerHTML=list.map(x=>{
+    const label=x[0];
+    const status=label==="AI API key"?"NOT CONFIGURED":(x[1]?"PASS":"FAIL");
+    const cls=label==="AI API key"?"warn":(x[1]?"ok":"fail");
+    return `<div class="devCheck ${cls}"><span>${label}</span><b>${status}</b></div>`;
+  }).join("");
+  list.forEach(x=>{
+    const status=x[0]==="AI API key"?"NOT CONFIGURED":(x[1]?"PASS":"FAIL");
+    devLog("CHECK",x[0]+": "+status);
+  });
 }
 runDevChecks();
 
@@ -1011,7 +1067,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.11 DIAGNOSTICS",
+    "ROBO AIOS v2.12 DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -1124,10 +1180,10 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.11 booted · local brain only");
+  log("ROBO AIOS v2.12 booted · provider-neutral AI brain");
   log("3D floating emoji renderer online");
   log("camera + mic waiting for user permission");
-  log("AI API intentionally disabled · scheduled for v2.12");
+  log("AI provider adapter online · API key required for live AI");
   log("natural idle emotion cycle → ON");
 
   /* Developer convenience: desktop starts in portrait simulator. */
