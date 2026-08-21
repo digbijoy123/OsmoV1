@@ -1,68 +1,123 @@
-// ROBO AIOS v2.11 — Vercel Node.js Function.
-// This endpoint is intentionally optional during development.
-// Without OPENAI_API_KEY it returns 503 so the browser can use Robo's local fallback.
+/**
+ * ROBO AIOS v2.12 — provider-neutral AI adapter.
+ * Vercel serverless function: /api/robo
+ *
+ * Provider selection is controlled by AI_PROVIDER.
+ * Current provider: openai.
+ * Future providers can implement the same generate() contract.
+ */
 
-module.exports = async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).json({ error: 'Method not allowed' });
+const PROVIDERS = {
+  openai: {
+    async generate({ messages, model }) {
+      const key = process.env.OPENAI_API_KEY;
+      if (!key) {
+        const err = new Error('OPENAI_API_KEY is not configured');
+        err.code = 'AI_NOT_CONFIGURED';
+        err.status = 503;
+        throw err;
+      }
+
+      const input = messages.map((m) => ({
+        role: m.role,
+        content: [{ type: 'input_text', text: String(m.content ?? '') }],
+      }));
+
+      const response = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          model: process.env.OPENAI_MODEL || 'gpt-5.6',
+          input,
+          instructions:
+            'You are Robo, a warm, concise AI companion. Respond naturally for spoken conversation. Keep answers reasonably short unless the user asks for detail.',
+          store: false,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const err = new Error(
+          data?.error?.message || `OpenAI request failed (${response.status})`,
+        );
+        err.code = data?.error?.code || 'OPENAI_API_ERROR';
+        err.status = response.status;
+        throw err;
+      }
+
+      const text = typeof data?.output_text === 'string' ? data.output_text.trim() : '';
+      if (!text) {
+        const err = new Error('OpenAI returned no text');
+        err.code = 'AI_EMPTY_RESPONSE';
+        err.status = 502;
+        throw err;
+      }
+
+      return { text, provider: 'openai', model: process.env.OPENAI_MODEL || 'gpt-5.6' };
+    },
+  },
+};
+
+function json(res, status, body) {
+  return res.status(status).json({ ...body });
+}
+
+export default async function handler(req, res) {
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return res.status(503).json({
-      error: 'AI backend is not configured yet.'
+  if (req.method === 'GET') {
+    const providerName = String(process.env.AI_PROVIDER || 'openai').toLowerCase();
+    const configured = providerName === 'openai' ? Boolean(process.env.OPENAI_API_KEY) : false;
+    return json(res, 200, {
+      ok: true,
+      provider: providerName,
+      configured,
+      model: providerName === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-5.6') : null,
     });
+  }
+
+  if (req.method !== 'POST') {
+    return json(res, 405, { error: 'Method not allowed', code: 'METHOD_NOT_ALLOWED' });
   }
 
   try {
-    let body = req.body || {};
-    if (typeof body === 'string') {
-      try { body = JSON.parse(body); }
-      catch { return res.status(400).json({ error: 'Invalid JSON body.' }); }
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const providerName = String(process.env.AI_PROVIDER || 'openai').toLowerCase();
+    const provider = PROVIDERS[providerName];
+
+    if (!provider) {
+      return json(res, 400, {
+        error: `Unsupported AI provider: ${providerName}`,
+        code: 'UNSUPPORTED_PROVIDER',
+      });
     }
 
-    const incoming = Array.isArray(body.messages) ? body.messages : [];
-    const messages = incoming
-      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
-      .slice(-8)
-      .map(m => ({ role: m.role, content: m.content.slice(0, 2000) }));
+    const messages = Array.isArray(body.messages) ? body.messages : [];
+    const cleanMessages = messages
+      .filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
+      .slice(-12)
+      .map((m) => ({ role: m.role, content: String(m.content || '').slice(0, 12000) }))
+      .filter((m) => m.content.trim());
 
-    if (!messages.length || messages[messages.length - 1].role !== 'user') {
-      return res.status(400).json({ error: 'A user message is required.' });
+    if (!cleanMessages.length) {
+      return json(res, 400, { error: 'No conversation messages supplied', code: 'EMPTY_INPUT' });
     }
 
-    const model = process.env.OPENAI_MODEL || 'gpt-5.6';
-    const input = [
-      {
-        role: 'developer',
-        content: 'You are Robo, a concise, warm AI companion living inside a small floating emoji robot. Reply naturally in 1 to 3 short sentences. Be conversational and useful.'
-      },
-      ...messages
-    ];
+    const result = await provider.generate({
+      messages: cleanMessages,
+      });
 
-    const upstream = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({ model, input, max_output_tokens: 180 })
+    return json(res, 200, result);
+  } catch (error) {
+    const status = Number.isInteger(error?.status) ? error.status : 500;
+    return json(res, status, {
+      error: error?.message || 'AI provider error',
+      code: error?.code || 'AI_PROVIDER_ERROR',
     });
-
-    const data = await upstream.json().catch(() => ({}));
-    if (!upstream.ok) {
-      const message = data?.error?.message || `OpenAI returned HTTP ${upstream.status}`;
-      console.error('ROBO upstream error:', upstream.status, message);
-      return res.status(502).json({ error: message });
-    }
-
-    const reply = typeof data.output_text === 'string' ? data.output_text.trim() : '';
-    if (!reply) return res.status(502).json({ error: 'AI returned no text.' });
-
-    return res.status(200).json({ reply, model });
-  } catch (err) {
-    console.error('ROBO AI API error:', err);
-    return res.status(500).json({ error: err?.message || 'AI backend request failed.' });
   }
-};
+}
