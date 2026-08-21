@@ -912,13 +912,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let sttNoMatch=false;
   let sttWatchdog=null;
 
+  function sttEventForStart(message){
+    log('STT · '+message);
+  }
+
   function buildRecognition(){
     if(!SR) return null;
     const r=new SR();
     r.continuous=false;
     r.interimResults=true;
     r.maxAlternatives=3;
-    r.lang='en-US';
+    const browserLang=(navigator.language||'en-US').toLowerCase();
+    r.lang=browserLang.startsWith('en-') ? browserLang : 'en-US';
 
     /* Some newer engines expose local recognition. We only opt in when the
        browser explicitly reports that the language is available; otherwise
@@ -940,7 +945,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     r.onspeechend=()=>{sttEvent('speech ended');};
     r.onsoundend=()=>{sttEvent('sound ended');};
     r.onaudioend=()=>{sttEvent('audio ended');};
-    r.onnomatch=()=>{sttNoMatch=true;sttEvent('NO MATCH · speech detected but no words recognized');setVoiceStatus('STT NO MATCH · Chrome heard speech but returned no words');if(devStage)devStage.textContent='NO MATCH · NO TRANSCRIPT';};
+    r.onnomatch=()=>{
+      sttNoMatch=true;
+      sttEvent('NO MATCH · speech detected but no words recognized');
+      log('STT · no-match diagnostic · lang='+r.lang+' · onDevice='+(r.processLocally===true?'true':'false'));
+      setVoiceStatus('STT NO MATCH · Chrome heard speech but returned no words');
+      if(devStage)devStage.textContent='NO MATCH · NO TRANSCRIPT';
+    };
 
     r.onstart=()=>{
       listening=true; sttStarting=false; sttHadResult=false; sttHadSpeech=false; sttLastErrorCode=''; sttNoMatch=false;
@@ -1049,6 +1060,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     try{
       sttSession++;
+      if(!isRetry) sttRetryUsed=false;
       recognition=buildRecognition();
       sttStarting=true;
 
@@ -1060,15 +1072,15 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       setVoiceStatus(isRetry?'STT RETRY · speak now…':'STT STARTING · microphone released · speak now…');
 
-      // Give Android Chrome a short handoff window after closing the
-      // getUserMedia/AudioContext resources.
-      await new Promise(r=>setTimeout(r,350));
-
       if(talking){
         talking=false;
         micBtn.classList.remove('talking');
       }
 
+      // IMPORTANT: do not await a timer here. On Android Chrome, delaying
+      // SpeechRecognition.start() can break the user-gesture/audio handoff.
+      // The microphone getUserMedia tracks were already stopped above.
+      sttEventForStart('calling SpeechRecognition.start()');
       recognition.start();
     }catch(e){
       sttStarting=false;
