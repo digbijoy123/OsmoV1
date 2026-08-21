@@ -1131,13 +1131,45 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     return "I heard you: " + text.trim();
   }
 
-  async function callRoboBrain(messages){
+  const visionCanvas=document.createElement('canvas');
+  const visionCtx=visionCanvas.getContext('2d',{alpha:false});
+
+  function captureVisionFrame(){
+    const video=$('#camera');
+    const track=cameraStream?.getVideoTracks?.()[0];
+    if(!video || !track || track.readyState!=='live' ||
+       video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+       video.videoWidth < 2 || video.videoHeight < 2){
+      return null;
+    }
+
+    const maxWidth=768;
+    const scale=Math.min(1,maxWidth/video.videoWidth);
+    const width=Math.max(2,Math.round(video.videoWidth*scale));
+    const height=Math.max(2,Math.round(video.videoHeight*scale));
+    visionCanvas.width=width;
+    visionCanvas.height=height;
+
+    visionCtx.drawImage(video,0,0,width,height);
+    const dataUrl=visionCanvas.toDataURL('image/jpeg',0.68);
+    const comma=dataUrl.indexOf(',');
+    if(comma<0) return null;
+
+    return {
+      mimeType:'image/jpeg',
+      data:dataUrl.slice(comma+1),
+      width,
+      height
+    };
+  }
+
+  async function callRoboBrain(messages,image=null){
     const started=performance.now();
-    devLog("AI","request sent · provider adapter");
+    devLog("AI","request sent · provider adapter"+(image?' · vision frame attached':''));
     const res=await fetch('/api/robo',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({messages})
+      body:JSON.stringify({messages,image})
     });
     let data=null;
     try{data=await res.json();}catch(_){data=null;}
@@ -1177,7 +1209,21 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     setState('thinking','thinking · Robo is processing');
 
     try{
-      const data=await callRoboBrain(conversation);
+      let visionImage=null;
+      if(cameraStream){
+        try{
+          visionImage=captureVisionFrame();
+          if(visionImage){
+            devLog("VISION","camera frame captured",{width:visionImage.width,height:visionImage.height});
+          }else{
+            devLog("VISION","camera is live but no usable frame was available · continuing text-only");
+          }
+        }catch(visionErr){
+          devLog("VISION ERROR",visionErr?.message||'frame capture failed');
+        }
+      }
+
+      const data=await callRoboBrain(conversation,visionImage);
       const reply=String(data.text).trim();
       conversation.push({role:'assistant',content:reply});
       while(conversation.length>MAX_HISTORY) conversation.shift();
@@ -1242,7 +1288,7 @@ function devLog(type,msg,data){
 }
 function devStageSet(s){if(devStage)devStage.textContent=s;devLog("STAGE",s)}
 if(devBrowser)devBrowser.textContent=navigator.userAgent.includes("Chrome")?"Chrome":"Other";
-if(devAI)devAI.textContent="NOT CONNECTED · ADD API KEY";
+if(devAI)devAI.textContent="CHECKING · PROVIDER ADAPTER";
 if(devStt)devStt.textContent=(window.SpeechRecognition||window.webkitSpeechRecognition)?"SUPPORTED":"UNSUPPORTED";
 if(devCamera)devCamera.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
 if(devMic)devMic.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
@@ -1260,6 +1306,36 @@ async function refreshMicPermissionDiagnostic(){
 }
 refreshMicPermissionDiagnostic();
 
+async function refreshAIProviderDiagnostic(){
+  try{
+    const res=await fetch('/api/robo',{method:'GET',cache:'no-store'});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok){
+      if(devAI)devAI.textContent='AI ERROR · DIAGNOSTIC HTTP '+res.status;
+      devLog('AI ERROR','diagnostic request failed · '+res.status);
+      return;
+    }
+
+    const provider=String(data.provider||'AI').toUpperCase();
+    const model=data.model||'unknown model';
+    if(devAI)devAI.textContent=data.configured
+      ? provider+' · CONNECTED'+(data.vision?' · VISION READY':'')
+      : provider+' · KEY NOT CONFIGURED';
+
+    const row=[...document.querySelectorAll('#devChecks .devCheck')]
+      .find(el=>el.firstElementChild?.textContent==='AI API key');
+    if(row){
+      row.className='devCheck '+(data.configured?'ok':'fail');
+      row.lastElementChild.textContent=data.configured?'PASS':'NOT CONFIGURED';
+    }
+
+    devLog('CHECK','AI provider: '+provider+' · '+model+' · configured='+(data.configured?'yes':'no')+' · vision='+(data.vision?'yes':'no'));
+  }catch(e){
+    if(devAI)devAI.textContent='AI ERROR · ROUTE UNREACHABLE';
+    devLog('AI ERROR','diagnostic request failed · '+(e?.message||e?.name||'unknown'));
+  }
+}
+
 function runDevChecks(){
   const list=[
     ["HTTPS / localhost",location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"],
@@ -1271,18 +1347,20 @@ function runDevChecks(){
     ["Media permission API",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
     ["On-device STT API",!!(window.SpeechRecognition&&"processLocally" in SpeechRecognition.prototype)],
     ["AI adapter route",true],
-    ["AI API key",false]
+    ["Camera vision capture",!!(cameraStream && $("#camera")?.videoWidth>1 && $("#camera")?.videoHeight>1)],
+    ["AI API key",null]
   ];
   $("#devChecks").innerHTML=list.map(x=>{
     const label=x[0];
-    const status=label==="AI API key"?"NOT CONFIGURED":(x[1]?"PASS":"FAIL");
+    const status=label==="AI API key"?"CHECKING":(x[1]?"PASS":"FAIL");
     const cls=label==="AI API key"?"warn":(x[1]?"ok":"fail");
     return `<div class="devCheck ${cls}"><span>${label}</span><b>${status}</b></div>`;
   }).join("");
   list.forEach(x=>{
-    const status=x[0]==="AI API key"?"NOT CONFIGURED":(x[1]?"PASS":"FAIL");
-    devLog("CHECK",x[0]+": "+status);
+    if(x[0]==="AI API key") return;
+    devLog("CHECK",x[0]+": "+(x[1]?"PASS":"FAIL"));
   });
+  refreshAIProviderDiagnostic();
 }
 runDevChecks();
 
