@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS — v2.12 camera-fixed</title>
+<title>ROBO AIOS — v2.12</title>
 <style>
 :root{
   --void:#090d15;
@@ -181,7 +181,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.12 CAM FIX</small></div>
+          <div class="brand">ROBO <small>v2.12</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -246,14 +246,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.12 CAM FIX</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.12</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
     <section class="devCard">
       <div class="devTitle">VOICE PIPELINE</div>
       <div class="devRow"><span>Browser</span><b id="devBrowser">—</b></div>
-      <div class="devRow"><span>Camera</span><b id="devCamera">—</b></div>
       <div class="devRow"><span>Microphone</span><b id="devMic">—</b></div>
       <div class="devRow"><span>Speech recognition</span><b id="devStt">—</b></div>
       <div class="devRow"><span>Mic permission</span><b id="devMicPermission">—</b></div>
@@ -686,146 +685,31 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     return stream;
   }
 
-  function stopCamera(){
-    if(cameraStream){
-      cameraStream.getTracks().forEach(t=>t.stop());
-      cameraStream=null;
-    }
-    const video=$('#camera');
-    if(video){
-      video.pause();
-      video.srcObject=null;
-    }
-    $('#cameraBox')?.classList.add('empty');
-  }
-
   async function startCamera(){
     if(!navigator.mediaDevices?.getUserMedia) throw new Error('Camera API unavailable');
-
-    const video=$('#camera');
-    const box=$('#cameraBox');
-    if(!video || !box) throw new Error('Camera UI unavailable');
-
-    stopCamera();
-    log('CAM · requesting camera permission');
-
-    let stream;
-    try{
-      stream=await navigator.mediaDevices.getUserMedia({
-        video:{
-          facingMode:{ideal:'user'},
-          width:{ideal:1280},
-          height:{ideal:720},
-          frameRate:{ideal:30,max:30}
-        },
-        audio:false
-      });
-    }catch(firstErr){
-      log('CAM · preferred constraints failed · '+(firstErr?.name||'unknown'));
-      /* Some mobile browsers reject the ideal constraint set. Retry with
-         the simplest camera request before declaring the camera broken. */
-      stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
-    }
-
-    cameraStream=stream;
-    const track=stream.getVideoTracks()[0];
-    if(!track) throw new Error('Camera permission granted but no video track returned');
-
-    log('CAM · permission granted · '+track.label);
-    log('CAM · track state '+track.readyState+' · enabled '+track.enabled);
-
-    video.srcObject=stream;
-    box.classList.remove('empty');
-
-    const playCamera=async()=>{
-      try{
-        await video.play();
-        log('CAM · video playing · '+video.videoWidth+'x'+video.videoHeight);
-        if(video.videoWidth>0 && video.videoHeight>0){
-          log('CAM · LIVE');
-        }
-      }catch(err){
-        log('CAM · video.play failed · '+(err?.name||'unknown')+' · '+(err?.message||''));
-        throw err;
-      }
-    };
-
-    if(video.readyState >= HTMLMediaElement.HAVE_METADATA){
-      await playCamera();
-    }else{
-      await new Promise((resolve,reject)=>{
-        const onMeta=()=>{cleanup();resolve();};
-        const onError=()=>{cleanup();reject(new Error('Camera video element failed to load stream'));};
-        const cleanup=()=>{
-          video.removeEventListener('loadedmetadata',onMeta);
-          video.removeEventListener('error',onError);
-        };
-        video.addEventListener('loadedmetadata',onMeta,{once:true});
-        video.addEventListener('error',onError,{once:true});
-      });
-      await playCamera();
-    }
-
-    video.onloadedmetadata=()=>{
-      log('CAM · metadata · '+video.videoWidth+'x'+video.videoHeight);
-    };
-    video.onplaying=()=>log('CAM · PLAYING');
-    video.onpause=()=>log('CAM · PAUSED');
-    video.onstalled=()=>log('CAM · STALLED');
-    video.onerror=()=>log('CAM · VIDEO ELEMENT ERROR');
-    track.onended=()=>log('CAM · TRACK ENDED');
+    cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30,max:30}},audio:false});
+    $('#camera').srcObject=cameraStream;
+    $('#cameraBox').classList.remove('empty');
+    await $('#camera').play().catch(()=>{});
   }
 
   async function enableMedia(){
-    const results=await Promise.allSettled([
-      startCamera(),
-      micPermissionStream ? Promise.resolve(micPermissionStream) : requestMicPermission()
-    ]);
-
-    const camResult=results[0];
-    const micResult=results[1];
-    const camOK=camResult.status==='fulfilled';
-    const micOK=micResult.status==='fulfilled';
-
-    if(camOK && micOK){
+    try{
+      await startCamera();
+      if(!micPermissionStream) await requestMicPermission();
       $('#mediaDot').className='dot ok';
       $('#mediaText').textContent='CAM + MIC READY';
-      setVoiceStatus('CAM READY · MIC READY · tap orange mic');
+      setVoiceStatus('MIC READY · STT READY · tap orange mic');
       hideCaption(3000);
-      log('MEDIA · camera + microphone ready');
+      log('MEDIA · camera + microphone permission granted');
       if(devMicPermission)devMicPermission.textContent='GRANTED';
-      return;
+    }catch(err){
+      console.warn(err);
+      $('#mediaDot').className='dot';
+      $('#mediaText').textContent='MEDIA BLOCKED';
+      setVoiceStatus('MEDIA ERROR · '+err.message);
+      hideCaption(5000);
     }
-
-    if(camOK && !micOK){
-      $('#mediaDot').className='dot ok';
-      $('#mediaText').textContent='CAM READY · MIC ERROR';
-      const e=micResult.reason;
-      log('MIC · permission failed · '+(e?.name||'unknown')+' · '+(e?.message||''));
-      setVoiceStatus('CAM READY · MIC ERROR · '+(e?.message||e?.name||'permission blocked'));
-      hideCaption(6000);
-      return;
-    }
-
-    if(!camOK && micOK){
-      $('#mediaDot').className='dot ok';
-      $('#mediaText').textContent='MIC READY · CAM ERROR';
-      const e=camResult.reason;
-      log('CAM · permission/start failed · '+(e?.name||'unknown')+' · '+(e?.message||''));
-      $('#cameraBox').classList.add('empty');
-      setVoiceStatus('MIC READY · CAMERA ERROR · '+(e?.message||e?.name||'permission blocked'));
-      hideCaption(6000);
-      return;
-    }
-
-    const camErr=camResult.reason;
-    const micErr=micResult.reason;
-    $('#mediaDot').className='dot';
-    $('#mediaText').textContent='CAM + MIC ERROR';
-    log('MEDIA · camera failed · '+(camErr?.name||'unknown')+' · '+(camErr?.message||''));
-    log('MEDIA · microphone failed · '+(micErr?.name||'unknown')+' · '+(micErr?.message||''));
-    setVoiceStatus('MEDIA ERROR · '+(camErr?.message||micErr?.message||'permission blocked'));
-    hideCaption(6000);
   }
   $('#mediaBtn').addEventListener('click',enableMedia);
   $('#cameraBox').addEventListener('click',enableMedia);
@@ -843,23 +727,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function buildRecognition(){
     if(!SR) return null;
     const r=new SR();
+    /* Keep recognition aligned with the last known-good Android/Chrome build.
+       Do not opt into experimental local recognition here. */
     r.continuous=false;
     r.interimResults=true;
-    r.maxAlternatives=3;
+    r.maxAlternatives=1;
     r.lang='en-US';
-
-    /* Some newer engines expose local recognition. We only opt in when the
-       browser explicitly reports that the language is available; otherwise
-       the normal Chrome recognition service remains the fallback. */
-    try{
-      if('processLocally' in r && typeof SR.available==='function'){
-        SR.available({langs:['en-US'],processLocally:true}).then(result=>{
-          const ok=result==='available' || (Array.isArray(result)&&result.includes('available'));
-          if(ok){ r.processLocally=true; log('STT · on-device recognition available'); }
-          else log('STT · on-device recognition unavailable · using Chrome service');
-        }).catch(()=>log('STT · on-device availability check failed · using Chrome service'));
-      }
-    }catch(_){ }
 
     const sttEvent=(name,detail='')=>log('STT · '+name+(detail?' · '+detail:''));
     r.onaudiostart=()=>{sttHadSpeech=false;sttEvent('audio start');setVoiceStatus('MIC ACTIVE · STT LISTENING');};
@@ -868,7 +741,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     r.onspeechend=()=>{sttEvent('speech ended');};
     r.onsoundend=()=>{sttEvent('sound ended');};
     r.onaudioend=()=>{sttEvent('audio ended');};
-    r.onnomatch=()=>{devLog("STT ERROR","NO MATCH · speech detected but no words recognized");sttNoMatch=true;sttEvent('NO MATCH · speech detected but no words recognized');setVoiceStatus('STT NO MATCH · Chrome heard speech but returned no words');if(devStage)devStage.textContent='NO MATCH · NO TRANSCRIPT';};
+    r.onnomatch=()=>{sttNoMatch=true;sttEvent('NO MATCH · speech detected but no words recognized');setVoiceStatus('STT NO MATCH · Chrome heard speech but returned no words');if(devStage)devStage.textContent='NO MATCH · NO TRANSCRIPT';};
 
     r.onstart=()=>{
       listening=true; sttStarting=false; sttHadResult=false; sttHadSpeech=false; sttLastErrorCode=''; sttNoMatch=false;
@@ -902,7 +775,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       if(text){
         const first=changed[0]||{};
         sttEvent(first.final?'FINAL RESULT': 'INTERIM RESULT',text+' · confidence '+(first.confidence||0).toFixed(3));
-         devLog("STT",first.final?"FINAL RESULT · "+text:"INTERIM RESULT · "+text);
         showCaption('ROBO HEARS\n'+text,true);
         if(devTranscript) devTranscript.textContent=text;
         if(devStage) devStage.textContent=first.final?'FINAL TRANSCRIPT RECEIVED':'INTERIM TRANSCRIPT RECEIVED';
@@ -920,7 +792,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       const code=e&&e.error?e.error:'unknown';
       sttLastErrorCode=code;
       sttEvent('ERROR',code+(e&&e.message?' · '+e.message:''));
-       devLog("STT ERROR",code+(e&&e.message?" · "+e.message:""));
       setState('confused','voice · '+code);
       const messages={
         'not-allowed':'STT ERROR · microphone permission blocked',
@@ -965,17 +836,15 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(listening||sttStarting)return;
     try{
       sttSession++;
-      /* Always create a fresh recognition object after a completed session.
-         Chrome Android can retain a stale recognition service connection. */
-      recognition=buildRecognition();
+      /* Reuse the same recognizer across sessions, as in the known-good build.
+         Release getUserMedia before SpeechRecognition owns the microphone. */
       sttStarting=true;
       setVoiceStatus(isRetry?'STT RETRY · speak now…':'MIC HANDOFF · releasing audio input for STT…');
-       devLog("STT",isRetry?"retry session · preparing microphone":"microphone handoff · releasing analyser stream");
       if(micPermissionStream){micPermissionStream.getTracks().forEach(t=>t.stop());micPermissionStream=null;}
       if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}
       if(micMeterRAF){cancelAnimationFrame(micMeterRAF);micMeterRAF=null;}
       if(micAudioContext){await micAudioContext.close().catch(()=>{});micAudioContext=null;micAnalyser=null;}
-      await new Promise(r=>setTimeout(r,650));
+      await new Promise(r=>setTimeout(r,150));
       setVoiceStatus('STT STARTING · speak now…');
       recognition.start();
     }catch(e){
@@ -1023,7 +892,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const res=await fetch('/api/robo',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({messages})
+      body:JSON.stringify({provider:'openai',messages})
     });
     let data=null;
     try{data=await res.json();}catch(_){data=null;}
@@ -1113,7 +982,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 /* ---------- Developer diagnostics runtime ---------- */
 const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript");
-const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
+const devStage=$("#devStage"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
 let devLogLines=["[BOOT] Developer diagnostics ready."];
 
 function devLog(type,msg,data){
@@ -1128,7 +997,6 @@ function devStageSet(s){if(devStage)devStage.textContent=s;devLog("STAGE",s)}
 if(devBrowser)devBrowser.textContent=navigator.userAgent.includes("Chrome")?"Chrome":"Other";
 if(devAI)devAI.textContent="NOT CONNECTED · ADD API KEY";
 if(devStt)devStt.textContent=(window.SpeechRecognition||window.webkitSpeechRecognition)?"SUPPORTED":"UNSUPPORTED";
-if(devCamera)devCamera.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
 if(devMic)devMic.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
 if(devMicPermission)devMicPermission.textContent="UNKNOWN · tap ENABLE CAM + MIC";
 if(devLocalStt)devLocalStt.textContent=(window.SpeechRecognition&&"processLocally" in SpeechRecognition.prototype)?"SUPPORTED API":"NOT EXPOSED";
@@ -1150,7 +1018,7 @@ function runDevChecks(){
     ["getUserMedia",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
     ["SpeechRecognition",!!(window.SpeechRecognition||window.webkitSpeechRecognition)],
     ["Speech synthesis","speechSynthesis" in window],
-    ["Camera",!!$("#camera") && !!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
+    ["Camera",!!$("#camera")],
     ["3D emoji canvas",!!$("#face")],
     ["Media permission API",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
     ["On-device STT API",!!(window.SpeechRecognition&&"processLocally" in SpeechRecognition.prototype)],
@@ -1192,7 +1060,6 @@ $("#copyLogs").addEventListener("click",async()=>{
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
     "Stage: "+devStage.textContent,
-    "Camera: "+devCamera.textContent,
     "Mic API: "+devMic.textContent,
     "Mic permission: "+devMicPermission.textContent,
     "STT: "+devStt.textContent,
@@ -1301,7 +1168,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.12 CAM FIX booted · provider-neutral AI brain");
+  log("ROBO AIOS v2.12 booted · provider-neutral AI brain");
   log("3D floating emoji renderer online");
   log("camera + mic waiting for user permission");
   log("AI provider adapter online · API key required for live AI");
