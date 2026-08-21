@@ -987,7 +987,7 @@ function runDevChecks(){
     ["3D emoji canvas",!!$("#face")],
     ["Media permission API",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
     ["On-device STT API",!!(window.SpeechRecognition&&"processLocally" in SpeechRecognition.prototype)],
-    ["AI API (v2.12)",false]
+    ["AI API (v2.12)","NOT CONNECTED"]
   ];
   $("#devChecks").innerHTML=list.map(x=>`<div class="devCheck ${x[1]?"ok":"fail"}"><span>${x[0]}</span><b>${x[1]?"PASS":"FAIL"}</b></div>`).join("");
   list.forEach(x=>devLog("CHECK",x[0]+": "+(x[1]?"PASS":"FAIL")));
