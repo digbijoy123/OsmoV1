@@ -1,21 +1,19 @@
 /**
- * ROBO AIOS v2.12 — provider-neutral AI adapter.
+ * ROBO AIOS v2.12 — Gemini AI + Vision adapter
  * Vercel serverless function: /api/robo
  *
- * Current provider: Gemini
- * Model: Gemini 3.1 Flash-Lite
+ * Provider: Gemini
+ * Text + single camera-frame vision support.
  *
- * Supports:
- *   - Normal text conversation
- *   - Optional single camera frame for vision
- *
- * The Gemini API key stays server-side in:
+ * Environment variables:
  * GEMINI_API_KEY
+ * GEMINI_MODEL
+ * AI_PROVIDER
  */
 
 const PROVIDERS = {
   gemini: {
-    async generate({ messages, image }) {
+    async generate({ messages }) {
       const key = process.env.GEMINI_API_KEY;
 
       if (!key) {
@@ -28,111 +26,70 @@ const PROVIDERS = {
       const model =
         process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 
-      /*
-       * Convert our internal conversation format to Gemini format.
-       *
-       * user      -> user
-       * assistant -> model
-       */
-      const contents = messages.map((message) => ({
-        role: message.role === 'assistant' ? 'model' : 'user',
-        parts: [
-          {
-            text: String(message.content ?? ''),
-          },
-        ],
-      }));
+      const contents = messages.map((message) => {
+        const parts = [];
 
-      /*
-       * Optional camera frame.
-       *
-       * image must look like:
-       *
-       * {
-       *   mimeType: "image/jpeg",
-       *   data: "<base64>"
-       * }
-       *
-       * The image is attached ONLY to the latest user message.
-       */
-      if (image) {
-        const mimeType = String(
-          image.mimeType || '',
-        ).toLowerCase();
+        /*
+         * Normal text message.
+         */
+        if (typeof message.content === 'string') {
+          const text = message.content.trim();
 
-        const allowedTypes = new Set([
-          'image/jpeg',
-          'image/jpg',
-          'image/png',
-          'image/webp',
-          'image/heic',
-          'image/heif',
-        ]);
-
-        if (!allowedTypes.has(mimeType)) {
-          const err = new Error(
-            `Unsupported image type: ${mimeType || 'unknown'}`,
-          );
-          err.code = 'INVALID_IMAGE_TYPE';
-          err.status = 400;
-          throw err;
-        }
-
-        const imageData = String(image.data || '').trim();
-
-        if (!imageData) {
-          const err = new Error('Camera image data is empty');
-          err.code = 'EMPTY_IMAGE';
-          err.status = 400;
-          throw err;
+          if (text) {
+            parts.push({
+              text,
+            });
+          }
         }
 
         /*
-         * Prevent accidentally sending a huge camera payload.
-         * This limit is on the Base64 string, not decoded bytes.
+         * Vision message.
+         *
+         * Expected format:
+         * {
+         *   role: "user",
+         *   content: "What do you see?",
+         *   image: {
+         *     mimeType: "image/jpeg",
+         *     data: "<base64>"
+         *   }
+         * }
          */
-        if (imageData.length > 6_000_000) {
-          const err = new Error(
-            'Camera image is too large',
-          );
-          err.code = 'IMAGE_TOO_LARGE';
-          err.status = 413;
-          throw err;
+        if (
+          message.image &&
+          typeof message.image.data === 'string' &&
+          message.image.data.length > 0
+        ) {
+          parts.push({
+            inlineData: {
+              mimeType:
+                message.image.mimeType || 'image/jpeg',
+              data: message.image.data,
+            },
+          });
         }
 
-        /*
-         * Gemini's REST API expects the image as inline_data.
-         * Keep it on the final user turn.
-         */
-        const lastContent = contents[contents.length - 1];
+        return {
+          role: message.role === 'assistant' ? 'model' : 'user',
+          parts,
+        };
+      }).filter((message) => message.parts.length > 0);
 
-        if (!lastContent || lastContent.role !== 'user') {
-          const err = new Error(
-            'Vision input requires a final user message',
-          );
-          err.code = 'INVALID_VISION_CONTEXT';
-          err.status = 400;
-          throw err;
-        }
-
-        lastContent.parts.push({
-          inline_data: {
-            mime_type: mimeType,
-            data: imageData,
-          },
-        });
+      if (!contents.length) {
+        const err = new Error('No valid Gemini content supplied');
+        err.code = 'EMPTY_INPUT';
+        err.status = 400;
+        throw err;
       }
 
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
         {
           method: 'POST',
-
           headers: {
             'Content-Type': 'application/json',
             'x-goog-api-key': key,
           },
-
           body: JSON.stringify({
             systemInstruction: {
               parts: [
@@ -141,9 +98,10 @@ const PROVIDERS = {
                     'You are Robo, a warm, concise AI companion. ' +
                     'Respond naturally for spoken conversation. ' +
                     'Keep answers reasonably short unless the user asks for detail. ' +
-                    'Do not mention being a language model unless directly asked. ' +
-                    'When an image is provided, use it as visual context and ' +
-                    'describe only what you can actually see. Do not invent details.',
+                    'You can understand images from Robo camera frames. ' +
+                    'When an image is provided, describe only what you can actually see. ' +
+                    'Do not claim to see something that is unclear or outside the frame. ' +
+                    'Do not mention being a language model unless directly asked.',
                 },
               ],
             },
@@ -184,13 +142,9 @@ const PROVIDERS = {
           .trim() || '';
 
       if (!text) {
-        const err = new Error(
-          'Gemini returned no text',
-        );
-
+        const err = new Error('Gemini returned no text');
         err.code = 'AI_EMPTY_RESPONSE';
         err.status = 502;
-
         throw err;
       }
 
@@ -198,7 +152,7 @@ const PROVIDERS = {
         text,
         provider: 'gemini',
         model,
-        vision: Boolean(image),
+        vision: true,
       };
     },
   },
@@ -217,11 +171,6 @@ export default async function handler(req, res) {
     process.env.AI_PROVIDER || 'gemini',
   ).toLowerCase();
 
-  /*
-   * GET /api/robo
-   *
-   * Used by diagnostics.
-   */
   if (req.method === 'GET') {
     const configured =
       providerName === 'gemini'
@@ -232,13 +181,11 @@ export default async function handler(req, res) {
       ok: true,
       provider: providerName,
       configured,
-
       model:
         providerName === 'gemini'
           ? process.env.GEMINI_MODEL ||
             'gemini-3.1-flash-lite'
           : null,
-
       vision: providerName === 'gemini',
     });
   }
@@ -265,9 +212,6 @@ export default async function handler(req, res) {
       });
     }
 
-    /*
-     * Conversation history.
-     */
     const messages = Array.isArray(body.messages)
       ? body.messages
       : [];
@@ -276,41 +220,55 @@ export default async function handler(req, res) {
       .filter(
         (m) =>
           m &&
-          (m.role === 'user' ||
-            m.role === 'assistant'),
+          (m.role === 'user' || m.role === 'assistant'),
       )
       .slice(-12)
-      .map((m) => ({
-        role: m.role,
-        content: String(
-          m.content || '',
-        ).slice(0, 12000),
-      }))
-      .filter((m) => m.content.trim());
+      .map((m) => {
+        const result = {
+          role: m.role,
+          content: String(
+            typeof m.content === 'string'
+              ? m.content
+              : '',
+          ).slice(0, 12000),
+        };
+
+        /*
+         * Only accept a properly formed camera image.
+         * Limit the base64 payload to prevent accidental huge requests.
+         */
+        if (
+          m.image &&
+          typeof m.image.data === 'string' &&
+          m.image.data.length > 0 &&
+          m.image.data.length <= 2_500_000
+        ) {
+          result.image = {
+            mimeType:
+              m.image.mimeType === 'image/jpeg'
+                ? 'image/jpeg'
+                : 'image/jpeg',
+            data: m.image.data,
+          };
+        }
+
+        return result;
+      })
+      .filter(
+        (m) =>
+          m.content.trim() ||
+          m.image,
+      );
 
     if (!cleanMessages.length) {
       return json(res, 400, {
-        error:
-          'No conversation messages supplied',
+        error: 'No conversation messages supplied',
         code: 'EMPTY_INPUT',
       });
     }
 
-    /*
-     * Optional vision payload from the browser.
-     */
-    let image = null;
-
-    if (body.image && typeof body.image === 'object') {
-      image = {
-        mimeType: body.image.mimeType,
-        data: body.image.data,
-      };
-    }
-
     const result = await provider.generate({
       messages: cleanMessages,
-      image,
     });
 
     return json(res, 200, result);
@@ -324,7 +282,6 @@ export default async function handler(req, res) {
       error:
         error?.message ||
         'AI provider error',
-
       code:
         error?.code ||
         'AI_PROVIDER_ERROR',
