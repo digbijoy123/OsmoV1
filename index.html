@@ -709,16 +709,20 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const box=$('#cameraBox');
     if(!video || !box) throw new Error('Camera UI unavailable');
 
-    // Never tear down a working stream just because the user taps again.
+    // Reuse an already-live stream. A second getUserMedia call is unnecessary
+    // and can make Android Chrome fight with the first camera session.
     if(cameraStream){
-      const track=cameraStream.getVideoTracks()[0];
-      if(track?.readyState==='live'){
+      const liveTrack=cameraStream.getVideoTracks()[0];
+      if(liveTrack?.readyState==='live'){
+        video.autoplay=true;
+        video.playsInline=true;
+        video.muted=true;
         if(video.srcObject!==cameraStream) video.srcObject=cameraStream;
         box.classList.remove('empty');
-        if(video.paused){
-          try{await video.play();}catch(e){
-            if(e?.name!=='AbortError') throw e;
-          }
+        try{
+          if(video.paused) await video.play();
+        }catch(err){
+          if(err?.name!=='AbortError') throw err;
         }
         log('CAM · existing live stream reused');
         return cameraStream;
@@ -750,43 +754,80 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }
 
     cameraStream=stream;
+
+    // Set the media element completely before attaching the stream.
+    // Do not wait for loadedmetadata: on Android Chrome that event can fire
+    // before a listener is installed, which previously left the UI stuck on
+    // "MEDIA STARTING".
     video.autoplay=true;
     video.playsInline=true;
     video.muted=true;
+    video.setAttribute('autoplay','');
+    video.setAttribute('playsinline','');
     video.srcObject=stream;
     box.classList.remove('empty');
 
-    const playCamera=async()=>{
-      try{
-        await video.play();
-      }catch(err){
-        if(err?.name==='AbortError'){
-          // Android Chrome can briefly report an interrupted play while the
-          // MediaStream attaches. Retry without replacing srcObject.
-          await new Promise(r=>setTimeout(r,180));
-          if(video.srcObject===stream && track.readyState==='live') await video.play();
-        }else{
-          throw err;
-        }
+    const waitForVideoReady=async()=>{
+      // Metadata may already be available.
+      if(video.readyState>=HTMLMediaElement.HAVE_METADATA &&
+         video.videoWidth>0 && video.videoHeight>0){
+        return;
       }
+
+      await new Promise((resolve,reject)=>{
+        let settled=false;
+        const finish=(fn,value)=>{
+          if(settled)return;
+          settled=true;
+          video.removeEventListener('loadedmetadata',onMeta);
+          video.removeEventListener('canplay',onCanPlay);
+          video.removeEventListener('error',onError);
+          clearTimeout(timer);
+          fn(value);
+        };
+        const onMeta=()=>finish(resolve);
+        const onCanPlay=()=>finish(resolve);
+        const onError=()=>finish(reject,new Error('Camera video element failed to load stream'));
+        const timer=setTimeout(()=>{
+          // If the track is live, do not fail merely because Android Chrome
+          // delayed its media events. The subsequent play() call is the
+          // authoritative test.
+          if(track.readyState==='live') finish(resolve);
+          else finish(reject,new Error('Camera track did not become live'));
+        },2500);
+
+        video.addEventListener('loadedmetadata',onMeta,{once:true});
+        video.addEventListener('canplay',onCanPlay,{once:true});
+        video.addEventListener('error',onError,{once:true});
+
+        // Re-check synchronously after listeners are installed so a metadata
+        // event that raced with setup cannot strand the promise.
+        if(video.readyState>=HTMLMediaElement.HAVE_METADATA &&
+           video.videoWidth>0 && video.videoHeight>0){
+          finish(resolve);
+        }
+      });
     };
 
-    if(video.readyState < HTMLMediaElement.HAVE_METADATA){
-      await new Promise((resolve,reject)=>{
-        const onMeta=()=>{cleanup();resolve();};
-        const onError=()=>{cleanup();reject(new Error('Camera video element failed to load stream'));};
-        const cleanup=()=>{
-          video.removeEventListener('loadedmetadata',onMeta);
-          video.removeEventListener('error',onError);
-        };
-        video.addEventListener('loadedmetadata',onMeta,{once:true});
-        video.addEventListener('error',onError,{once:true});
-      });
+    await waitForVideoReady();
+
+    // Android Chrome may briefly interrupt play() while attaching a MediaStream.
+    // Retry the same stream without replacing srcObject.
+    let played=false;
+    for(let attempt=0;attempt<3 && !played;attempt++){
+      try{
+        await video.play();
+        played=true;
+      }catch(err){
+        if(err?.name==='AbortError' && attempt<2){
+          await new Promise(r=>setTimeout(r,200*(attempt+1)));
+          continue;
+        }
+        throw err;
+      }
     }
 
-    await playCamera();
-
-    log('CAM · video playing · '+video.videoWidth+'x'+video.videoHeight);
+    log('CAM · video playing · '+(video.videoWidth||0)+'x'+(video.videoHeight||0));
     if(video.videoWidth>0 && video.videoHeight>0) log('CAM · LIVE');
 
     video.onloadedmetadata=()=>log('CAM · metadata · '+video.videoWidth+'x'+video.videoHeight);
@@ -1377,4 +1418,3 @@ function hookRecognitionDiagnostics(r){
 </script>
 </body>
 </html>
-
