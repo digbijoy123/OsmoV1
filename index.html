@@ -1,4 +1,4 @@
- <!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -55,7 +55,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 @keyframes blinkDot{50%{opacity:.35}}
 
 /* Camera */
-.camera{position:absolute;right:15px;top:103px;width:min(62vw, 420px);height:min(32vh, 250px);border-radius:20px;overflow:hidden;background:#080b11;border:2px solid rgba(255,255,255,.75);box-shadow:0 12px 28px rgba(44,36,64,.22);z-index:25}
+.camera{position:absolute;left:50%;right:auto;top:108px;width:min(92%,420px);height:auto;aspect-ratio:16/9;transform:translateX(-50%);border-radius:18px;overflow:hidden;background:#080b11;border:2px solid rgba(255,255,255,.75);box-shadow:0 12px 28px rgba(44,36,64,.22);z-index:25}
 .camera video{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1)}
 .camera.rear video{transform:none}
 #cameraSwitchBtn:disabled{opacity:.45;cursor:not-allowed}
@@ -69,7 +69,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 .camera .visionSummary.show{opacity:1;transform:none}
 
 /* Avatar zone */
-.avatarZone{position:absolute;left:12px;right:12px;top:125px;bottom:205px;display:grid;place-items:center;z-index:8}
+.avatarZone{position:absolute;left:12px;right:12px;top:310px;bottom:205px;display:grid;place-items:center;z-index:8}
 .orbit{position:relative;width:min(82vw,470px);height:min(82vw,470px);max-height:100%;aspect-ratio:1}
 .ring{position:absolute;border-radius:50%;inset:0;border:1px solid rgba(44,36,64,.14);pointer-events:none}
 .ring.r1{inset:0;animation:spin 30s linear infinite}
@@ -139,7 +139,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 /* Desktop landscape */
 .device.landscape .avatarZone{top:105px;bottom:120px;left:24%;right:24%}
-.device.landscape .camera{left:18px;right:auto;top:100px;width:180px;height:128px}
+.device.landscape .camera{left:18px;right:auto;top:100px;width:180px;height:128px;aspect-ratio:auto;transform:none}
 .device.landscape .status{bottom:88px}
 .device.landscape .caption{left:18px;right:210px;bottom:18px;min-height:52px}
 .device.landscape .bottom{bottom:18px;left:auto;right:18px;width:170px;justify-content:flex-end}
@@ -149,9 +149,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 /* Small phones */
 @media(max-width:380px){
-  .camera{width:190px;height:135px}
+  .camera{left:50%;right:auto;top:104px;width:92%;height:auto;aspect-ratio:16/9;transform:translateX(-50%)}
   .brand{font-size:12px}.stateChip,.battery,.pill{font-size:7px}
-  .avatarZone{top:116px;bottom:190px}
+  .avatarZone{top:285px;bottom:190px}
   .caption{bottom:75px}
   .mic{width:64px;height:64px}
 }
