@@ -343,6 +343,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let cameraSession = 0;
   let visionRequestController = null;
   let latestVision = null;
+  let visualMemory = null;
   let micStream = null;
   let recognition = null;
   let bleDevice = null;
@@ -1205,6 +1206,58 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     );
   }
 
+  function isFreshVisionQuestion(text){
+    const l=(text||'').toLowerCase().trim();
+    return (
+      /\b(now|currently|right now|at the moment)\b/.test(l) ||
+      /\b(where|left|right|behind|front|next to|near|far|moved|move|still there|still here)\b/.test(l) ||
+      /\b(is|are)\s+.*\b(still|there|here)\b/.test(l)
+    );
+  }
+
+  function isVisualMemoryFollowup(text){
+    const l=(text||'').toLowerCase().trim();
+    return (
+      /\b(it|that|this|they|them|the same|the object|the item)\b/.test(l) ||
+      /\bwhat (color|colour|kind|type|shape|size)\b/.test(l) ||
+      /\bwhat was\b/.test(l) ||
+      /\bwas (it|that|this)\b/.test(l) ||
+      /\bhow many\b/.test(l) ||
+      /\bdescribe (it|that|this|the object|the item)\b/.test(l) ||
+      /\bwhat did you see\b/.test(l)
+    );
+  }
+
+  function buildVisualMemoryMessage(){
+    if(!visualMemory) return null;
+
+    const ageSeconds=Math.max(
+      0,
+      Math.round((Date.now()-visualMemory.timestamp)/1000)
+    );
+
+    const objects=Array.isArray(visualMemory.objects)
+      ? visualMemory.objects
+      : [];
+
+    const objectLines=objects.slice(0,12).map((o)=>{
+      const name=String(o?.name||'object');
+      const count=Math.max(1,Number.parseInt(o?.count,10)||1);
+      const confidence=Number.isFinite(Number(o?.confidence))
+        ? Math.round(Number(o.confidence))
+        : 0;
+      return `- ${name}: count ${count}, confidence ${confidence}/100`;
+    }).join('\n');
+
+    return [
+      'VISUAL MEMORY — this is a previous camera observation, not a live feed.',
+      `Observed approximately ${ageSeconds} seconds ago in camera session ${visualMemory.session}.`,
+      `Scene: ${String(visualMemory.scene||'No scene description available.')}`,
+      objectLines ? `Objects:\n${objectLines}` : 'Objects: none confidently detected.',
+      'Use this memory only for questions about what was previously seen. Never claim that the camera currently sees these things.'
+    ].join('\n');
+  }
+
   function captureVisionFrame(){
     const video = $('#camera');
     const track = cameraStream?.getVideoTracks?.()[0];
@@ -1280,6 +1333,19 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       : [];
 
     const scene = String(visionData.scene || '').trim();
+
+    visualMemory = {
+      scene,
+      objects: objects.map((object)=>({
+        name:String(object?.name||'object'),
+        count:Math.max(1,Number.parseInt(object?.count,10)||1),
+        confidence:Number.isFinite(Number(object?.confidence))
+          ? Math.max(0,Math.min(100,Number(object.confidence)))
+          : 0
+      })),
+      session:cameraSession,
+      timestamp:Date.now()
+    };
 
     objects.slice(0,12).forEach((object)=>{
       const box = Array.isArray(object.box) ? object.box : [];
@@ -1472,7 +1538,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     try{
       let visionImage=null;
-      const wantsVision=isVisionQuestion(clean);
+      const baseVisionQuestion=isVisionQuestion(clean);
+      const freshVision=isFreshVisionQuestion(clean);
+      const wantsVision=baseVisionQuestion || freshVision;
+      const useVisualMemory=Boolean(visualMemory) && !freshVision && (
+        isVisualMemoryFollowup(clean) ||
+        (!cameraEnabled && baseVisionQuestion)
+      );
 
       if(cameraEnabled && wantsVision && requestCameraSession===cameraSession){
         try{
@@ -1500,8 +1572,28 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       }
 
       visionRequestController=new AbortController();
+
+      const requestMessages = useVisualMemory
+        ? [
+            ...conversation,
+            {
+              role:'assistant',
+              content:buildVisualMemoryMessage()
+            }
+          ]
+        : conversation;
+
+      if(useVisualMemory){
+        devLog('VISION','visual memory attached to request',{
+          session:visualMemory?.session ?? null,
+          ageSeconds:visualMemory
+            ? Math.max(0,Math.round((Date.now()-visualMemory.timestamp)/1000))
+            : null
+        });
+      }
+
       const data = await callRoboBrain(
-        conversation,
+        requestMessages,
         visionImage,
         visionRequestController.signal,
         requestUsedVision && requestCameraSession === cameraSession,
