@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS — v2.13 media-stt-fixed</title>
+<title>ROBO AIOS — v2.13 ROBO VISION</title>
 <style>
 :root{
   --void:#090d15;
@@ -181,12 +181,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.12 CAM FIX</small></div>
+          <div class="brand">ROBO <small>v2.13 VISION</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
         <div class="hudBottom">
           <div class="pill"><span class="dot" id="mediaDot"></span><span id="mediaText">MEDIA OFF</span></div>
+          <div class="pill"><span class="dot" id="visionDot"></span><span id="visionText">VISION IDLE</span></div>
           <div class="pill"><span class="dot" id="bleDot"></span><span id="bleText">ROBOT OFFLINE</span></div>
         </div>
       </header>
@@ -246,7 +247,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.12 CAM FIX</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.13 VISION</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -265,6 +266,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <section class="devCard">
       <div class="devTitle">CAPTURED TRANSCRIPT</div>
       <pre class="devPre" id="devTranscript">No transcript yet.</pre>
+    </section>
+    <section class="devCard">
+      <div class="devTitle">ROBO VISION · OBJECTS</div>
+      <div class="devRow"><span>Scene</span><b id="devVisionScene">—</b></div>
+      <pre class="devPre" id="devVisionObjects">No vision result yet.</pre>
     </section>
     <section class="devCard devLogCard">
       <div class="devTitle">EVENT / ERROR LOG</div>
@@ -334,6 +340,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let bleDevice = null;
   let bleChar = null;
   let audioLevel = 0;
+  let latestVision = null;
   let lastActivity = performance.now();
   let blink = 0;
   let blinkTimer = 1800 + Math.random()*3000;
@@ -1163,6 +1170,35 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     };
   }
 
+  function setVisionStatus(text, ok=false){
+    const dot=$('#visionDot');
+    const label=$('#visionText');
+    if(label) label.textContent=text;
+    if(dot) dot.className='dot '+(ok?'ok':'');
+  }
+
+  function renderVisionResult(vision){
+    latestVision=vision || null;
+    const scene=String(vision?.scene||'No scene description.').trim();
+    const objects=Array.isArray(vision?.objects)?vision.objects:[];
+    if($('#devVisionScene')) $('#devVisionScene').textContent=scene;
+    if($('#devVisionObjects')){
+      if(!objects.length){
+        $('#devVisionObjects').textContent='No objects confidently detected.';
+      }else{
+        $('#devVisionObjects').textContent=objects.map((o,i)=>{
+          const box=Array.isArray(o.box)&&o.box.length===4
+            ? ` · box ${o.box.join(',')}` : '';
+          const confidence=Number.isFinite(Number(o.confidence))
+            ? ` · ${Math.round(Number(o.confidence))}%` : '';
+          return `${i+1}. ${o.name||'unknown'} ×${Number(o.count)||1}${confidence}${box}`;
+        }).join('\n');
+      }
+    }
+    setVisionStatus(objects.length?`VISION · ${objects.length} OBJECT${objects.length===1?'':'S'}`:'VISION · NO OBJECTS',true);
+    devLog('VISION','structured result',{scene,objects});
+  }
+
   async function callRoboBrain(messages,image=null){
     const started=performance.now();
     devLog("AI","request sent · provider adapter"+(image?' · vision frame attached':''));
@@ -1224,10 +1260,15 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       }
 
       const data=await callRoboBrain(conversation,visionImage);
+      if(data?.visionData){
+        renderVisionResult(data.visionData);
+      }else if(visionImage){
+        setVisionStatus('VISION · ANALYZING',false);
+      }
       const reply=String(data.text).trim();
       conversation.push({role:'assistant',content:reply});
       while(conversation.length>MAX_HISTORY) conversation.shift();
-      if(devAI) devAI.textContent=(data.provider||'OPENAI').toUpperCase()+' · CONNECTED';
+      if(devAI) devAI.textContent=(data.provider||'AI').toUpperCase()+' · CONNECTED';
       if(devStage) devStage.textContent='AI RESPONSE RECEIVED';
       setState(emotion,emotion+' · AI response');
       speak(reply);
@@ -1275,7 +1316,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 /* ---------- Developer diagnostics runtime ---------- */
 const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript");
-const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
+const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI"), devVisionScene=$("#devVisionScene"), devVisionObjects=$("#devVisionObjects");
 let devLogLines=["[BOOT] Developer diagnostics ready."];
 
 function devLog(type,msg,data){
@@ -1348,6 +1389,7 @@ function runDevChecks(){
     ["On-device STT API",!!(window.SpeechRecognition&&"processLocally" in SpeechRecognition.prototype)],
     ["AI adapter route",true],
     ["Camera vision capture",!!(cameraStream && $("#camera")?.videoWidth>1 && $("#camera")?.videoHeight>1)],
+    ["Structured vision state",latestVision!==null],
     ["AI API key",null]
   ];
   $("#devChecks").innerHTML=list.map(x=>{
@@ -1392,6 +1434,8 @@ $("#copyLogs").addEventListener("click",async()=>{
     "STT: "+devStt.textContent,
     "On-device STT: "+devLocalStt.textContent,
     "AI brain: "+devAI.textContent,
+    "Vision scene: "+(devVisionScene?.textContent||"—"),
+    "Vision objects: "+(devVisionObjects?.textContent||"—"),
     "",
     "TRANSCRIPT:",
     devTranscript.textContent,
@@ -1495,10 +1539,12 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.12 CAM FIX booted · provider-neutral AI brain");
+  log("ROBO AIOS v2.13 VISION booted · provider-neutral AI brain");
   log("3D floating emoji renderer online");
   log("camera + mic waiting for user permission");
-  log("AI provider adapter online · API key required for live AI");
+  log("AI provider adapter online · Gemini vision enabled");
+  setVisionStatus('VISION IDLE',false);
+  log("structured object detection → ready on next camera query");
   log("natural idle emotion cycle → ON");
 
   /* Developer convenience: desktop starts in portrait simulator. */
