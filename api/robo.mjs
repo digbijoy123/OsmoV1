@@ -1,33 +1,33 @@
-/**
+/\*\*
 
- * ROBO AIOS v2.13 — provider-neutral Gemini AI + vision adapter.
+ \* ROBO AIOS v2.13 — provider-neutral Gemini AI + vision adapter.
 
- * Vercel serverless function: /api/robo
+ \* Vercel serverless function: /api/robo
 
- *
+ \*
 
- * Current provider: Gemini
+ \* Current provider: Gemini
 
- * Model: Gemini 3.1 Flash-Lite
+ \* Model: Gemini 3.1 Flash-Lite
 
- *
+ \*
 
- * Supports:
+ \* Supports:
 
- * - spoken/text conversation
+ \* - spoken/text conversation
 
- * - one optional camera frame per request
+ \* - one optional camera frame per request
 
- * - structured scene + object detection
+ \* - structured scene + object detection
 
- *
+ \*
 
- * Secrets stay server-side in GEMINI_API_KEY.
+ \* Secrets stay server-side in GEMINI\_API\_KEY.
 
- */
+ \*/
 
 
-const SYSTEM_PROMPT =
+const SYSTEM\_PROMPT =
 
   'You are Robo, a warm, concise AI companion. ' +
 
@@ -48,7 +48,7 @@ const SYSTEM_PROMPT =
   'If no camera image is attached, return an empty objects array and a clear scene message.';
 
 
-const VISION_SCHEMA = {
+const VISION\_SCHEMA = {
 
   type: 'OBJECT',
 
@@ -166,7 +166,7 @@ function normalizeImage(image) {
 
   if (!mimeType || !mimeType.startsWith('image/')) {
 
-    throw makeError('Invalid vision image MIME type', 'INVALID_IMAGE', 400);
+    throw makeError('Invalid vision image MIME type', 'INVALID\_IMAGE', 400);
 
   }
 
@@ -182,14 +182,14 @@ function normalizeImage(image) {
 
   if (!data) {
 
-    throw makeError('Vision image data is empty', 'INVALID_IMAGE', 400);
+    throw makeError('Vision image data is empty', 'INVALID\_IMAGE', 400);
 
   }
 
 
-  if (data.length > 12_000_000) {
+  if (data.length > 12\_000\_000) {
 
-    throw makeError('Vision image is too large', 'IMAGE_TOO_LARGE', 413);
+    throw makeError('Vision image is too large', 'IMAGE\_TOO\_LARGE', 413);
 
   }
 
@@ -288,10 +288,14 @@ function normalizeVisionResult(value) {
         .filter(Boolean)
 
     : [];
+
+
   return {
-    answer: typeof value?.answer === 'string' ? value.answer.trim() : '',
+
     scene,
+
     objects,
+
   };
 
 }
@@ -313,16 +317,16 @@ const PROVIDERS = {
 
     }) {
 
-      const key = process.env.GEMINI_API_KEY;
+      const key = process.env.GEMINI\_API\_KEY;
 
 
       if (!key) {
 
         throw makeError(
 
-          'GEMINI_API_KEY is not configured',
+          'GEMINI\_API\_KEY is not configured',
 
-          'AI_NOT_CONFIGURED',
+          'AI\_NOT\_CONFIGURED',
 
           503,
 
@@ -341,7 +345,7 @@ const PROVIDERS = {
 
           'Vision frame supplied while camera is disabled',
 
-          'CAMERA_STATE_MISMATCH',
+          'CAMERA\_STATE\_MISMATCH',
 
           409,
 
@@ -356,7 +360,7 @@ const PROVIDERS = {
 
           'Vision frame is missing a valid camera session',
 
-          'INVALID_CAMERA_SESSION',
+          'INVALID\_CAMERA\_SESSION',
 
           400,
 
@@ -397,9 +401,9 @@ const PROVIDERS = {
 
           parts.push({
 
-            inline_data: {
+            inline\_data: {
 
-              mime_type: normalizedImage.mimeType,
+              mime\_type: normalizedImage.mimeType,
 
               data: normalizedImage.data,
 
@@ -423,12 +427,12 @@ const PROVIDERS = {
 
       const model =
 
-        process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+        process.env.GEMINI\_MODEL || 'gemini-3.1-flash-lite';
 
 
       const response = await fetch(
 
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        \`[https://generativelanguage.googleapis.com/v1beta/models/${model}\:generateContent](https://generativelanguage.googleapis.com/v1beta/models/${model}\:generateContent)\`,
 
         {
 
@@ -446,7 +450,7 @@ const PROVIDERS = {
 
             systemInstruction: {
 
-              parts: [{ text: SYSTEM_PROMPT }],
+              parts: [{ text: SYSTEM\_PROMPT }],
 
             },
 
@@ -460,7 +464,7 @@ const PROVIDERS = {
 
               responseMimeType: 'application/json',
 
-              responseSchema: VISION_SCHEMA,
+              responseSchema: VISION\_SCHEMA,
 
             },
 
@@ -480,7 +484,7 @@ const PROVIDERS = {
 
           data?.error?.message ||
 
-          `Gemini request failed (${response.status})`;
+          \`Gemini request failed (${response.status})\`;
 
 
         throw makeError(
@@ -491,7 +495,7 @@ const PROVIDERS = {
 
             data?.error?.code ||
 
-            'GEMINI_API_ERROR',
+            'GEMINI\_API\_ERROR',
 
           response.status,
 
@@ -509,7 +513,7 @@ const PROVIDERS = {
 
           'Gemini returned no structured text',
 
-          'AI_EMPTY_RESPONSE',
+          'AI\_EMPTY\_RESPONSE',
 
           502,
 
@@ -531,7 +535,7 @@ const PROVIDERS = {
 
           'Gemini returned invalid structured JSON',
 
-          'AI_INVALID_JSON',
+          'AI\_INVALID\_JSON',
 
           502,
 
@@ -555,7 +559,7 @@ const PROVIDERS = {
 
           'Gemini returned no spoken answer',
 
-          'AI_EMPTY_RESPONSE',
+          'AI\_EMPTY\_RESPONSE',
 
           502,
 
@@ -609,7 +613,7 @@ export default async function handler(req, res) {
 
   const providerName = String(
 
-    process.env.AI_PROVIDER || 'gemini',
+    process.env.AI\_PROVIDER || 'gemini',
 
   ).toLowerCase();
 
@@ -620,7 +624,7 @@ export default async function handler(req, res) {
 
       providerName === 'gemini'
 
-        ? Boolean(process.env.GEMINI_API_KEY)
+        ? Boolean(process.env.GEMINI\_API\_KEY)
 
         : false;
 
@@ -637,7 +641,7 @@ export default async function handler(req, res) {
 
         providerName === 'gemini'
 
-          ? process.env.GEMINI_MODEL ||
+          ? process.env.GEMINI\_MODEL ||
 
             'gemini-3.1-flash-lite'
 
@@ -658,7 +662,7 @@ export default async function handler(req, res) {
 
       error: 'Method not allowed',
 
-      code: 'METHOD_NOT_ALLOWED',
+      code: 'METHOD\_NOT\_ALLOWED',
 
     });
 
@@ -683,9 +687,9 @@ export default async function handler(req, res) {
 
       return json(res, 400, {
 
-        error: `Unsupported AI provider: ${providerName}`,
+        error: \`Unsupported AI provider: ${providerName}\`,
 
-        code: 'UNSUPPORTED_PROVIDER',
+        code: 'UNSUPPORTED\_PROVIDER',
 
       });
 
@@ -730,7 +734,7 @@ export default async function handler(req, res) {
 
         error: 'No conversation messages supplied',
 
-        code: 'EMPTY_INPUT',
+        code: 'EMPTY\_INPUT',
 
       });
 
@@ -795,7 +799,7 @@ export default async function handler(req, res) {
 
         error?.code ||
 
-        'AI_PROVIDER_ERROR',
+        'AI\_PROVIDER\_ERROR',
 
     });
 
