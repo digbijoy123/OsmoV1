@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS — v2.16 context-aware vision</title>
+<title>ROBO AIOS — v2.15 camera + object vision</title>
 <style>
 :root{
   --void:#090d15;
@@ -188,7 +188,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.16 CONTEXT-AWARE VISION</small></div>
+          <div class="brand">ROBO <small>v2.15 CAM + OBJECT VISION</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -255,7 +255,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.16 CONTEXT-AWARE VISION</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.15 CAM + OBJECT VISION</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -1219,16 +1219,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function isVisualMemoryFollowup(text){
     const l=(text||'').toLowerCase().trim();
     return (
-      /\b(it|that|this|they|them|the same|the object|the item|the one)\b/.test(l) ||
-      /\bwhich one\b/.test(l) ||
-      /\bwhat (color|colour|kind|type|shape|size|material)\b/.test(l) ||
+      /\b(it|that|this|they|them|the same|the object|the item)\b/.test(l) ||
+      /\bwhat (color|colour|kind|type|shape|size)\b/.test(l) ||
       /\bwhat was\b/.test(l) ||
       /\bwas (it|that|this)\b/.test(l) ||
       /\bhow many\b/.test(l) ||
       /\bdescribe (it|that|this|the object|the item)\b/.test(l) ||
-      /\bwhat did you see\b/.test(l) ||
-      /\bwhat did you (say|tell me)\b/.test(l) ||
-      /\bwhat was it like\b/.test(l)
+      /\bwhat did you see\b/.test(l)
     );
   }
 
@@ -1253,23 +1250,16 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return `- ${name}: count ${count}, confidence ${confidence}/100`;
     }).join('\n');
 
-    const previousAnswer=String(visualMemory.spokenAnswer||'').trim();
-
     return [
       'VISUAL MEMORY — this is a previous camera observation, not a live feed.',
       `Observed approximately ${ageSeconds} seconds ago in camera session ${visualMemory.session}.`,
       `Scene: ${String(visualMemory.scene||'No scene description available.')}`,
       objectLines ? `Objects:\n${objectLines}` : 'Objects: none confidently detected.',
-      previousAnswer
-        ? `Robo's spoken answer about that observation: ${previousAnswer}`
-        : '',
       visualMemory.tracking?.summary
         ? `Last same-session tracking result: ${visualMemory.tracking.summary}`
         : '',
-      'Use this memory for questions about what was previously seen.',
-      'If the user asks for current position, current presence, or whether something is still there, do not answer from memory; a fresh camera frame is required.',
-      'Never claim that an old observation is live.'
-    ].filter(Boolean).join('\n');
+      'Use this memory only for questions about what was previously seen. Never claim that the camera currently sees these things.'
+    ].join('\n');
   }
 
   function captureVisionFrame(){
@@ -1448,8 +1438,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       objects: currentObjects,
       tracking,
       session:cameraSession,
-      timestamp:Date.now(),
-      spokenAnswer:''
+      timestamp:Date.now()
     };
 
     if(tracking && tracking.summary){
@@ -1688,10 +1677,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             {
               role:'assistant',
               content:buildVisualMemoryMessage()
-            },
-            {
-              role:'user',
-              content:'Use the visual-memory context above to answer this follow-up. Do not treat it as a live camera feed.'
             }
           ]
         : conversation;
@@ -1719,13 +1704,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       if(data?.visionData && visionImage && cameraEnabled && requestCameraSession===cameraSession) renderVisionResult(data.visionData);
       else if(!visionImage || !cameraEnabled){ clearVisionOverlay(); latestVision=null; }
       const reply=String(data.text).trim();
-
-      if(requestUsedVision && visualMemory && requestCameraSession===cameraSession){
-        visualMemory.spokenAnswer=reply;
-        visualMemory.timestamp=Date.now();
-        devLog('VISION','visual context updated with Robo answer');
-      }
-
       conversation.push({role:'assistant',content:reply});
       while(conversation.length>MAX_HISTORY) conversation.shift();
       if(devAI) devAI.textContent=(data.provider||'GEMINI').toUpperCase()+' · CONNECTED';
@@ -2007,7 +1985,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.16 CONTEXT-AWARE VISION booted · Gemini AI brain");
+  log("ROBO AIOS v2.15 CAMERA + OBJECT VISION booted · Gemini AI brain");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
   log("AI provider adapter online · Gemini structured vision enabled");
