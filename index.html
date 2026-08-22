@@ -700,7 +700,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     cameraEnabled=false;
     if(stream) stream.getTracks().forEach(track=>{ try{track.stop();}catch(_){ } });
     const video=$('#camera');
-    if(video){ try{video.pause();}catch(_){ } video.srcObject=null; try{video.load();}catch(_){ } }
+    if(video){ try{video.pause();}catch(_){ } video.srcObject=null; }
     $('#cameraBox')?.classList.add('empty');
     $('#cameraBox')?.classList.remove('rear');
     clearVisionOverlay();
@@ -727,6 +727,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
   async function startCamera(facingMode=cameraFacingMode){
     if(!navigator.mediaDevices?.getUserMedia) throw new Error('Camera API unavailable');
+
+    // Every start gets a unique session. If the user turns the camera off
+    // while getUserMedia() or video.play() is still pending, that old start
+    // is no longer allowed to resurrect the camera.
+    const startSession=++cameraSession;
 
     const video=$('#camera');
     const box=$('#cameraBox');
@@ -783,6 +788,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }catch(firstErr){
       log('CAM · preferred constraints failed · '+(firstErr?.name||'unknown'));
       stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facingMode}},audio:false});
+    }
+
+    if(startSession!==cameraSession){
+      stream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
+      throw new DOMException('Camera start was cancelled','AbortError');
     }
 
     const track=stream.getVideoTracks()[0];
@@ -847,6 +857,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       }
 
       await waitForVideoFrame();
+      if(startSession!==cameraSession){
+        stream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
+        throw new DOMException('Camera start was cancelled','AbortError');
+      }
       cameraEnabled=true;
       cameraFacingMode=facingMode;
       const cameraBtn=$('#cameraBtn');
@@ -860,11 +874,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return stream;
     }catch(err){
       log('CAM · startup failed after permission · '+(err?.name||'unknown')+' · '+(err?.message||''));
-      stream.getTracks().forEach(t=>t.stop());
-      cameraStream=null;
+      stream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
+      if(cameraStream===stream) cameraStream=null;
       cameraEnabled=false;
-      video.srcObject=null;
-      try{video.load();}catch(_){}
+      video.pause?.();
+      if(video.srcObject===stream) video.srcObject=null;
       box.classList.add('empty');
       throw err;
     }
@@ -1402,6 +1416,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 /* ---------- Developer diagnostics runtime ---------- */
 const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript");
 const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
+window.__roboStructuredVisionReady=false;
 let devLogLines=["[BOOT] Developer diagnostics ready."];
 
 function devLog(type,msg,data){
@@ -1444,9 +1459,16 @@ async function refreshAIProviderDiagnostic(){
 
     const provider=String(data.provider||'AI').toUpperCase();
     const model=data.model||'unknown model';
+    window.__roboStructuredVisionReady=Boolean(data.configured && data.structuredVision);
     if(devAI)devAI.textContent=data.configured
       ? provider+' · CONNECTED'+(data.vision?' · VISION READY':'')
       : provider+' · KEY NOT CONFIGURED';
+    const visionRow=[...document.querySelectorAll('#devChecks .devCheck')]
+      .find(el=>el.firstElementChild?.textContent==='Structured vision state');
+    if(visionRow){
+      visionRow.className='devCheck '+(window.__roboStructuredVisionReady?'ok':'fail');
+      visionRow.lastElementChild.textContent=window.__roboStructuredVisionReady?'PASS':'FAIL';
+    }
 
     const row=[...document.querySelectorAll('#devChecks .devCheck')]
       .find(el=>el.firstElementChild?.textContent==='AI API key');
@@ -1475,7 +1497,7 @@ function runDevChecks(){
     ["AI adapter route",true],
     ["Camera vision capture",!!(cameraEnabled && cameraStream && $("#camera")?.videoWidth>1 && $("#camera")?.videoHeight>1)],
     ["Camera state",cameraEnabled && !!cameraStream],
-    ["Structured vision state",latestVision!==null],
+    ["Structured vision state",!!window.__roboStructuredVisionReady],
     ["AI API key",null]
   ];
   $("#devChecks").innerHTML=list.map(x=>{
