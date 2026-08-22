@@ -1,11 +1,13 @@
 /**
- * ROBO AIOS v2.12 — provider-neutral AI adapter.
+ * ROBO AIOS v2.13 — provider-neutral AI adapter.
  * Vercel serverless function: /api/robo
  *
  * Current provider: Gemini
  * Model: Gemini 3.1 Flash-Lite
  *
  * Supports text chat plus one optional camera image per request.
+ * When an image is supplied, Gemini returns structured ROBO VISION data:
+ * scene + detected objects + normalized bounding boxes.
  * The Gemini API key stays server-side in GEMINI_API_KEY.
  */
 
@@ -14,8 +16,48 @@ const SYSTEM_PROMPT =
   'Respond naturally for spoken conversation. ' +
   'Keep answers reasonably short unless the user asks for detail. ' +
   'Do not mention being a language model unless directly asked. ' +
-  'When a camera image is attached, use it to answer the user’s question. ' +
-  'If the image is unclear or irrelevant, say so briefly instead of inventing details.';
+  'When a camera image is attached, inspect it carefully and use it to answer the user. ' +
+  'Do not invent objects or details that are not visible. ' +
+  'When vision data is requested, report only objects that are reasonably visible in the image. ' +
+  'Bounding boxes are approximate and must be normalized to 0-1000 as [ymin, xmin, ymax, xmax].';
+
+const VISION_SCHEMA = {
+  type: 'object',
+  properties: {
+    scene: {
+      type: 'string',
+      description: 'A concise description of the visible scene.',
+    },
+    objects: {
+      type: 'array',
+      description: 'Visible objects detected in the image.',
+      items: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Short common name of the visible object.',
+          },
+          count: {
+            type: 'integer',
+            description: 'Number of instances of this object visible in the image.',
+          },
+          confidence: {
+            type: 'integer',
+            description: 'Approximate visual confidence from 0 to 100.',
+          },
+          box: {
+            type: 'array',
+            description: 'Approximate normalized bounding box [ymin, xmin, ymax, xmax], each value 0-1000.',
+            items: { type: 'integer' },
+          },
+        },
+        required: ['name', 'count', 'confidence', 'box'],
+      },
+    },
+  },
+  required: ['scene', 'objects'],
+};
 
 function makeError(message, code, status) {
   const err = new Error(message);
@@ -34,23 +76,25 @@ function normalizeImage(image) {
     throw makeError('Invalid vision image MIME type', 'INVALID_IMAGE', 400);
   }
 
-  // Accept either raw base64 or a data URL from the browser.
   const comma = data.indexOf(',');
-  if (data.startsWith('data:') && comma >= 0) {
-    data = data.slice(comma + 1);
-  }
+  if (data.startsWith('data:') && comma >= 0) data = data.slice(comma + 1);
 
   if (!data) {
     throw makeError('Vision image data is empty', 'INVALID_IMAGE', 400);
   }
 
-  // Keep accidental oversized requests out of the serverless function.
-  // The browser currently sends a small JPEG frame.
   if (data.length > 12_000_000) {
     throw makeError('Vision image is too large', 'IMAGE_TOO_LARGE', 413);
   }
 
   return { mimeType, data };
+}
+
+function extractText(data) {
+  return data?.candidates?.[0]?.content?.parts
+    ?.map((part) => part?.text || '')
+    .join('')
+    .trim() || '';
 }
 
 const PROVIDERS = {
@@ -67,15 +111,13 @@ const PROVIDERS = {
       }
 
       const normalizedImage = normalizeImage(image);
+      const visionMode = Boolean(normalizedImage);
 
       const contents = messages.map((message, index) => {
         const parts = [
-          {
-            text: String(message.content ?? ''),
-          },
+          { text: String(message.content ?? '') },
         ];
 
-        // Attach the live camera frame to the latest user message only.
         if (
           normalizedImage &&
           message.role === 'user' &&
@@ -98,6 +140,18 @@ const PROVIDERS = {
       const model =
         process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 
+      const generationConfig = visionMode
+        ? {
+            temperature: 0.2,
+            maxOutputTokens: 700,
+            response_mime_type: 'application/json',
+            response_json_schema: VISION_SCHEMA,
+          }
+        : {
+            temperature: 0.7,
+            maxOutputTokens: 300,
+          };
+
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
         {
@@ -111,10 +165,7 @@ const PROVIDERS = {
               parts: [{ text: SYSTEM_PROMPT }],
             },
             contents,
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 300,
-            },
+            generationConfig,
           }),
         },
       );
@@ -135,13 +186,9 @@ const PROVIDERS = {
         );
       }
 
-      const text =
-        data?.candidates?.[0]?.content?.parts
-          ?.map((part) => part?.text || '')
-          .join('')
-          .trim() || '';
+      const rawText = extractText(data);
 
-      if (!text) {
+      if (!rawText) {
         throw makeError(
           'Gemini returned no text',
           'AI_EMPTY_RESPONSE',
@@ -149,11 +196,81 @@ const PROVIDERS = {
         );
       }
 
+      if (visionMode) {
+        let visionData;
+
+        try {
+          visionData = JSON.parse(rawText);
+        } catch {
+          throw makeError(
+            'Gemini returned invalid structured vision JSON',
+            'VISION_INVALID_JSON',
+            502,
+          );
+        }
+
+        const objects = Array.isArray(visionData.objects)
+          ? visionData.objects
+              .map((object) => ({
+                name: String(object?.name || 'unknown').trim(),
+                count: Math.max(
+                  1,
+                  Number.parseInt(object?.count, 10) || 1,
+                ),
+                confidence: Math.max(
+                  0,
+                  Math.min(
+                    100,
+                    Number.parseInt(object?.confidence, 10) || 0,
+                  ),
+                ),
+                box:
+                  Array.isArray(object?.box) &&
+                  object.box.length === 4
+                    ? object.box.map((value) =>
+                        Math.max(
+                          0,
+                          Math.min(
+                            1000,
+                            Number.parseInt(value, 10) || 0,
+                          ),
+                        ),
+                      )
+                    : [0, 0, 1000, 1000],
+              }))
+              .filter((object) => object.name)
+          : [];
+
+        const scene =
+          String(visionData.scene || '').trim() ||
+          'No clear scene description.';
+
+        const reply = objects.length
+          ? `I can see ${objects
+              .map(
+                (o) =>
+                  `${o.count > 1 ? `${o.count} ` : ''}${o.name}`,
+              )
+              .join(', ')}.`
+          : 'I do not see any clear objects I can identify confidently.';
+
+        return {
+          text: reply,
+          provider: 'gemini',
+          model,
+          vision: true,
+          visionData: {
+            scene,
+            objects,
+          },
+        };
+      }
+
       return {
-        text,
+        text: rawText,
         provider: 'gemini',
         model,
-        vision: Boolean(normalizedImage),
+        vision: false,
       };
     },
   },
@@ -184,9 +301,12 @@ export default async function handler(req, res) {
       configured,
       model:
         providerName === 'gemini'
-          ? process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite'
+          ? process.env.GEMINI_MODEL ||
+            'gemini-3.1-flash-lite'
           : null,
       vision: providerName === 'gemini',
+      objectDetection: providerName === 'gemini',
+      structuredVision: providerName === 'gemini',
     });
   }
 
@@ -198,10 +318,19 @@ export default async function handler(req, res) {
   }
 
   try {
-    const body =
-      typeof req.body === 'string'
-        ? JSON.parse(req.body)
-        : req.body || {};
+    let body;
+
+    try {
+      body =
+        typeof req.body === 'string'
+          ? JSON.parse(req.body)
+          : req.body || {};
+    } catch {
+      return json(res, 400, {
+        error: 'Invalid JSON body',
+        code: 'INVALID_JSON',
+      });
+    }
 
     const provider = PROVIDERS[providerName];
 
