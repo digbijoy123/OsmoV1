@@ -1,15 +1,14 @@
 /**
- * ROBO AIOS v2.14 — Gemini AI + optional structured vision.
+ * ROBO AIOS v2.16 — robust Gemini AI + vision adapter
  * Vercel serverless function: /api/robo
  *
- * Current provider: Gemini
- * Model: Gemini 3.1 Flash-Lite
+ * Supports:
+ * - spoken/text conversation
+ * - one optional camera frame per request
+ * - structured scene + object detection
+ * - safe fallback when Gemini returns non-JSON text
  *
- * IMPORTANT:
- * - Normal text/voice requests use a normal text response.
- * - Vision requests use structured JSON.
- * - Camera images are never required for ordinary conversation.
- * - GEMINI_API_KEY stays server-side.
+ * Secrets stay server-side in GEMINI_API_KEY.
  */
 
 const SYSTEM_PROMPT =
@@ -17,12 +16,11 @@ const SYSTEM_PROMPT =
   'Respond naturally for spoken conversation. ' +
   'Keep answers reasonably short unless the user asks for detail. ' +
   'Do not mention being a language model unless directly asked. ' +
-  'You have two separate abilities: hearing the user through speech recognition and seeing camera images when an image is provided. ' +
-  'Never confuse hearing with seeing. ' +
-  'If the user asks "can you hear me", answer about hearing. ' +
-  'If the user asks whether you can see them, answer about the camera image. ' +
-  'Only describe the camera image when one is actually attached. ' +
-  'Never invent visual details.';
+  'When a camera image is attached, inspect it carefully and use it to answer the user. ' +
+  'Never invent objects or details that are not reasonably visible. ' +
+  'For object detection, report prominent visible objects only. ' +
+  'Bounding boxes must be [ymin, xmin, ymax, xmax] normalized to 0-1000. ' +
+  'If no camera image is attached, return an empty objects array.';
 
 const VISION_SCHEMA = {
   type: 'OBJECT',
@@ -36,35 +34,39 @@ const VISION_SCHEMA = {
     scene: {
       type: 'STRING',
       description:
-        'A brief factual description of the visible camera scene.',
+        'A brief factual description of the visible scene. ' +
+        'If no image is attached, say that no camera image was provided.',
     },
 
     objects: {
       type: 'ARRAY',
       description:
-        'Prominent confidently visible objects in the camera image.',
+        'Prominent visible objects detected in the camera image. ' +
+        'Empty when no image is attached or no object is confidently visible.',
+
       items: {
         type: 'OBJECT',
+
         properties: {
           name: {
             type: 'STRING',
-            description: 'Concise object name.',
+            description: 'A concise descriptive object label.',
           },
 
           count: {
             type: 'INTEGER',
-            description: 'Number of instances represented.',
+            description: 'Number of instances represented by this object entry.',
           },
 
           confidence: {
             type: 'NUMBER',
-            description: 'Confidence estimate from 0 to 100.',
+            description: 'Model confidence estimate from 0 to 100.',
           },
 
           box: {
             type: 'ARRAY',
             description:
-              'Bounding box [ymin, xmin, ymax, xmax], normalized 0-1000.',
+              'Bounding box as [ymin, xmin, ymax, xmax], normalized to 0-1000.',
             minItems: 4,
             maxItems: 4,
             items: {
@@ -90,7 +92,6 @@ const VISION_SCHEMA = {
   ],
 };
 
-
 function makeError(message, code, status) {
   const err = new Error(message);
   err.code = code;
@@ -98,19 +99,21 @@ function makeError(message, code, status) {
   return err;
 }
 
-
+/**
+ * Normalize and validate incoming camera image.
+ */
 function normalizeImage(image) {
   if (!image || typeof image !== 'object') {
     return null;
   }
 
-  const mimeType =
-    String(image.mimeType || '').toLowerCase();
+  const mimeType = String(image.mimeType || '')
+    .trim()
+    .toLowerCase();
 
-  let data =
-    String(image.data || '').trim();
+  let data = String(image.data || '').trim();
 
-  if (!mimeType.startsWith('image/')) {
+  if (!mimeType || !mimeType.startsWith('image/')) {
     throw makeError(
       'Invalid vision image MIME type',
       'INVALID_IMAGE',
@@ -118,12 +121,14 @@ function normalizeImage(image) {
     );
   }
 
+  /*
+   * Accept both:
+   * image/jpeg;base64,...
+   * and raw base64.
+   */
   const comma = data.indexOf(',');
 
-  if (
-    data.startsWith('data:') &&
-    comma >= 0
-  ) {
+  if (data.startsWith('data:') && comma >= 0) {
     data = data.slice(comma + 1);
   }
 
@@ -135,6 +140,9 @@ function normalizeImage(image) {
     );
   }
 
+  /*
+   * Protect the server from accidentally gigantic camera payloads.
+   */
   if (data.length > 12_000_000) {
     throw makeError(
       'Vision image is too large',
@@ -149,17 +157,81 @@ function normalizeImage(image) {
   };
 }
 
-
+/**
+ * Extract ordinary text from Gemini response.
+ */
 function extractText(data) {
-  return (
-    data?.candidates?.[0]?.content?.parts
-      ?.map((part) => part?.text || '')
-      .join('')
-      .trim() || ''
-  );
+  const parts =
+    data?.candidates?.[0]?.content?.parts;
+
+  if (!Array.isArray(parts)) {
+    return '';
+  }
+
+  return parts
+    .map((part) => {
+      if (typeof part?.text === 'string') {
+        return part.text;
+      }
+
+      return '';
+    })
+    .join('')
+    .trim();
 }
 
+/**
+ * Remove markdown JSON fences if Gemini adds them.
+ */
+function cleanPossibleJson(text) {
+  let value = String(text || '').trim();
 
+  if (!value) {
+    return '';
+  }
+
+  if (value.startsWith('```')) {
+    value = value
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+  }
+
+  return value;
+}
+
+/**
+ * Try to parse Gemini structured output.
+ *
+ * Returns null when the response is ordinary text.
+ */
+function tryParseStructuredResponse(text) {
+  const cleaned = cleanPossibleJson(text);
+
+  if (!cleaned) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(cleaned);
+
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed)
+    ) {
+      return parsed;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Normalize structured vision data coming from Gemini.
+ */
 function normalizeVisionResult(value) {
   const scene =
     typeof value?.scene === 'string' &&
@@ -167,78 +239,57 @@ function normalizeVisionResult(value) {
       ? value.scene.trim()
       : 'No scene description available.';
 
-  const objects =
-    Array.isArray(value?.objects)
-      ? value.objects
-          .map((object) => {
+  const objects = Array.isArray(value?.objects)
+    ? value.objects
+        .map((object) => {
+          const name = String(
+            object?.name || '',
+          ).trim();
 
-            const name =
-              String(
-                object?.name || '',
-              ).trim();
+          const count = Math.max(
+            1,
+            Number.parseInt(object?.count, 10) || 1,
+          );
 
-            if (!name) {
-              return null;
-            }
+          const confidenceRaw =
+            Number(object?.confidence);
 
-            const count =
-              Math.max(
-                1,
-                Number.parseInt(
-                  object?.count,
-                  10,
-                ) || 1,
-              );
+          const confidence =
+            Number.isFinite(confidenceRaw)
+              ? Math.max(
+                  0,
+                  Math.min(100, confidenceRaw),
+                )
+              : 0;
 
-            const confidenceRaw =
-              Number(
-                object?.confidence,
-              );
-
-            const confidence =
-              Number.isFinite(
-                confidenceRaw,
-              )
-                ? Math.max(
-                    0,
-                    Math.min(
-                      100,
-                      confidenceRaw,
+          const box =
+            Array.isArray(object?.box)
+              ? object.box
+                  .slice(0, 4)
+                  .map((n) =>
+                    Math.max(
+                      0,
+                      Math.min(
+                        1000,
+                        Number.parseInt(n, 10) || 0,
+                      ),
                     ),
                   )
-                : 0;
+              : [];
 
-            const box =
-              Array.isArray(object?.box)
-                ? object.box
-                    .slice(0, 4)
-                    .map((n) =>
-                      Math.max(
-                        0,
-                        Math.min(
-                          1000,
-                          Number.parseInt(
-                            n,
-                            10,
-                          ) || 0,
-                        ),
-                      ),
-                    )
-                : [];
+          if (!name || box.length !== 4) {
+            return null;
+          }
 
-            if (box.length !== 4) {
-              return null;
-            }
-
-            return {
-              name,
-              count,
-              confidence,
-              box,
-            };
-          })
-          .filter(Boolean)
-      : [];
+          return {
+            name,
+            count,
+            confidence,
+            box,
+          };
+        })
+        .filter(Boolean)
+    : [];
 
   return {
     scene,
@@ -246,18 +297,32 @@ function normalizeVisionResult(value) {
   };
 }
 
+/**
+ * Build a safe vision result when Gemini gives ordinary text
+ * instead of the expected JSON structure.
+ */
+function fallbackVisionResult(answer, hasImage) {
+  return {
+    scene: hasImage
+      ? 'Camera image was provided, but structured scene data was unavailable.'
+      : 'No camera image was provided.',
+
+    objects: [],
+
+    answer:
+      String(answer || '').trim() ||
+      (
+        hasImage
+          ? 'I received the camera image, but I could not produce a vision description.'
+          : 'I received your message, but I could not produce a response.'
+      ),
+  };
+}
 
 const PROVIDERS = {
-
   gemini: {
-
-    async generate({
-      messages,
-      image,
-    }) {
-
-      const key =
-        process.env.GEMINI_API_KEY;
+    async generate({ messages, image }) {
+      const key = process.env.GEMINI_API_KEY;
 
       if (!key) {
         throw makeError(
@@ -270,96 +335,67 @@ const PROVIDERS = {
       const normalizedImage =
         normalizeImage(image);
 
-      const isVision =
-        Boolean(normalizedImage);
-
-
       /*
-       * Build Gemini conversation.
-       *
-       * Only the latest user message receives
-       * the camera frame.
+       * Only attach the camera frame to the latest
+       * user message.
        */
-      const contents =
-        messages.map(
-          (message, index) => {
+      const contents = messages.map(
+        (message, index) => {
+          const parts = [
+            {
+              text: String(
+                message.content ?? '',
+              ),
+            },
+          ];
 
-            const parts = [
-              {
-                text:
-                  String(
-                    message.content ?? '',
-                  ),
+          if (
+            normalizedImage &&
+            message.role === 'user' &&
+            index === messages.length - 1
+          ) {
+            parts.push({
+              inline_data: {
+                mime_type:
+                  normalizedImage.mimeType,
+
+                data:
+                  normalizedImage.data,
               },
-            ];
+            });
+          }
 
-            if (
-              isVision &&
-              message.role === 'user' &&
-              index === messages.length - 1
-            ) {
+          return {
+            role:
+              message.role === 'assistant'
+                ? 'model'
+                : 'user',
 
-              parts.push({
-                inline_data: {
-                  mime_type:
-                    normalizedImage.mimeType,
-
-                  data:
-                    normalizedImage.data,
-                },
-              });
-
-            }
-
-            return {
-              role:
-                message.role === 'assistant'
-                  ? 'model'
-                  : 'user',
-
-              parts,
-            };
-          },
-        );
-
+            parts,
+          };
+        },
+      );
 
       const model =
         process.env.GEMINI_MODEL ||
         'gemini-3.1-flash-lite';
 
+      const controller =
+        new AbortController();
 
       /*
-       * IMPORTANT:
-       *
-       * Normal conversation does NOT use
-       * responseSchema.
-       *
-       * Vision requests DO use structured output.
-       *
-       * This prevents ordinary voice requests
-       * from failing with AI_EMPTY_RESPONSE.
+       * Prevent a hung Gemini request from
+       * leaving the browser waiting forever.
        */
+      const timeout = setTimeout(
+        () => controller.abort(),
+        25_000,
+      );
 
-      const generationConfig =
-        isVision
-          ? {
-              temperature: 0.4,
-              maxOutputTokens: 500,
+      let response;
 
-              responseMimeType:
-                'application/json',
-
-              responseSchema:
-                VISION_SCHEMA,
-            }
-          : {
-              temperature: 0.7,
-              maxOutputTokens: 300,
-            };
-
-
-      const response =
-        await fetch(
+      try {
+        response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
           {
             method: 'POST',
@@ -373,33 +409,62 @@ const PROVIDERS = {
             },
 
             body: JSON.stringify({
-
               systemInstruction: {
                 parts: [
                   {
-                    text:
-                      SYSTEM_PROMPT,
+                    text: SYSTEM_PROMPT,
                   },
                 ],
               },
 
               contents,
 
-              generationConfig,
+              generationConfig: {
+                temperature: 0.4,
+                maxOutputTokens: 500,
 
+                /*
+                 * Keep structured output enabled.
+                 * The response parser below is deliberately
+                 * tolerant if Gemini returns ordinary text.
+                 */
+                responseMimeType:
+                  'application/json',
+
+                responseSchema:
+                  VISION_SCHEMA,
+              },
             }),
+
+            signal:
+              controller.signal,
           },
         );
+      } catch (error) {
+        if (error?.name === 'AbortError') {
+          throw makeError(
+            'Gemini request timed out',
+            'GEMINI_TIMEOUT',
+            504,
+          );
+        }
 
+        throw makeError(
+          error?.message ||
+            'Gemini network request failed',
+          'GEMINI_NETWORK_ERROR',
+          502,
+        );
+      } finally {
+        clearTimeout(timeout);
+      }
 
       const data =
         await response
           .json()
           .catch(() => ({}));
 
-
       if (!response.ok) {
-
         const message =
           data?.error?.message ||
           `Gemini request failed (${response.status})`;
@@ -415,135 +480,123 @@ const PROVIDERS = {
         );
       }
 
-
       const rawText =
         extractText(data);
 
-
+      /*
+       * Important:
+       *
+       * Do NOT immediately throw AI_EMPTY_RESPONSE here.
+       *
+       * Gemini can occasionally return an unusual candidate
+       * or structured response shape. We first inspect everything
+       * available to us.
+       */
       if (!rawText) {
+        const finishReason =
+          data?.candidates?.[0]?.finishReason ||
+          'UNKNOWN';
+
+        const blockReason =
+          data?.promptFeedback?.blockReason ||
+          null;
+
+        /*
+         * A blocked request should remain a real error.
+         */
+        if (blockReason) {
+          throw makeError(
+            `Gemini blocked the request: ${blockReason}`,
+            'GEMINI_BLOCKED',
+            502,
+          );
+        }
 
         throw makeError(
-          isVision
-            ? 'Gemini returned no structured vision response'
-            : 'Gemini returned no text response',
-
+          `Gemini returned no usable text (finishReason: ${finishReason})`,
           'AI_EMPTY_RESPONSE',
-
           502,
         );
       }
 
-
       /*
-       * NORMAL TEXT RESPONSE
+       * First attempt: structured JSON.
        */
-      if (!isVision) {
-
-        return {
-          text: rawText,
-
-          provider:
-            'gemini',
-
-          model,
-
-          vision:
-            false,
-
-          visionData:
-            null,
-        };
-      }
-
-
-      /*
-       * STRUCTURED VISION RESPONSE
-       */
-      let parsed;
-
-      try {
-
-        parsed =
-          JSON.parse(rawText);
-
-      } catch {
-
-        throw makeError(
-          'Gemini returned invalid vision JSON',
-
-          'AI_INVALID_JSON',
-
-          502,
-        );
-      }
-
-
-      const visionData =
-        normalizeVisionResult(
-          parsed,
+      const parsed =
+        tryParseStructuredResponse(
+          rawText,
         );
 
+      let visionData;
+      let answer;
 
-      const text =
-        String(
-          parsed?.answer || '',
-        ).trim();
+      if (parsed) {
+        visionData =
+          normalizeVisionResult(parsed);
 
+        answer =
+          String(
+            parsed.answer || '',
+          ).trim();
+      } else {
+        /*
+         * Second attempt: ordinary text response.
+         *
+         * This prevents the entire voice assistant from
+         * failing simply because Gemini did not obey the
+         * JSON structure perfectly.
+         */
+        answer = rawText.trim();
 
-      if (!text) {
+        visionData =
+          fallbackVisionResult(
+            answer,
+            Boolean(normalizedImage),
+          );
+      }
 
+      if (!answer) {
         throw makeError(
           'Gemini returned no spoken answer',
-
           'AI_EMPTY_RESPONSE',
-
           502,
         );
       }
 
-
       return {
+        text: answer,
 
-        text,
-
-        provider:
-          'gemini',
+        provider: 'gemini',
 
         model,
 
         vision:
-          true,
+          Boolean(normalizedImage),
 
         visionData,
-
       };
     },
   },
 };
 
-
-function json(
-  res,
-  status,
-  body,
-) {
+function json(res, status, body) {
   return res
     .status(status)
     .json(body);
 }
 
-
 export default async function handler(
   req,
   res,
 ) {
-
+  /*
+   * CORS preflight.
+   */
   if (req.method === 'OPTIONS') {
     return res
       .status(204)
       .end();
   }
-
 
   const providerName =
     String(
@@ -551,14 +604,13 @@ export default async function handler(
         'gemini',
     ).toLowerCase();
 
-
   /*
-   * GET /api/robo
+   * Diagnostics endpoint.
    *
-   * Used by the developer diagnostics page.
+   * The frontend uses this to determine whether
+   * Gemini and structured vision are configured.
    */
   if (req.method === 'GET') {
-
     const configured =
       providerName === 'gemini'
         ? Boolean(
@@ -566,141 +618,111 @@ export default async function handler(
           )
         : false;
 
+    return json(res, 200, {
+      ok: true,
 
-    return json(
-      res,
-      200,
-      {
-        ok: true,
+      provider:
+        providerName,
 
-        provider:
-          providerName,
+      configured,
 
-        configured,
+      model:
+        providerName === 'gemini'
+          ? process.env.GEMINI_MODEL ||
+            'gemini-3.1-flash-lite'
+          : null,
 
-        model:
-          providerName === 'gemini'
-            ? process.env.GEMINI_MODEL ||
-              'gemini-3.1-flash-lite'
-            : null,
+      vision:
+        providerName === 'gemini',
 
-        vision:
-          providerName === 'gemini',
-
-        structuredVision:
-          providerName === 'gemini',
-      },
-    );
+      structuredVision:
+        providerName === 'gemini',
+    });
   }
-
 
   if (req.method !== 'POST') {
+    return json(res, 405, {
+      error:
+        'Method not allowed',
 
-    return json(
-      res,
-      405,
-      {
-        error:
-          'Method not allowed',
-
-        code:
-          'METHOD_NOT_ALLOWED',
-      },
-    );
+      code:
+        'METHOD_NOT_ALLOWED',
+    });
   }
 
-
   try {
-
     const body =
       typeof req.body === 'string'
         ? JSON.parse(req.body)
         : req.body || {};
 
-
     const provider =
       PROVIDERS[providerName];
 
-
     if (!provider) {
+      return json(res, 400, {
+        error:
+          `Unsupported AI provider: ${providerName}`,
 
-      return json(
-        res,
-        400,
-        {
-          error:
-            `Unsupported AI provider: ${providerName}`,
-
-          code:
-            'UNSUPPORTED_PROVIDER',
-        },
-      );
+        code:
+          'UNSUPPORTED_PROVIDER',
+      });
     }
 
-
+    /*
+     * Only accept valid conversation messages.
+     */
     const messages =
       Array.isArray(body.messages)
         ? body.messages
         : [];
 
-
     const cleanMessages =
       messages
-
         .filter(
-          (m) =>
-            m &&
+          (message) =>
+            message &&
             (
-              m.role === 'user' ||
-              m.role === 'assistant'
+              message.role === 'user' ||
+              message.role === 'assistant'
             ),
         )
 
         .slice(-12)
 
-        .map(
-          (m) => ({
-            role:
-              m.role,
+        .map((message) => ({
+          role:
+            message.role,
 
-            content:
-              String(
-                m.content || '',
-              ).slice(
-                0,
-                12000,
-              ),
-          }),
-        )
+          content:
+            String(
+              message.content || '',
+            ).slice(0, 12_000),
+        }))
 
         .filter(
-          (m) =>
-            m.content.trim(),
+          (message) =>
+            message.content.trim(),
         );
 
-
     if (!cleanMessages.length) {
+      return json(res, 400, {
+        error:
+          'No conversation messages supplied',
 
-      return json(
-        res,
-        400,
-        {
-          error:
-            'No conversation messages supplied',
-
-          code:
-            'EMPTY_INPUT',
-        },
-      );
+        code:
+          'EMPTY_INPUT',
+      });
     }
 
-
     /*
-     * Vision is activated ONLY when the frontend
-     * explicitly sends body.image.
+     * Vision image is optional.
      *
-     * If camera is OFF, body.image should be null
-     * and this backend performs ordinary text chat.
+     * When null:
+     *   normal text/voice request.
+     *
+     * When present:
+     *   latest user message receives one image.
      */
     const result =
       await provider.generate({
@@ -711,36 +733,25 @@ export default async function handler(
           body.image || null,
       });
 
-
     return json(
       res,
       200,
       result,
     );
-
-
   } catch (error) {
-
     const status =
-      Number.isInteger(
-        error?.status,
-      )
+      Number.isInteger(error?.status)
         ? error.status
         : 500;
 
+    return json(res, status, {
+      error:
+        error?.message ||
+        'AI provider error',
 
-    return json(
-      res,
-      status,
-      {
-        error:
-          error?.message ||
-          'AI provider error',
-
-        code:
-          error?.code ||
-          'AI_PROVIDER_ERROR',
-      },
-    );
+      code:
+        error?.code ||
+        'AI_PROVIDER_ERROR',
+    });
   }
 }
