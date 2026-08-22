@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS — v2.13 media-stt-fixed</title>
+<title>ROBO AIOS — v2.15 camera + object vision</title>
 <style>
 :root{
   --void:#090d15;
@@ -57,9 +57,16 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 /* Camera */
 .camera{position:absolute;right:15px;top:103px;width:128px;height:94px;border-radius:20px;overflow:hidden;background:#080b11;border:2px solid rgba(255,255,255,.75);box-shadow:0 12px 28px rgba(44,36,64,.22);z-index:25}
 .camera video{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1)}
+.camera.rear video{transform:none}
+#cameraSwitchBtn:disabled{opacity:.45;cursor:not-allowed}
 .camera .camLabel{position:absolute;left:8px;bottom:6px;padding:4px 6px;border-radius:8px;background:rgba(0,0,0,.55);color:#fff;font-size:7px}
 .camera .camRec{position:absolute;right:8px;top:8px;width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red)}
 .camera.empty::after{content:"CAMERA OFF";position:absolute;inset:0;display:grid;place-items:center;color:#7c8598;font-size:8px;letter-spacing:.08em}
+.camera .visionOverlay{position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden}
+.camera .visionBox{position:absolute;border:2px solid var(--cyan);border-radius:6px;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 12px rgba(95,212,208,.28);background:rgba(95,212,208,.06)}
+.camera .visionLabel{position:absolute;left:-2px;top:-19px;max-width:120px;padding:3px 5px;border-radius:5px;background:rgba(9,13,21,.82);color:#fff;font-size:6px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.camera .visionSummary{position:absolute;left:7px;right:7px;top:7px;padding:5px 6px;border-radius:7px;background:rgba(9,13,21,.72);color:#fff;font-size:6px;line-height:1.25;letter-spacing:.04em;opacity:0;transform:translateY(-3px);transition:.2s}
+.camera .visionSummary.show{opacity:1;transform:none}
 
 /* Avatar zone */
 .avatarZone{position:absolute;left:12px;right:12px;top:125px;bottom:205px;display:grid;place-items:center;z-index:8}
@@ -181,7 +188,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.12 CAM FIX</small></div>
+          <div class="brand">ROBO <small>v2.15 CAM + OBJECT VISION</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -193,6 +200,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       <div class="camera empty" id="cameraBox">
         <video id="camera" autoplay playsinline muted></video>
+        <div class="visionOverlay" id="visionOverlay"></div>
+        <div class="visionSummary" id="visionSummary"></div>
         <span class="camRec"></span>
         <span class="camLabel">what I see</span>
       </div>
@@ -226,7 +235,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       <footer class="bottom">
         <div class="actions">
           <button class="modeBtn" id="orientationBtn">LANDSCAPE TEST</button><button class="modeBtn" id="devPageBtn">DEV PAGE</button>
-          <button class="mediaBtn" id="cameraBtn" aria-pressed="false">CAMERA OFF</button>
+          <button class="mediaBtn" id="cameraBtn" aria-pressed="false">CAMERA OFF</button><button class="mediaBtn" id="cameraSwitchBtn" aria-pressed="false" disabled>REAR CAM</button>
           <button class="modeBtn" id="devBtn">DEV STATES</button>
         </div>
         <button class="mic" id="micBtn" aria-label="Talk to Robo">
@@ -246,7 +255,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.12 CAM FIX</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.15 CAM + OBJECT VISION</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -330,6 +339,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let listening = false;
   let cameraStream = null;
   let cameraEnabled = false;
+  let cameraFacingMode = 'user';
+  let cameraSession = 0;
+  let visionRequestController = null;
+  let latestVision = null;
   let micStream = null;
   let recognition = null;
   let bleDevice = null;
@@ -679,28 +692,26 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }catch(e){ log('MIC · meter unavailable: '+e.message); }
   }
 
-  function stopCamera(){
-    if(cameraStream){
-      cameraStream.getTracks().forEach(t=>t.stop());
-      cameraStream=null;
-    }
+  function stopCamera(reason='manual'){
+    cameraSession += 1;
+    if(visionRequestController){ try{ visionRequestController.abort(); }catch(_){ } visionRequestController=null; }
+    const stream=cameraStream;
+    cameraStream=null;
     cameraEnabled=false;
+    if(stream) stream.getTracks().forEach(track=>{ try{track.stop();}catch(_){ } });
     const video=$('#camera');
-    if(video){
-      try{video.pause();}catch(_){}
-      video.srcObject=null;
-      try{video.load();}catch(_){}
-    }
+    if(video){ try{video.pause();}catch(_){ } video.srcObject=null; try{video.load();}catch(_){ } }
     $('#cameraBox')?.classList.add('empty');
+    $('#cameraBox')?.classList.remove('rear');
+    clearVisionOverlay();
+    latestVision=null;
     const btn=$('#cameraBtn');
-    if(btn){
-      btn.textContent='CAMERA OFF';
-      btn.classList.remove('active');
-      btn.setAttribute('aria-pressed','false');
-    }
+    if(btn){ btn.textContent='CAMERA OFF'; btn.classList.remove('active'); btn.setAttribute('aria-pressed','false'); }
+    const switchBtn=$('#cameraSwitchBtn');
+    if(switchBtn){ switchBtn.disabled=true; switchBtn.textContent='REAR CAM'; switchBtn.setAttribute('aria-pressed','false'); }
     $('#mediaDot').className='dot ok';
     $('#mediaText').textContent='MIC READY';
-    log('CAM · OFF');
+    log('CAM · OFF · all tracks stopped · vision disabled · '+reason);
   }
 
   function releaseMicForSTT(){
@@ -714,7 +725,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     micVoiceLevel=0;
   }
 
-  async function startCamera(){
+  async function startCamera(facingMode=cameraFacingMode){
     if(!navigator.mediaDevices?.getUserMedia) throw new Error('Camera API unavailable');
 
     const video=$('#camera');
@@ -743,11 +754,15 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           throw new Error('Camera stream is live but video frame is not ready');
         }
         cameraEnabled=true;
+        cameraFacingMode=facingMode;
         const btn=$('#cameraBtn');
         if(btn){btn.textContent='CAMERA ON';btn.classList.add('active');btn.setAttribute('aria-pressed','true');}
+        const switchBtn=$('#cameraSwitchBtn');
+        if(switchBtn){switchBtn.disabled=false;switchBtn.textContent=facingMode==='environment'?'FRONT CAM':'REAR CAM';switchBtn.setAttribute('aria-pressed',String(facingMode==='environment'));}
+        $('#cameraBox').classList.toggle('rear',facingMode==='environment');
         $('#mediaDot').className='dot ok';
-        $('#mediaText').textContent='CAMERA ON';
-        log('CAM · existing live stream reused · '+video.videoWidth+'x'+video.videoHeight);
+        $('#mediaText').textContent=facingMode==='environment'?'REAR CAMERA ON':'CAMERA ON';
+        log('CAM · existing live stream reused · '+facingMode+' · '+video.videoWidth+'x'+video.videoHeight);
         return cameraStream;
       }
     }
@@ -758,7 +773,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     try{
       stream=await navigator.mediaDevices.getUserMedia({
         video:{
-          facingMode:{ideal:'user'},
+          facingMode:{exact:facingMode},
           width:{ideal:1280},
           height:{ideal:720},
           frameRate:{ideal:30,max:30}
@@ -767,7 +782,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       });
     }catch(firstErr){
       log('CAM · preferred constraints failed · '+(firstErr?.name||'unknown'));
-      stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facingMode}},audio:false});
     }
 
     const track=stream.getVideoTracks()[0];
@@ -833,11 +848,15 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       await waitForVideoFrame();
       cameraEnabled=true;
+      cameraFacingMode=facingMode;
       const cameraBtn=$('#cameraBtn');
       if(cameraBtn){cameraBtn.textContent='CAMERA ON';cameraBtn.classList.add('active');cameraBtn.setAttribute('aria-pressed','true');}
+      const switchBtn=$('#cameraSwitchBtn');
+      if(switchBtn){switchBtn.disabled=false;switchBtn.textContent=facingMode==='environment'?'FRONT CAM':'REAR CAM';switchBtn.setAttribute('aria-pressed',String(facingMode==='environment'));}
+      $('#cameraBox').classList.toggle('rear',facingMode==='environment');
       $('#mediaDot').className='dot ok';
-      $('#mediaText').textContent='CAMERA ON';
-      log('CAM · LIVE · '+video.videoWidth+'x'+video.videoHeight);
+      $('#mediaText').textContent=facingMode==='environment'?'REAR CAMERA ON':'CAMERA ON';
+      log('CAM · LIVE · '+facingMode+' · '+video.videoWidth+'x'+video.videoHeight);
       return stream;
     }catch(err){
       log('CAM · startup failed after permission · '+(err?.name||'unknown')+' · '+(err?.message||''));
@@ -873,48 +892,56 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   async function toggleCamera(){
-    const btn=$('#cameraBtn');
     if(cameraEnabled || cameraStream){
-      stopCamera();
-      setVoiceStatus('CAMERA OFF · voice only');
+      stopCamera('manual OFF');
+      setVoiceStatus('CAMERA OFF · lens released · voice only');
       hideCaption(1800);
       return;
     }
-
     if(window.__roboCameraStarting) return;
     window.__roboCameraStarting=true;
-
     try{
       setVoiceStatus('CAMERA STARTING · requesting permission…');
-      await startCamera();
-      $('#mediaDot').className='dot ok';
-      $('#mediaText').textContent='CAMERA ON';
-      if(btn){
-        btn.textContent='CAMERA ON';
-        btn.classList.add('active');
-        btn.setAttribute('aria-pressed','true');
-      }
-      log('CAM · ON · independent camera control');
-      setVoiceStatus('CAMERA ON · microphone remains independent');
+      await startCamera(cameraFacingMode);
+      log('CAM · ON · '+cameraFacingMode+' · independent camera control');
+      setVoiceStatus(cameraFacingMode==='environment'?'REAR CAMERA ON · microphone remains independent':'CAMERA ON · microphone remains independent');
       hideCaption(2500);
     }catch(err){
-      cameraEnabled=false;
-      if(btn){
-        btn.textContent='CAMERA OFF';
-        btn.classList.remove('active');
-        btn.setAttribute('aria-pressed','false');
-      }
+      stopCamera('startup failed');
       $('#mediaDot').className='dot';
       $('#mediaText').textContent='CAMERA ERROR';
       log('CAM · start failed · '+(err?.name||'unknown')+' · '+(err?.message||''));
       setVoiceStatus('CAMERA ERROR · '+(err?.message||err?.name||'camera unavailable'));
       hideCaption(6000);
-    }finally{
-      window.__roboCameraStarting=false;
+    }finally{ window.__roboCameraStarting=false; }
+  }
+
+  async function switchCamera(){
+    if(window.__roboCameraStarting) return;
+    if(!cameraEnabled || !cameraStream){
+      setVoiceStatus('CAMERA OFF · turn the camera on first');
+      hideCaption(1800);
+      return;
     }
+    const nextFacing=cameraFacingMode==='user' ? 'environment' : 'user';
+    window.__roboCameraStarting=true;
+    try{
+      stopCamera('switching lens');
+      setVoiceStatus(nextFacing==='environment'?'SWITCHING · rear camera…':'SWITCHING · front camera…');
+      await startCamera(nextFacing);
+      setVoiceStatus(nextFacing==='environment'?'REAR CAMERA ON':'FRONT CAMERA ON');
+      hideCaption(1800);
+    }catch(err){
+      stopCamera('camera switch failed');
+      $('#mediaDot').className='dot';
+      $('#mediaText').textContent='CAMERA ERROR';
+      setVoiceStatus('CAMERA SWITCH ERROR · '+(err?.message||err?.name||'camera unavailable'));
+      hideCaption(5000);
+    }finally{ window.__roboCameraStarting=false; }
   }
 
   $('#cameraBtn').addEventListener('click',toggleCamera);
+  $('#cameraSwitchBtn').addEventListener('click',switchCamera);
 
     /* ---------- Speech recognition (v2.12 hardened pipeline) ---------- */
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -1156,7 +1183,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       /\bwhat.*in\s+front\s+of\s+me\b/.test(l) ||
       /\bwhat.*around\s+me\b/.test(l) ||
       /\bdescribe.*scene\b/.test(l) ||
-      /\bidentify.*object\b/.test(l)
+      /\bidentify.*object\b/.test(l) ||
+      /\bwhat.*(holding|carrying|wearing|in my hand)\b/.test(l) ||
+      /\bwhat.*(is|are)\s+(this|that|these|those)\b/.test(l) ||
+      /\bwhat.*(object|objects|item|items)\b/.test(l) ||
+      /\bhow many\b/.test(l)
     );
   }
 
@@ -1189,13 +1220,56 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     };
   }
 
-  async function callRoboBrain(messages,image=null){
+  function clearVisionOverlay(){
+    const overlay=$('#visionOverlay');
+    const summary=$('#visionSummary');
+    if(overlay) overlay.innerHTML='';
+    if(summary){summary.textContent='';summary.classList.remove('show');}
+  }
+
+  function renderVisionResult(visionData){
+    latestVision=visionData || null;
+    const overlay=$('#visionOverlay');
+    const summary=$('#visionSummary');
+    if(!overlay || !summary) return;
+    overlay.innerHTML='';
+    summary.textContent='';
+    summary.classList.remove('show');
+    if(!visionData) return;
+    const objects=Array.isArray(visionData.objects) ? visionData.objects : [];
+    const scene=String(visionData.scene||'').trim();
+    objects.slice(0,12).forEach((object)=>{
+      const box=Array.isArray(object.box) ? object.box : [];
+      if(box.length!==4) return;
+      const [ymin,xmin,ymax,xmax]=box.map(Number);
+      const top=Math.max(0,Math.min(100,ymin/10));
+      const left=Math.max(0,Math.min(100,(1000-xmax)/10));
+      const width=Math.max(.5,Math.min(100-left,(xmax-xmin)/10));
+      const height=Math.max(.5,Math.min(100-top,(ymax-ymin)/10));
+      const el=document.createElement('div');
+      el.className='visionBox';
+      el.style.left=left+'%'; el.style.top=top+'%';
+      el.style.width=width+'%'; el.style.height=height+'%';
+      const label=document.createElement('span');
+      label.className='visionLabel';
+      const confidence=Number.isFinite(Number(object.confidence)) ? Math.round(Number(object.confidence)) : 0;
+      const count=Math.max(1,Number.parseInt(object.count,10)||1);
+      label.textContent=String(object.name||'object')+' ×'+count+' · '+confidence+'%';
+      el.appendChild(label); overlay.appendChild(el);
+    });
+    const headline=objects.length ? objects.slice(0,5).map(o=>String(o.name||'object')).join(' · ') : (scene || 'No confident objects detected');
+    summary.textContent=headline; summary.classList.add('show');
+    devLog('VISION','structured result received',{objects:objects.length,scene});
+  }
+
+  async function callRoboBrain(messages,image=null,signal=null){
     const started=performance.now();
     devLog("AI","request sent · provider adapter"+(image?' · vision frame attached':''));
     const res=await fetch('/api/robo',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({messages,image})
+      body:JSON.stringify({messages,image}),
+      ...(signal ? {signal} : {})
     });
     let data=null;
     try{data=await res.json();}catch(_){data=null;}
@@ -1234,19 +1308,26 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     setVoiceStatus('ROBO THINKING · contacting AI brain…');
     setState('thinking','thinking · Robo is processing');
 
+    const requestCameraSession=cameraSession;
+    let requestUsedVision=false;
+    visionRequestController=null;
+
     try{
       let visionImage=null;
       const wantsVision=isVisionQuestion(clean);
 
-      if(cameraEnabled && wantsVision){
+      if(cameraEnabled && wantsVision && requestCameraSession===cameraSession){
         try{
           visionImage=captureVisionFrame();
           if(visionImage){
-            devLog("VISION","vision question · camera frame attached",{width:visionImage.width,height:visionImage.height});
+            requestUsedVision=true;
+            devLog("VISION","vision question · camera frame attached",{width:visionImage.width,height:visionImage.height,session:requestCameraSession});
           }else{
+            clearVisionOverlay(); latestVision=null;
             devLog("VISION","vision requested but no usable camera frame · continuing text-only");
           }
         }catch(visionErr){
+          clearVisionOverlay(); latestVision=null;
           devLog("VISION ERROR",visionErr?.message||'frame capture failed');
         }
       }else if(cameraEnabled){
@@ -1255,7 +1336,19 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         devLog("VISION","camera OFF · voice/text-only request");
       }
 
-      const data=await callRoboBrain(conversation,visionImage);
+      if(requestUsedVision && requestCameraSession!==cameraSession){
+        devLog("VISION","camera changed/off before AI send · request cancelled");
+        return;
+      }
+
+      visionRequestController=new AbortController();
+      const data=await callRoboBrain(conversation,visionImage,visionRequestController.signal);
+      if(requestUsedVision && requestCameraSession!==cameraSession){
+        devLog("VISION","camera changed/off during AI request · response ignored");
+        return;
+      }
+      if(data?.visionData && visionImage && cameraEnabled && requestCameraSession===cameraSession) renderVisionResult(data.visionData);
+      else if(!visionImage || !cameraEnabled){ clearVisionOverlay(); latestVision=null; }
       const reply=String(data.text).trim();
       conversation.push({role:'assistant',content:reply});
       while(conversation.length>MAX_HISTORY) conversation.shift();
@@ -1275,6 +1368,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       setState(emotion,emotion+' · local fallback');
       speak(fallback);
     }finally{
+      visionRequestController=null;
       aiRequestInFlight=false;
     }
   }
@@ -1381,6 +1475,7 @@ function runDevChecks(){
     ["AI adapter route",true],
     ["Camera vision capture",!!(cameraEnabled && cameraStream && $("#camera")?.videoWidth>1 && $("#camera")?.videoHeight>1)],
     ["Camera state",cameraEnabled && !!cameraStream],
+    ["Structured vision state",latestVision!==null],
     ["AI API key",null]
   ];
   $("#devChecks").innerHTML=list.map(x=>{
@@ -1528,10 +1623,10 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.12 CAM FIX booted · provider-neutral AI brain");
+  log("ROBO AIOS v2.15 CAMERA + OBJECT VISION booted · Gemini AI brain");
   log("3D floating emoji renderer online");
-  log("camera OFF by default · microphone/STT independent");
-  log("AI provider adapter online · API key required for live AI");
+  log("camera OFF by default · microphone/STT independent · object detection ready");
+  log("AI provider adapter online · Gemini structured vision enabled");
   log("natural idle emotion cycle → ON");
 
   /* Developer convenience: desktop starts in portrait simulator. */
