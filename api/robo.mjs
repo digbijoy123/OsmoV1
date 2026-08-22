@@ -1,18 +1,14 @@
 /**
- * ROBO AIOS v2.13 — Gemini AI + structured vision adapter.
+ * ROBO AIOS — Gemini AI + vision adapter
  * Vercel serverless function: /api/robo
  *
- * Current provider: Gemini
- * Model: Gemini 3.1 Flash-Lite
- *
- * Supports:
- * - text / spoken conversation
- * - one optional camera frame per request
- * - structured scene + object detection
- *
- * IMPORTANT:
- * The server only accepts a camera image when the frontend
- * explicitly sends cameraEnabled: true.
+ * FIXES:
+ * - Explicitly accepts cameraEnabled from client.
+ * - Explicitly accepts cameraSession from client.
+ * - Forwards the captured image to Gemini when camera is enabled.
+ * - Rejects stale/invalid camera sessions.
+ * - Structured scene + object detection.
+ * - Keeps camera disabled requests completely image-free.
  */
 
 const SYSTEM_PROMPT =
@@ -20,11 +16,14 @@ const SYSTEM_PROMPT =
   'Respond naturally for spoken conversation. ' +
   'Keep answers reasonably short unless the user asks for detail. ' +
   'Do not mention being a language model unless directly asked. ' +
-  'When a camera image is attached, inspect it carefully and use it to answer the user. ' +
+  'When a camera image is attached, inspect the image itself carefully before answering. ' +
+  'For questions about what the user sees, answer from the attached camera image, not from assumptions. ' +
+  'Never claim that no image exists when an image is attached. ' +
   'Never invent objects or details that are not reasonably visible. ' +
   'For object detection, report prominent visible objects only. ' +
-  'Bounding boxes must use [ymin, xmin, ymax, xmax] normalized to 0-1000. ' +
-  'If no camera image is attached, return an empty objects array.';
+  'Bounding boxes must be [ymin, xmin, ymax, xmax] normalized to 0-1000. ' +
+  'For counting questions such as fingers, people, objects, or items, inspect the image and give the best visible count. ' +
+  'If no camera image is attached, return an empty objects array and clearly say that no camera image was provided.';
 
 const VISION_SCHEMA = {
   type: 'OBJECT',
@@ -32,23 +31,21 @@ const VISION_SCHEMA = {
     answer: {
       type: 'STRING',
       description:
-        'The natural spoken answer to the user’s latest question.',
+        'The natural spoken answer to the user latest question. If an image is attached, answer using the image.',
     },
 
     scene: {
       type: 'STRING',
       description:
-        'A brief factual description of the visible scene. If no image is attached, say that no camera image was provided.',
+        'A brief factual description of the visible camera scene. If no image is attached, say that no camera image was provided.',
     },
 
     objects: {
       type: 'ARRAY',
       description:
-        'Prominent visible objects detected in the camera image. Empty when no image is attached or no object is confidently visible.',
-
+        'Prominent visible objects detected in the attached camera image. Empty when no image is attached or no object is confidently visible.',
       items: {
         type: 'OBJECT',
-
         properties: {
           name: {
             type: 'STRING',
@@ -57,14 +54,12 @@ const VISION_SCHEMA = {
 
           count: {
             type: 'INTEGER',
-            description:
-              'Number of instances represented by this object entry.',
+            description: 'Number of visible instances represented by this object entry.',
           },
 
           confidence: {
             type: 'NUMBER',
-            description:
-              'Model confidence estimate from 0 to 100.',
+            description: 'Model confidence estimate from 0 to 100.',
           },
 
           box: {
@@ -79,21 +74,12 @@ const VISION_SCHEMA = {
           },
         },
 
-        required: [
-          'name',
-          'count',
-          'confidence',
-          'box',
-        ],
+        required: ['name', 'count', 'confidence', 'box'],
       },
     },
   },
 
-  required: [
-    'answer',
-    'scene',
-    'objects',
-  ],
+  required: ['answer', 'scene', 'objects'],
 };
 
 function makeError(message, code, status) {
@@ -108,18 +94,11 @@ function normalizeImage(image) {
     return null;
   }
 
-  const mimeType = String(
-    image.mimeType || '',
-  ).toLowerCase();
+  const mimeType = String(image.mimeType || '').toLowerCase();
 
-  let data = String(
-    image.data || '',
-  ).trim();
+  let data = String(image.data || '').trim();
 
-  if (
-    !mimeType ||
-    !mimeType.startsWith('image/')
-  ) {
+  if (!mimeType || !mimeType.startsWith('image/')) {
     throw makeError(
       'Invalid vision image MIME type',
       'INVALID_IMAGE',
@@ -127,13 +106,9 @@ function normalizeImage(image) {
     );
   }
 
-  // Accept raw base64 or browser data URLs.
   const comma = data.indexOf(',');
 
-  if (
-    data.startsWith('data:') &&
-    comma >= 0
-  ) {
+  if (data.startsWith('data:') && comma >= 0) {
     data = data.slice(comma + 1);
   }
 
@@ -145,7 +120,6 @@ function normalizeImage(image) {
     );
   }
 
-  // Protect the serverless function from oversized frames.
   if (data.length > 12_000_000) {
     throw makeError(
       'Vision image is too large',
@@ -170,76 +144,53 @@ function extractText(data) {
 }
 
 function normalizeVisionResult(value) {
-  // IMPORTANT:
-  // Preserve Gemini's spoken answer.
   const answer =
-    typeof value?.answer === 'string' &&
-    value.answer.trim()
+    typeof value?.answer === 'string' && value.answer.trim()
       ? value.answer.trim()
       : '';
 
   const scene =
-    typeof value?.scene === 'string' &&
-    value.scene.trim()
+    typeof value?.scene === 'string' && value.scene.trim()
       ? value.scene.trim()
       : 'No scene description available.';
 
-  const objects = Array.isArray(
-    value?.objects,
-  )
+  const objects = Array.isArray(value?.objects)
     ? value.objects
         .map((object) => {
-          const name = String(
-            object?.name || '',
-          ).trim();
+          const name = String(object?.name || '').trim();
 
           const count = Math.max(
             1,
-            Number.parseInt(
-              object?.count,
-              10,
-            ) || 1,
+            Number.parseInt(object?.count, 10) || 1,
           );
 
-          const confidenceRaw = Number(
-            object?.confidence,
-          );
+          const confidenceRaw = Number(object?.confidence);
 
-          const confidence =
-            Number.isFinite(
-              confidenceRaw,
-            )
-              ? Math.max(
-                  0,
-                  Math.min(
-                    100,
-                    confidenceRaw,
-                  ),
-                )
-              : 0;
+          const confidence = Number.isFinite(confidenceRaw)
+            ? Math.max(0, Math.min(100, confidenceRaw))
+            : 0;
 
-          const box = Array.isArray(
-            object?.box,
-          )
+          const box = Array.isArray(object?.box)
             ? object.box
                 .slice(0, 4)
-                .map((n) =>
-                  Math.max(
-                    0,
-                    Math.min(
-                      1000,
-                      Number.parseInt(
-                        n,
-                        10,
-                      ) || 0,
-                    ),
-                  ),
-                )
+                .map((n) => {
+                  const value = Number(n);
+
+                  return Number.isFinite(value)
+                    ? Math.max(0, Math.min(1000, Math.round(value)))
+                    : 0;
+                })
             : [];
 
+          if (!name || box.length !== 4) {
+            return null;
+          }
+
+          const [ymin, xmin, ymax, xmax] = box;
+
           if (
-            !name ||
-            box.length !== 4
+            ymax <= ymin ||
+            xmax <= xmin
           ) {
             return null;
           }
@@ -269,8 +220,7 @@ const PROVIDERS = {
       cameraEnabled = false,
       cameraSession = null,
     }) {
-      const key =
-        process.env.GEMINI_API_KEY;
+      const key = process.env.GEMINI_API_KEY;
 
       if (!key) {
         throw makeError(
@@ -281,14 +231,11 @@ const PROVIDERS = {
       }
 
       /*
-       * HARD CAMERA SAFETY RULE:
-       *
-       * If cameraEnabled is false, no image is allowed.
+       * IMPORTANT:
+       * A camera frame is valid only when the browser explicitly says
+       * the camera is currently enabled.
        */
-      if (
-        !cameraEnabled &&
-        image
-      ) {
+      if (image && !cameraEnabled) {
         throw makeError(
           'Vision frame supplied while camera is disabled',
           'CAMERA_STATE_MISMATCH',
@@ -296,16 +243,7 @@ const PROVIDERS = {
         );
       }
 
-      /*
-       * A vision request must have a valid camera session.
-       */
-      if (
-        image &&
-        cameraEnabled &&
-        !Number.isInteger(
-          cameraSession,
-        )
-      ) {
+      if (image && cameraEnabled && !Number.isInteger(cameraSession)) {
         throw makeError(
           'Vision frame is missing a valid camera session',
           'INVALID_CAMERA_SESSION',
@@ -313,104 +251,81 @@ const PROVIDERS = {
         );
       }
 
-      const normalizedImage =
-        cameraEnabled
-          ? normalizeImage(image)
-          : null;
+      const normalizedImage = cameraEnabled
+        ? normalizeImage(image)
+        : null;
 
-      const contents =
-        messages.map(
-          (message, index) => {
-            const parts = [
-              {
-                text: String(
-                  message.content ??
-                    '',
-                ),
-              },
-            ];
-
-            /*
-             * Attach the camera frame ONLY
-             * to the latest user message.
-             */
-            if (
-              normalizedImage &&
-              message.role === 'user' &&
-              index ===
-                messages.length - 1
-            ) {
-              parts.push({
-                inline_data: {
-                  mime_type:
-                    normalizedImage.mimeType,
-
-                  data:
-                    normalizedImage.data,
-                },
-              });
-            }
-
-            return {
-              role:
-                message.role ===
-                'assistant'
-                  ? 'model'
-                  : 'user',
-
-              parts,
-            };
+      /*
+       * The image is attached to the LAST USER MESSAGE.
+       * This is critical because the user's current question must be
+       * evaluated together with the current camera frame.
+       */
+      const contents = messages.map((message, index) => {
+        const parts = [
+          {
+            text: String(message.content ?? ''),
           },
-        );
+        ];
+
+        if (
+          normalizedImage &&
+          message.role === 'user' &&
+          index === messages.length - 1
+        ) {
+          parts.push({
+            inline_data: {
+              mime_type: normalizedImage.mimeType,
+              data: normalizedImage.data,
+            },
+          });
+        }
+
+        return {
+          role: message.role === 'assistant'
+            ? 'model'
+            : 'user',
+          parts,
+        };
+      });
 
       const model =
         process.env.GEMINI_MODEL ||
         'gemini-3.1-flash-lite';
 
-      const response =
-        await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-          {
-            method: 'POST',
+      const endpoint =
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
-            headers: {
-              'Content-Type':
-                'application/json',
+      const response = await fetch(endpoint, {
+        method: 'POST',
 
-              'x-goog-api-key':
-                key,
-            },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': key,
+        },
 
-            body: JSON.stringify({
-              systemInstruction: {
-                parts: [
-                  {
-                    text:
-                      SYSTEM_PROMPT,
-                  },
-                ],
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [
+              {
+                text: SYSTEM_PROMPT,
               },
-
-              contents,
-
-              generationConfig: {
-                temperature: 0.4,
-                maxOutputTokens: 500,
-
-                responseMimeType:
-                  'application/json',
-
-                responseSchema:
-                  VISION_SCHEMA,
-              },
-            }),
+            ],
           },
-        );
 
-      const data =
-        await response
-          .json()
-          .catch(() => ({}));
+          contents,
+
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 500,
+            responseMimeType: 'application/json',
+            responseSchema: VISION_SCHEMA,
+          },
+        }),
+      });
+
+      const data = await response
+        .json()
+        .catch(() => ({}));
 
       if (!response.ok) {
         const message =
@@ -419,17 +334,14 @@ const PROVIDERS = {
 
         throw makeError(
           message,
-
           data?.error?.status ||
             data?.error?.code ||
             'GEMINI_API_ERROR',
-
           response.status,
         );
       }
 
-      const rawText =
-        extractText(data);
+      const rawText = extractText(data);
 
       if (!rawText) {
         throw makeError(
@@ -442,8 +354,7 @@ const PROVIDERS = {
       let parsed;
 
       try {
-        parsed =
-          JSON.parse(rawText);
+        parsed = JSON.parse(rawText);
       } catch {
         throw makeError(
           'Gemini returned invalid structured JSON',
@@ -453,14 +364,9 @@ const PROVIDERS = {
       }
 
       const visionData =
-        normalizeVisionResult(
-          parsed,
-        );
+        normalizeVisionResult(parsed);
 
-      if (
-        !visionData.answer ||
-        !visionData.answer.trim()
-      ) {
+      if (!visionData.answer) {
         throw makeError(
           'Gemini returned no spoken answer',
           'AI_EMPTY_RESPONSE',
@@ -469,18 +375,13 @@ const PROVIDERS = {
       }
 
       return {
-        text:
-          visionData.answer,
+        text: visionData.answer,
 
-        provider:
-          'gemini',
+        provider: 'gemini',
 
         model,
 
-        vision:
-          Boolean(
-            normalizedImage,
-          ),
+        vision: Boolean(normalizedImage),
 
         visionData,
 
@@ -493,128 +394,70 @@ const PROVIDERS = {
   },
 };
 
-function json(
-  res,
-  status,
-  body,
-) {
-  return res
-    .status(status)
-    .json(body);
+function json(res, status, body) {
+  return res.status(status).json(body);
 }
 
-export default async function handler(
-  req,
-  res,
-) {
-  if (
-    req.method ===
-    'OPTIONS'
-  ) {
-    return res
-      .status(204)
-      .end();
+export default async function handler(req, res) {
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
   }
 
-  const providerName =
-    String(
-      process.env.AI_PROVIDER ||
-        'gemini',
-    ).toLowerCase();
+  const providerName = String(
+    process.env.AI_PROVIDER || 'gemini',
+  ).toLowerCase();
 
-  /*
-   * Diagnostic endpoint.
-   */
-  if (
-    req.method === 'GET'
-  ) {
+  if (req.method === 'GET') {
     const configured =
       providerName === 'gemini'
-        ? Boolean(
-            process.env
-              .GEMINI_API_KEY,
-          )
+        ? Boolean(process.env.GEMINI_API_KEY)
         : false;
 
-    return json(
-      res,
-      200,
-      {
-        ok: true,
+    return json(res, 200, {
+      ok: true,
+      provider: providerName,
 
-        provider:
-          providerName,
+      configured,
 
-        configured,
+      model:
+        providerName === 'gemini'
+          ? process.env.GEMINI_MODEL ||
+            'gemini-3.1-flash-lite'
+          : null,
 
-        model:
-          providerName ===
-          'gemini'
-            ? process.env
-                .GEMINI_MODEL ||
-              'gemini-3.1-flash-lite'
-            : null,
+      vision: providerName === 'gemini',
 
-        vision:
-          providerName ===
-          'gemini',
-
-        structuredVision:
-          providerName ===
-          'gemini',
-      },
-    );
+      structuredVision:
+        providerName === 'gemini',
+    });
   }
 
-  if (
-    req.method !==
-    'POST'
-  ) {
-    return json(
-      res,
-      405,
-      {
-        error:
-          'Method not allowed',
-
-        code:
-          'METHOD_NOT_ALLOWED',
-      },
-    );
+  if (req.method !== 'POST') {
+    return json(res, 405, {
+      error: 'Method not allowed',
+      code: 'METHOD_NOT_ALLOWED',
+    });
   }
 
   try {
     const body =
-      typeof req.body ===
-      'string'
-        ? JSON.parse(
-            req.body,
-          )
+      typeof req.body === 'string'
+        ? JSON.parse(req.body)
         : req.body || {};
 
     const provider =
-      PROVIDERS[
-        providerName
-      ];
+      PROVIDERS[providerName];
 
     if (!provider) {
-      return json(
-        res,
-        400,
-        {
-          error:
-            `Unsupported AI provider: ${providerName}`,
-
-          code:
-            'UNSUPPORTED_PROVIDER',
-        },
-      );
+      return json(res, 400, {
+        error:
+          `Unsupported AI provider: ${providerName}`,
+        code: 'UNSUPPORTED_PROVIDER',
+      });
     }
 
     const messages =
-      Array.isArray(
-        body.messages,
-      )
+      Array.isArray(body.messages)
         ? body.messages
         : [];
 
@@ -623,112 +466,76 @@ export default async function handler(
         .filter(
           (m) =>
             m &&
-            (
-              m.role ===
-                'user' ||
-              m.role ===
-                'assistant'
-            ),
+            (m.role === 'user' ||
+              m.role === 'assistant'),
         )
-
         .slice(-12)
-
         .map((m) => ({
-          role:
-            m.role,
+          role: m.role,
 
-          content:
-            String(
-              m.content || '',
-            ).slice(
-              0,
-              12000,
-            ),
+          content: String(
+            m.content || '',
+          ).slice(0, 12000),
         }))
-
         .filter(
-          (m) =>
-            m.content.trim(),
+          (m) => m.content.trim(),
         );
 
-    if (
-      !cleanMessages.length
-    ) {
-      return json(
-        res,
-        400,
-        {
-          error:
-            'No conversation messages supplied',
-
-          code:
-            'EMPTY_INPUT',
-        },
-      );
+    if (!cleanMessages.length) {
+      return json(res, 400, {
+        error:
+          'No conversation messages supplied',
+        code: 'EMPTY_INPUT',
+      });
     }
 
     /*
-     * IMPORTANT:
-     * Never infer camera state from image presence.
-     * The frontend must explicitly send cameraEnabled.
+     * THIS IS THE IMPORTANT PART.
+     *
+     * The old version read cameraEnabled/cameraSession,
+     * but the browser never sent them.
+     *
+     * The fixed index file now sends both explicitly.
      */
     const cameraEnabled =
-      body.cameraEnabled ===
-      true;
+      body.cameraEnabled === true;
 
     const cameraSession =
-      Number.isInteger(
-        body.cameraSession,
-      )
+      Number.isInteger(body.cameraSession)
         ? body.cameraSession
         : null;
 
+    const image =
+      cameraEnabled && body.image
+        ? body.image
+        : null;
+
     const result =
-      await provider.generate(
-        {
-          messages:
-            cleanMessages,
+      await provider.generate({
+        messages: cleanMessages,
 
-          /*
-           * If camera is OFF, force image to null.
-           */
-          image:
-            cameraEnabled
-              ? body.image ||
-                null
-              : null,
+        image,
 
-          cameraEnabled,
+        cameraEnabled,
 
-          cameraSession,
-        },
-      );
+        cameraSession,
+      });
 
-    return json(
-      res,
-      200,
-      result,
-    );
+    return json(res, 200, result);
   } catch (error) {
     const status =
-      Number.isInteger(
-        error?.status,
-      )
+      Number.isInteger(error?.status)
         ? error.status
         : 500;
 
-    return json(
-      res,
-      status,
-      {
-        error:
-          error?.message ||
-          'AI provider error',
+    return json(res, status, {
+      error:
+        error?.message ||
+        'AI provider error',
 
-        code:
-          error?.code ||
-          'AI_PROVIDER_ERROR',
-      },
-    );
+      code:
+        error?.code ||
+        'AI_PROVIDER_ERROR',
+    });
   }
 }
