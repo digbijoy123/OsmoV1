@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS — v2.13 ROBO VISION</title>
+<title>ROBO AIOS — v2.13 media-stt-fixed</title>
 <style>
 :root{
   --void:#090d15;
@@ -115,7 +115,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 .mic.talking{animation:talkPulse .55s infinite alternate}
 @keyframes micPulse{50%{box-shadow:0 10px 24px rgba(217,96,61,.38),0 0 0 13px rgba(255,118,84,0)}}
 @keyframes talkPulse{to{transform:scale(1.06)}}
-.modeBtn,.mediaBtn{border:1px solid rgba(44,36,64,.12);background:rgba(255,255,255,.42);color:var(--ink);border-radius:16px;padding:9px 10px;font-size:7px;cursor:pointer}
+.modeBtn,.mediaBtn{border:1px solid rgba(44,36,64,.12);background:rgba(255,255,255,.42);color:var(--ink);border-radius:16px;padding:9px 10px;font-size:7px;cursor:pointer}.mediaBtn.active{background:var(--ink);color:#fff}
 .actions{display:flex;gap:7px;align-items:center}
 
 /* Developer panel */
@@ -181,13 +181,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.13 VISION</small></div>
+          <div class="brand">ROBO <small>v2.12 CAM FIX</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
         <div class="hudBottom">
           <div class="pill"><span class="dot" id="mediaDot"></span><span id="mediaText">MEDIA OFF</span></div>
-          <div class="pill"><span class="dot" id="visionDot"></span><span id="visionText">VISION IDLE</span></div>
           <div class="pill"><span class="dot" id="bleDot"></span><span id="bleText">ROBOT OFFLINE</span></div>
         </div>
       </header>
@@ -227,7 +226,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       <footer class="bottom">
         <div class="actions">
           <button class="modeBtn" id="orientationBtn">LANDSCAPE TEST</button><button class="modeBtn" id="devPageBtn">DEV PAGE</button>
-          <button class="mediaBtn" id="mediaBtn">ENABLE CAM + MIC</button>
+          <button class="mediaBtn" id="cameraBtn" aria-pressed="false">CAMERA OFF</button>
           <button class="modeBtn" id="devBtn">DEV STATES</button>
         </div>
         <button class="mic" id="micBtn" aria-label="Talk to Robo">
@@ -247,7 +246,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.13 VISION</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.12 CAM FIX</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -266,11 +265,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <section class="devCard">
       <div class="devTitle">CAPTURED TRANSCRIPT</div>
       <pre class="devPre" id="devTranscript">No transcript yet.</pre>
-    </section>
-    <section class="devCard">
-      <div class="devTitle">ROBO VISION · OBJECTS</div>
-      <div class="devRow"><span>Scene</span><b id="devVisionScene">—</b></div>
-      <pre class="devPre" id="devVisionObjects">No vision result yet.</pre>
     </section>
     <section class="devCard devLogCard">
       <div class="devTitle">EVENT / ERROR LOG</div>
@@ -335,12 +329,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let talking = false;
   let listening = false;
   let cameraStream = null;
+  let cameraEnabled = false;
   let micStream = null;
   let recognition = null;
   let bleDevice = null;
   let bleChar = null;
   let audioLevel = 0;
-  let latestVision = null;
   let lastActivity = performance.now();
   let blink = 0;
   let blinkTimer = 1800 + Math.random()*3000;
@@ -690,12 +684,22 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       cameraStream.getTracks().forEach(t=>t.stop());
       cameraStream=null;
     }
+    cameraEnabled=false;
     const video=$('#camera');
     if(video){
       video.pause();
       video.srcObject=null;
     }
     $('#cameraBox')?.classList.add('empty');
+    const btn=$('#cameraBtn');
+    if(btn){
+      btn.textContent='CAMERA OFF';
+      btn.classList.remove('active');
+      btn.setAttribute('aria-pressed','false');
+    }
+    $('#mediaDot').className='dot ok';
+    $('#mediaText').textContent='MIC READY';
+    log('CAM · OFF');
   }
 
   function releaseMicForSTT(){
@@ -731,6 +735,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         }catch(err){
           if(err?.name!=='AbortError') throw err;
         }
+        cameraEnabled=true;
+        const btn=$('#cameraBtn');
+        if(btn){btn.textContent='CAMERA ON';btn.classList.add('active');btn.setAttribute('aria-pressed','true');}
+        $('#mediaDot').className='dot ok';
+        $('#mediaText').textContent='CAMERA ON';
         log('CAM · existing live stream reused');
         return cameraStream;
       }
@@ -761,6 +770,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }
 
     cameraStream=stream;
+    cameraEnabled=true;
+    const cameraBtn=$('#cameraBtn');
+    if(cameraBtn){cameraBtn.textContent='CAMERA ON';cameraBtn.classList.add('active');cameraBtn.setAttribute('aria-pressed','true');}
 
     // Set the media element completely before attaching the stream.
     // Do not wait for loadedmetadata: on Android Chrome that event can fire
@@ -868,48 +880,51 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     return true;
   }
 
-  async function enableMedia(){
-    // IMPORTANT: camera and microphone are not requested in parallel anymore.
-    // Android Chrome can race two getUserMedia calls and leave the media
-    // element in an interrupted-loading state. Camera is established first,
-    // then microphone permission is checked and immediately released.
-    if(window.__roboMediaStarting) return;
-    window.__roboMediaStarting=true;
+  async function toggleCamera(){
+    const btn=$('#cameraBtn');
+    if(cameraEnabled || cameraStream){
+      stopCamera();
+      setVoiceStatus('CAMERA OFF · voice only');
+      hideCaption(1800);
+      return;
+    }
+
+    if(window.__roboCameraStarting) return;
+    window.__roboCameraStarting=true;
 
     try{
-      setVoiceStatus('MEDIA STARTING · camera first…');
-
+      setVoiceStatus('CAMERA STARTING · requesting permission…');
       await startCamera();
-      log('MEDIA · camera ready');
-
-      try{
-        await requestMicPermission();
-        $('#mediaDot').className='dot ok';
-        $('#mediaText').textContent='CAM + MIC READY';
-        setVoiceStatus('CAM READY · MIC READY · tap orange mic');
-        if(devMicPermission)devMicPermission.textContent='GRANTED';
-      }catch(micErr){
-        $('#mediaDot').className='dot ok';
-        $('#mediaText').textContent='CAM READY · MIC ERROR';
-        log('MIC · permission failed · '+(micErr?.name||'unknown')+' · '+(micErr?.message||''));
-        setVoiceStatus('CAM READY · MIC ERROR · '+(micErr?.message||micErr?.name||'permission blocked'));
+      $('#mediaDot').className='dot ok';
+      $('#mediaText').textContent='CAMERA ON';
+      if(btn){
+        btn.textContent='CAMERA ON';
+        btn.classList.add('active');
+        btn.setAttribute('aria-pressed','true');
       }
-      hideCaption(3000);
+      log('CAM · ON · independent camera control');
+      setVoiceStatus('CAMERA ON · microphone remains independent');
+      hideCaption(2500);
     }catch(err){
+      cameraEnabled=false;
+      if(btn){
+        btn.textContent='CAMERA OFF';
+        btn.classList.remove('active');
+        btn.setAttribute('aria-pressed','false');
+      }
       $('#mediaDot').className='dot';
       $('#mediaText').textContent='CAMERA ERROR';
       log('CAM · start failed · '+(err?.name||'unknown')+' · '+(err?.message||''));
       setVoiceStatus('CAMERA ERROR · '+(err?.message||err?.name||'camera unavailable'));
       hideCaption(6000);
     }finally{
-      window.__roboMediaStarting=false;
+      window.__roboCameraStarting=false;
     }
   }
 
-  $('#mediaBtn').addEventListener('click',enableMedia);
-  $('#cameraBox').addEventListener('click',enableMedia);
+  $('#cameraBtn').addEventListener('click',toggleCamera);
 
-  /* ---------- Speech recognition (v2.12 hardened pipeline) ---------- */
+    /* ---------- Speech recognition (v2.12 hardened pipeline) ---------- */
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   let sttSession=0;
   let sttHadResult=false;
@@ -1141,6 +1156,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   const visionCanvas=document.createElement('canvas');
   const visionCtx=visionCanvas.getContext('2d',{alpha:false});
 
+  function isVisionQuestion(text){
+    const l=(text||'').toLowerCase().trim();
+    return (
+      /\\b(see|seeing|look|looking|camera|image|picture|photo)\\b/.test(l) ||
+      /\\bwhat\\s+(do\\s+you|can\\s+you)\\s+see\\b/.test(l) ||
+      /\\bwhat.*in\\s+front\\s+of\\s+me\\b/.test(l) ||
+      /\\bwhat.*around\\s+me\\b/.test(l) ||
+      /\\bdescribe.*scene\\b/.test(l) ||
+      /\\bidentify.*object\\b/.test(l)
+    );
+  }
+
   function captureVisionFrame(){
     const video=$('#camera');
     const track=cameraStream?.getVideoTracks?.()[0];
@@ -1168,35 +1195,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       width,
       height
     };
-  }
-
-  function setVisionStatus(text, ok=false){
-    const dot=$('#visionDot');
-    const label=$('#visionText');
-    if(label) label.textContent=text;
-    if(dot) dot.className='dot '+(ok?'ok':'');
-  }
-
-  function renderVisionResult(vision){
-    latestVision=vision || null;
-    const scene=String(vision?.scene||'No scene description.').trim();
-    const objects=Array.isArray(vision?.objects)?vision.objects:[];
-    if($('#devVisionScene')) $('#devVisionScene').textContent=scene;
-    if($('#devVisionObjects')){
-      if(!objects.length){
-        $('#devVisionObjects').textContent='No objects confidently detected.';
-      }else{
-        $('#devVisionObjects').textContent=objects.map((o,i)=>{
-          const box=Array.isArray(o.box)&&o.box.length===4
-            ? ` · box ${o.box.join(',')}` : '';
-          const confidence=Number.isFinite(Number(o.confidence))
-            ? ` · ${Math.round(Number(o.confidence))}%` : '';
-          return `${i+1}. ${o.name||'unknown'} ×${Number(o.count)||1}${confidence}${box}`;
-        }).join('\n');
-      }
-    }
-    setVisionStatus(objects.length?`VISION · ${objects.length} OBJECT${objects.length===1?'':'S'}`:'VISION · NO OBJECTS',true);
-    devLog('VISION','structured result',{scene,objects});
   }
 
   async function callRoboBrain(messages,image=null){
@@ -1246,29 +1244,30 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     try{
       let visionImage=null;
-      if(cameraStream){
+      const wantsVision=isVisionQuestion(clean);
+
+      if(cameraEnabled && wantsVision){
         try{
           visionImage=captureVisionFrame();
           if(visionImage){
-            devLog("VISION","camera frame captured",{width:visionImage.width,height:visionImage.height});
+            devLog("VISION","vision question · camera frame attached",{width:visionImage.width,height:visionImage.height});
           }else{
-            devLog("VISION","camera is live but no usable frame was available · continuing text-only");
+            devLog("VISION","vision requested but no usable camera frame · continuing text-only");
           }
         }catch(visionErr){
           devLog("VISION ERROR",visionErr?.message||'frame capture failed');
         }
+      }else if(cameraEnabled){
+        devLog("VISION","camera ON but request is voice/text-only · frame NOT attached");
+      }else{
+        devLog("VISION","camera OFF · voice/text-only request");
       }
 
       const data=await callRoboBrain(conversation,visionImage);
-      if(data?.visionData){
-        renderVisionResult(data.visionData);
-      }else if(visionImage){
-        setVisionStatus('VISION · ANALYZING',false);
-      }
       const reply=String(data.text).trim();
       conversation.push({role:'assistant',content:reply});
       while(conversation.length>MAX_HISTORY) conversation.shift();
-      if(devAI) devAI.textContent=(data.provider||'AI').toUpperCase()+' · CONNECTED';
+      if(devAI) devAI.textContent=(data.provider||'GEMINI').toUpperCase()+' · CONNECTED';
       if(devStage) devStage.textContent='AI RESPONSE RECEIVED';
       setState(emotion,emotion+' · AI response');
       speak(reply);
@@ -1316,7 +1315,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 /* ---------- Developer diagnostics runtime ---------- */
 const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript");
-const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI"), devVisionScene=$("#devVisionScene"), devVisionObjects=$("#devVisionObjects");
+const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
 let devLogLines=["[BOOT] Developer diagnostics ready."];
 
 function devLog(type,msg,data){
@@ -1333,7 +1332,7 @@ if(devAI)devAI.textContent="CHECKING · PROVIDER ADAPTER";
 if(devStt)devStt.textContent=(window.SpeechRecognition||window.webkitSpeechRecognition)?"SUPPORTED":"UNSUPPORTED";
 if(devCamera)devCamera.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
 if(devMic)devMic.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
-if(devMicPermission)devMicPermission.textContent="UNKNOWN · tap ENABLE CAM + MIC";
+if(devMicPermission)devMicPermission.textContent="UNKNOWN · tap CAMERA or MIC";
 if(devLocalStt)devLocalStt.textContent=(window.SpeechRecognition&&"processLocally" in SpeechRecognition.prototype)?"SUPPORTED API":"NOT EXPOSED";
 async function refreshMicPermissionDiagnostic(){
   if(!devMicPermission)return;
@@ -1388,8 +1387,8 @@ function runDevChecks(){
     ["Media permission API",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
     ["On-device STT API",!!(window.SpeechRecognition&&"processLocally" in SpeechRecognition.prototype)],
     ["AI adapter route",true],
-    ["Camera vision capture",!!(cameraStream && $("#camera")?.videoWidth>1 && $("#camera")?.videoHeight>1)],
-    ["Structured vision state",latestVision!==null],
+    ["Camera vision capture",!!(cameraEnabled && cameraStream && $("#camera")?.videoWidth>1 && $("#camera")?.videoHeight>1)],
+    ["Camera state",cameraEnabled && !!cameraStream],
     ["AI API key",null]
   ];
   $("#devChecks").innerHTML=list.map(x=>{
@@ -1434,8 +1433,6 @@ $("#copyLogs").addEventListener("click",async()=>{
     "STT: "+devStt.textContent,
     "On-device STT: "+devLocalStt.textContent,
     "AI brain: "+devAI.textContent,
-    "Vision scene: "+(devVisionScene?.textContent||"—"),
-    "Vision objects: "+(devVisionObjects?.textContent||"—"),
     "",
     "TRANSCRIPT:",
     devTranscript.textContent,
@@ -1539,12 +1536,10 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.13 VISION booted · provider-neutral AI brain");
+  log("ROBO AIOS v2.12 CAM FIX booted · provider-neutral AI brain");
   log("3D floating emoji renderer online");
-  log("camera + mic waiting for user permission");
-  log("AI provider adapter online · Gemini vision enabled");
-  setVisionStatus('VISION IDLE',false);
-  log("structured object detection → ready on next camera query");
+  log("camera OFF by default · microphone/STT independent");
+  log("AI provider adapter online · API key required for live AI");
   log("natural idle emotion cycle → ON");
 
   /* Developer convenience: desktop starts in portrait simulator. */
