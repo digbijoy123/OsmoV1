@@ -1,18 +1,3 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS — v2.13 media-stt-fixed</title>
-<style>
-:root{
-  --void:#090d15;
-  --panel:#111827;
-  --panel2:#172033;
-  --screen:#f8ead7;
-  --screen2:#ffd5ae;
-  --ink:#29233c;
   --muted:#778198;
   --cyan:#5fd4d0;
   --amber:#f0b45b;
@@ -55,14 +40,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 @keyframes blinkDot{50%{opacity:.35}}
 
 /* Camera */
-.camera{position:absolute;right:15px;top:103px;width:174px;height:122px;border-radius:20px;overflow:hidden;background:#080b11;border:2px solid rgba(255,255,255,.75);box-shadow:0 12px 28px rgba(44,36,64,.22);z-index:25}
+.camera{position:absolute;right:15px;top:103px;width:128px;height:94px;border-radius:20px;overflow:hidden;background:#080b11;border:2px solid rgba(255,255,255,.75);box-shadow:0 12px 28px rgba(44,36,64,.22);z-index:25}
 .camera video{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1)}
-.camera .visionOverlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.camera .camSwitch{position:absolute;right:7px;bottom:7px;z-index:3;border:1px solid rgba(255,255,255,.35);background:rgba(0,0,0,.58);color:#fff;border-radius:9px;padding:4px 6px;font-size:7px;line-height:1;cursor:pointer}
-.camera .camSwitch:disabled{opacity:.45;cursor:default}
+.camera.rear video{transform:none}
+#cameraSwitchBtn:disabled{opacity:.45;cursor:not-allowed}
 .camera .camLabel{position:absolute;left:8px;bottom:6px;padding:4px 6px;border-radius:8px;background:rgba(0,0,0,.55);color:#fff;font-size:7px}
 .camera .camRec{position:absolute;right:8px;top:8px;width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red)}
 .camera.empty::after{content:"CAMERA OFF";position:absolute;inset:0;display:grid;place-items:center;color:#7c8598;font-size:8px;letter-spacing:.08em}
+.camera .visionOverlay{position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden}
+.camera .visionBox{position:absolute;border:2px solid var(--cyan);border-radius:6px;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 12px rgba(95,212,208,.28);background:rgba(95,212,208,.06)}
+.camera .visionLabel{position:absolute;left:-2px;top:-19px;max-width:120px;padding:3px 5px;border-radius:5px;background:rgba(9,13,21,.82);color:#fff;font-size:6px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.camera .visionSummary{position:absolute;left:7px;right:7px;top:7px;padding:5px 6px;border-radius:7px;background:rgba(9,13,21,.72);color:#fff;font-size:6px;line-height:1.25;letter-spacing:.04em;opacity:0;transform:translateY(-3px);transition:.2s}
+.camera .visionSummary.show{opacity:1;transform:none}
 
 /* Avatar zone */
 .avatarZone{position:absolute;left:12px;right:12px;top:125px;bottom:205px;display:grid;place-items:center;z-index:8}
@@ -145,7 +134,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 /* Small phones */
 @media(max-width:380px){
-  .camera{width:154px;height:108px}
+  .camera{width:108px;height:78px}
   .brand{font-size:12px}.stateChip,.battery,.pill{font-size:7px}
   .avatarZone{top:116px;bottom:190px}
   .caption{bottom:75px}
@@ -184,7 +173,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.12 CAM FIX</small></div>
+          <div class="brand">ROBO <small>v2.15 CAM + OBJECT VISION</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -196,10 +185,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       <div class="camera empty" id="cameraBox">
         <video id="camera" autoplay playsinline muted></video>
-        <canvas id="visionOverlay" class="visionOverlay"></canvas>
+        <div class="visionOverlay" id="visionOverlay"></div>
+        <div class="visionSummary" id="visionSummary"></div>
         <span class="camRec"></span>
         <span class="camLabel">what I see</span>
-        <button class="camSwitch" id="cameraSwitchBtn" type="button" disabled aria-label="Change camera">↻ CAM</button>
       </div>
 
       <section class="avatarZone">
@@ -231,7 +220,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       <footer class="bottom">
         <div class="actions">
           <button class="modeBtn" id="orientationBtn">LANDSCAPE TEST</button><button class="modeBtn" id="devPageBtn">DEV PAGE</button>
-          <button class="mediaBtn" id="cameraBtn" aria-pressed="false">CAMERA OFF</button>
+          <button class="mediaBtn" id="cameraBtn" aria-pressed="false">CAMERA OFF</button><button class="mediaBtn" id="cameraSwitchBtn" aria-pressed="false" disabled>REAR CAM</button>
           <button class="modeBtn" id="devBtn">DEV STATES</button>
         </div>
         <button class="mic" id="micBtn" aria-label="Talk to Robo">
@@ -251,7 +240,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.12 CAM FIX</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.15 CAM + OBJECT VISION</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -335,11 +324,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let listening = false;
   let cameraStream = null;
   let cameraEnabled = false;
+  let cameraFacingMode = 'user';
   let cameraSession = 0;
-  let cameraFacingMode = "user";
-  let cameraStarting = false;
-  let lastVisionFrameSignature = null;
-  let visionFrameWatchTimer = null;
+  let visionRequestController = null;
+  let latestVision = null;
   let micStream = null;
   let recognition = null;
   let bleDevice = null;
@@ -689,123 +677,26 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }catch(e){ log('MIC · meter unavailable: '+e.message); }
   }
 
-  const visionOverlay = $('#visionOverlay');
-  const visionOverlayCtx = visionOverlay?.getContext('2d');
-  const frameWatchCanvas = document.createElement('canvas');
-  const frameWatchCtx = frameWatchCanvas.getContext('2d', {willReadFrequently:true});
-
-  function clearVisionOverlay(reason='manual'){
-    if(visionOverlayCtx && visionOverlay){
-      const rect=visionOverlay.getBoundingClientRect();
-      visionOverlay.width=Math.max(1,Math.round(rect.width*2));
-      visionOverlay.height=Math.max(1,Math.round(rect.height*2));
-      visionOverlayCtx.setTransform(2,0,0,2,0,0);
-      visionOverlayCtx.clearRect(0,0,rect.width,rect.height);
-    }
-    lastVisionFrameSignature=null;
-    if(reason) devLog('VISION','object boxes cleared · '+reason);
-  }
-
-  function drawVisionObjects(visionData){
-    if(!visionOverlayCtx || !visionOverlay || !visionData?.objects?.length){
-      clearVisionOverlay('no detected objects');
-      return;
-    }
-    const rect=visionOverlay.getBoundingClientRect();
-    const w=Math.max(1,rect.width), h=Math.max(1,rect.height);
-    const dpr=Math.min(2,window.devicePixelRatio||1);
-    visionOverlay.width=Math.round(w*dpr);
-    visionOverlay.height=Math.round(h*dpr);
-    visionOverlayCtx.setTransform(dpr,0,0,dpr,0,0);
-    visionOverlayCtx.clearRect(0,0,w,h);
-    visionOverlayCtx.lineWidth=2;
-    visionOverlayCtx.font='700 9px ui-monospace,monospace';
-    visionData.objects.forEach((obj)=>{
-      const b=Array.isArray(obj.box)?obj.box:null;
-      if(!b || b.length!==4) return;
-      const ymin=Math.max(0,Math.min(1000,Number(b[0])||0));
-      const xmin=Math.max(0,Math.min(1000,Number(b[1])||0));
-      const ymax=Math.max(ymin,Math.min(1000,Number(b[2])||0));
-      const xmax=Math.max(xmin,Math.min(1000,Number(b[3])||0));
-      const x=(1000-xmax)/1000*w, y=ymin/1000*h;
-      const bw=Math.max(4,(xmax-xmin)/1000*w), bh=Math.max(4,(ymax-ymin)/1000*h);
-      visionOverlayCtx.strokeStyle='rgba(95,212,208,.95)';
-      visionOverlayCtx.strokeRect(x,y,bw,bh);
-      const label=String(obj.name||'object')+(obj.count>1?' ×'+obj.count:'');
-      const tw=visionOverlayCtx.measureText(label).width+8;
-      const th=14;
-      visionOverlayCtx.fillStyle='rgba(8,11,17,.78)';
-      visionOverlayCtx.fillRect(x,Math.max(0,y-th),tw,th);
-      visionOverlayCtx.fillStyle='#fff';
-      visionOverlayCtx.fillText(label,x+4,Math.max(10,y-4));
-    });
-  }
-
-  function frameSignature(){
-    const video=$('#camera');
-    const track=cameraStream?.getVideoTracks?.()[0];
-    if(!cameraEnabled || !video || !track || track.readyState!=='live' || video.videoWidth<2 || video.videoHeight<2) return null;
-    const size=24;
-    frameWatchCanvas.width=size; frameWatchCanvas.height=size;
-    frameWatchCtx.drawImage(video,0,0,size,size);
-    const pixels=frameWatchCtx.getImageData(0,0,size,size).data;
-    let sum=0;
-    for(let i=0;i<pixels.length;i+=4) sum=(sum+pixels[i]*3+pixels[i+1]*5+pixels[i+2]*2)%1000000007;
-    return sum;
-  }
-
-  function startVisionFrameWatch(){
-    clearInterval(visionFrameWatchTimer);
-    visionFrameWatchTimer=setInterval(()=>{
-      if(!cameraEnabled){ clearVisionOverlay('camera off'); return; }
-      const sig=frameSignature();
-      if(sig==null) return;
-      if(lastVisionFrameSignature==null){ lastVisionFrameSignature=sig; return; }
-      if(sig!==lastVisionFrameSignature){
-        clearVisionOverlay('camera frame changed');
-        lastVisionFrameSignature=sig;
-      }
-    },350);
-  }
-
-  function markVisionFrameSignature(){
-    lastVisionFrameSignature=frameSignature();
-  }
-
-  function stopCamera(){
-    // Invalidate the current and any pending asynchronous camera start first.
-    cameraSession++;
+  function stopCamera(reason='manual'){
+    cameraSession += 1;
+    if(visionRequestController){ try{ visionRequestController.abort(); }catch(_){ } visionRequestController=null; }
+    const stream=cameraStream;
+    cameraStream=null;
     cameraEnabled=false;
-    cameraStarting=false;
-    const wasVisionRequestActive = activeVisionRequestSession !== null;
-    if(wasVisionRequestActive && aiAbortController){
-      try{ aiAbortController.abort(); }catch(_){}
-      devLog('VISION','active vision request aborted because camera was turned off/switched');
-    }
-    cameraStarting=false;
-    clearVisionOverlay('camera OFF');
-    if(cameraStream){
-      cameraStream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
-      cameraStream=null;
-    }
+    if(stream) stream.getTracks().forEach(track=>{ try{track.stop();}catch(_){ } });
     const video=$('#camera');
-    if(video){
-      try{video.pause();}catch(_){}
-      video.srcObject=null;
-      try{video.load();}catch(_){}
-    }
+    if(video){ try{video.pause();}catch(_){ } video.srcObject=null; }
     $('#cameraBox')?.classList.add('empty');
+    $('#cameraBox')?.classList.remove('rear');
+    clearVisionOverlay();
+    latestVision=null;
     const btn=$('#cameraBtn');
-    if(btn){
-      btn.textContent='CAMERA OFF';
-      btn.classList.remove('active');
-      btn.setAttribute('aria-pressed','false');
-    }
-    const sw=$('#cameraSwitchBtn');
-    if(sw) sw.disabled=true;
+    if(btn){ btn.textContent='CAMERA OFF'; btn.classList.remove('active'); btn.setAttribute('aria-pressed','false'); }
+    const switchBtn=$('#cameraSwitchBtn');
+    if(switchBtn){ switchBtn.disabled=true; switchBtn.textContent='REAR CAM'; switchBtn.setAttribute('aria-pressed','false'); }
     $('#mediaDot').className='dot ok';
     $('#mediaText').textContent='MIC READY';
-    log('CAM · OFF · session '+cameraSession);
+    log('CAM · OFF · all tracks stopped · vision disabled · '+reason);
   }
 
   function releaseMicForSTT(){
@@ -821,28 +712,52 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
   async function startCamera(facingMode=cameraFacingMode){
     if(!navigator.mediaDevices?.getUserMedia) throw new Error('Camera API unavailable');
-    if(cameraStarting) throw new Error('Camera start already in progress');
-    cameraStarting=true;
-    const session=++cameraSession;
+
+    // Every start gets a unique session. If the user turns the camera off
+    // while getUserMedia() or video.play() is still pending, that old start
+    // is no longer allowed to resurrect the camera.
+    const startSession=++cameraSession;
+
     const video=$('#camera');
     const box=$('#cameraBox');
-    if(!video || !box) { cameraStarting=false; throw new Error('Camera UI unavailable'); }
+    if(!video || !box) throw new Error('Camera UI unavailable');
 
-    // Always discard a dead/stale stream before opening a new one. This is
-    // important on Android Chrome after CAMERA OFF → CAMERA ON.
+    // A stopped MediaStream object must never be reused. Android Chrome can
+    // otherwise hand us a dead track and leave the preview black/empty.
     if(cameraStream){
-      const oldTrack=cameraStream.getVideoTracks()[0];
-      if(oldTrack?.readyState==='live' && cameraEnabled){
-        cameraStarting=false;
-        return cameraStream;
-      }
-      cameraStream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
-      cameraStream=null;
+      const liveTrack=cameraStream.getVideoTracks()[0];
+      if(liveTrack?.readyState!=='live') stopCamera();
     }
 
-    cameraEnabled=false;
-    clearVisionOverlay('new camera session');
-    log('CAM · requesting '+facingMode+' camera · session '+session);
+    if(cameraStream){
+      const liveTrack=cameraStream.getVideoTracks()[0];
+      if(liveTrack?.readyState==='live'){
+        video.autoplay=true;
+        video.playsInline=true;
+        video.muted=true;
+        video.srcObject=cameraStream;
+        box.classList.remove('empty');
+        try{ await video.play(); }catch(err){
+          if(err?.name!=='AbortError') throw err;
+        }
+        if(video.videoWidth<2 || video.videoHeight<2){
+          throw new Error('Camera stream is live but video frame is not ready');
+        }
+        cameraEnabled=true;
+        cameraFacingMode=facingMode;
+        const btn=$('#cameraBtn');
+        if(btn){btn.textContent='CAMERA ON';btn.classList.add('active');btn.setAttribute('aria-pressed','true');}
+        const switchBtn=$('#cameraSwitchBtn');
+        if(switchBtn){switchBtn.disabled=false;switchBtn.textContent=facingMode==='environment'?'FRONT CAM':'REAR CAM';switchBtn.setAttribute('aria-pressed',String(facingMode==='environment'));}
+        $('#cameraBox').classList.toggle('rear',facingMode==='environment');
+        $('#mediaDot').className='dot ok';
+        $('#mediaText').textContent=facingMode==='environment'?'REAR CAMERA ON':'CAMERA ON';
+        log('CAM · existing live stream reused · '+facingMode+' · '+video.videoWidth+'x'+video.videoHeight);
+        return cameraStream;
+      }
+    }
+
+    log('CAM · requesting camera permission');
 
     let stream;
     try{
@@ -856,65 +771,48 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         audio:false
       });
     }catch(firstErr){
-      log('CAM · '+facingMode+' exact constraint failed · '+(firstErr?.name||'unknown'));
-      try{
-        stream=await navigator.mediaDevices.getUserMedia({
-          video:{facingMode:{ideal:facingMode},width:{ideal:1280},height:{ideal:720}},audio:false
-        });
-      }catch(secondErr){
-        if(facingMode!=='user'){
-          log('CAM · requested camera unavailable · keeping camera OFF');
-        }
-        cameraStarting=false;
-        throw secondErr;
-      }
+      log('CAM · preferred constraints failed · '+(firstErr?.name||'unknown'));
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facingMode}},audio:false});
     }
 
-    // CAMERA OFF may have happened while getUserMedia was pending.
-    // Never allow that stale async result to resurrect the camera.
-    if(session!==cameraSession){
-      stream.getTracks().forEach(t=>{try{t.stop();}catch(_){} });
-      cameraStarting=false;
-      throw new Error('Camera start cancelled');
+    if(startSession!==cameraSession){
+      stream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
+      throw new DOMException('Camera start was cancelled','AbortError');
     }
 
     const track=stream.getVideoTracks()[0];
     if(!track){
-      stream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
-      cameraStarting=false;
+      stream.getTracks().forEach(t=>t.stop());
       throw new Error('Camera permission granted but no video track returned');
     }
 
+    // Keep cameraEnabled false until we have a real rendered video frame.
     cameraStream=stream;
-    cameraFacingMode=facingMode;
-    video.autoplay=true; video.playsInline=true; video.muted=true;
+    cameraEnabled=false;
+    video.autoplay=true;
+    video.playsInline=true;
+    video.muted=true;
+    video.setAttribute('autoplay','');
+    video.setAttribute('playsinline','');
     video.srcObject=stream;
-
-    if(session!==cameraSession){
-      stream.getTracks().forEach(t=>{try{t.stop();}catch(_){} });
-      if(cameraStream===stream) cameraStream=null;
-      video.srcObject=null;
-      cameraStarting=false;
-      throw new Error('Camera start cancelled');
-    }
-
     box.classList.remove('empty');
 
     const waitForVideoFrame=()=>new Promise((resolve,reject)=>{
-      const deadline=performance.now()+5000;
+      const deadline=performance.now()+4000;
       let done=false;
       let timer=null;
       const finish=(err)=>{
-        if(done)return; done=true; clearInterval(timer);
+        if(done)return;
+        done=true;
+        clearTimeout(timer);
         video.removeEventListener('loadedmetadata',check);
         video.removeEventListener('canplay',check);
         video.removeEventListener('playing',check);
         track.removeEventListener('ended',onEnded);
-        err?reject(err):resolve();
+        if(err) reject(err); else resolve();
       };
       const check=()=>{
-        if(session!==cameraSession){finish(new Error('Camera session changed while starting'));return;}
-        if(video.videoWidth>1 && video.videoHeight>1 && video.readyState>=HTMLMediaElement.HAVE_CURRENT_DATA) finish();
+        if(video.videoWidth>1 && video.videoHeight>1) finish();
         else if(performance.now()>=deadline) finish(new Error('Camera opened but no video frame became available'));
       };
       const onEnded=()=>finish(new Error('Camera track ended while starting'));
@@ -922,42 +820,52 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       video.addEventListener('canplay',check);
       video.addEventListener('playing',check);
       track.addEventListener('ended',onEnded,{once:true});
-      timer=setInterval(check,100); check();
+      timer=setInterval(check,100);
+      check();
     });
 
     try{
-      for(let attempt=0;attempt<3;attempt++){
-        try{ await video.play(); break; }
-        catch(err){
-          if(err?.name==='AbortError' && attempt<2){ await new Promise(r=>setTimeout(r,220*(attempt+1))); continue; }
+      // Start playback first, then wait for actual dimensions. This avoids
+      // declaring CAMERA ON while Android Chrome still has a blank video box.
+      let played=false;
+      for(let attempt=0;attempt<3 && !played;attempt++){
+        try{
+          await video.play();
+          played=true;
+        }catch(err){
+          if(err?.name==='AbortError' && attempt<2){
+            await new Promise(r=>setTimeout(r,250*(attempt+1)));
+            continue;
+          }
           throw err;
         }
       }
+
       await waitForVideoFrame();
-      if(session!==cameraSession){ throw new Error('Camera session became stale'); }
+      if(startSession!==cameraSession){
+        stream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
+        throw new DOMException('Camera start was cancelled','AbortError');
+      }
       cameraEnabled=true;
+      cameraFacingMode=facingMode;
       const cameraBtn=$('#cameraBtn');
       if(cameraBtn){cameraBtn.textContent='CAMERA ON';cameraBtn.classList.add('active');cameraBtn.setAttribute('aria-pressed','true');}
-      const sw=$('#cameraSwitchBtn'); if(sw) sw.disabled=false;
+      const switchBtn=$('#cameraSwitchBtn');
+      if(switchBtn){switchBtn.disabled=false;switchBtn.textContent=facingMode==='environment'?'FRONT CAM':'REAR CAM';switchBtn.setAttribute('aria-pressed',String(facingMode==='environment'));}
+      $('#cameraBox').classList.toggle('rear',facingMode==='environment');
       $('#mediaDot').className='dot ok';
-      $('#mediaText').textContent='CAMERA ON';
-      markVisionFrameSignature();
-      startVisionFrameWatch();
-      log('CAM · LIVE · '+video.videoWidth+'x'+video.videoHeight+' · '+facingMode+' · session '+session);
+      $('#mediaText').textContent=facingMode==='environment'?'REAR CAMERA ON':'CAMERA ON';
+      log('CAM · LIVE · '+facingMode+' · '+video.videoWidth+'x'+video.videoHeight);
       return stream;
     }catch(err){
+      log('CAM · startup failed after permission · '+(err?.name||'unknown')+' · '+(err?.message||''));
       stream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
       if(cameraStream===stream) cameraStream=null;
       cameraEnabled=false;
-      video.srcObject=null;
-      try{video.load();}catch(_){}
+      video.pause?.();
+      if(video.srcObject===stream) video.srcObject=null;
       box.classList.add('empty');
-      clearVisionOverlay('camera startup failed');
-      const sw=$('#cameraSwitchBtn'); if(sw) sw.disabled=true;
-      log('CAM · startup failed · '+(err?.name||'unknown')+' · '+(err?.message||''));
       throw err;
-    }finally{
-      cameraStarting=false;
     }
   }
 
@@ -983,62 +891,52 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   async function toggleCamera(){
-    const btn=$('#cameraBtn');
     if(cameraEnabled || cameraStream){
-      stopCamera();
-      setVoiceStatus('CAMERA OFF · voice only');
+      stopCamera('manual OFF');
+      setVoiceStatus('CAMERA OFF · lens released · voice only');
       hideCaption(1800);
       return;
     }
-
+    if(window.__roboCameraStarting) return;
+    window.__roboCameraStarting=true;
     try{
       setVoiceStatus('CAMERA STARTING · requesting permission…');
-      await startCamera();
-      $('#mediaDot').className='dot ok';
-      $('#mediaText').textContent='CAMERA ON';
-      if(btn){
-        btn.textContent='CAMERA ON';
-        btn.classList.add('active');
-        btn.setAttribute('aria-pressed','true');
-      }
-      log('CAM · ON · independent camera control');
-      setVoiceStatus('CAMERA ON · microphone remains independent');
+      await startCamera(cameraFacingMode);
+      log('CAM · ON · '+cameraFacingMode+' · independent camera control');
+      setVoiceStatus(cameraFacingMode==='environment'?'REAR CAMERA ON · microphone remains independent':'CAMERA ON · microphone remains independent');
       hideCaption(2500);
     }catch(err){
-      if(err?.message==='Camera start cancelled'){
-        log('CAM · startup cancelled by user');
-        return;
-      }
-      cameraEnabled=false;
-      if(btn){
-        btn.textContent='CAMERA OFF';
-        btn.classList.remove('active');
-        btn.setAttribute('aria-pressed','false');
-      }
+      stopCamera('startup failed');
       $('#mediaDot').className='dot';
       $('#mediaText').textContent='CAMERA ERROR';
       log('CAM · start failed · '+(err?.name||'unknown')+' · '+(err?.message||''));
       setVoiceStatus('CAMERA ERROR · '+(err?.message||err?.name||'camera unavailable'));
       hideCaption(6000);
-    }finally{
-      // startCamera owns the actual cameraStarting lock.
-    }
+    }finally{ window.__roboCameraStarting=false; }
   }
 
   async function switchCamera(){
-    if(!cameraEnabled || cameraStarting){ log('CAM · switch ignored · camera not ready'); return; }
-    const next=cameraFacingMode==='user'?'environment':'user';
-    log('CAM · switching '+cameraFacingMode+' → '+next);
-    const previousSession=cameraSession;
-    // Stop the current stream first so Android releases the active camera.
-    stopCamera();
-    try{
-      await startCamera(next);
-      log('CAM · switched successfully · '+next+' · session '+cameraSession);
-    }catch(err){
-      log('CAM · switch failed · '+(err?.name||'unknown')+' · '+(err?.message||''));
-      setVoiceStatus('CAMERA SWITCH FAILED · camera remains off');
+    if(window.__roboCameraStarting) return;
+    if(!cameraEnabled || !cameraStream){
+      setVoiceStatus('CAMERA OFF · turn the camera on first');
+      hideCaption(1800);
+      return;
     }
+    const nextFacing=cameraFacingMode==='user' ? 'environment' : 'user';
+    window.__roboCameraStarting=true;
+    try{
+      stopCamera('switching lens');
+      setVoiceStatus(nextFacing==='environment'?'SWITCHING · rear camera…':'SWITCHING · front camera…');
+      await startCamera(nextFacing);
+      setVoiceStatus(nextFacing==='environment'?'REAR CAMERA ON':'FRONT CAMERA ON');
+      hideCaption(1800);
+    }catch(err){
+      stopCamera('camera switch failed');
+      $('#mediaDot').className='dot';
+      $('#mediaText').textContent='CAMERA ERROR';
+      setVoiceStatus('CAMERA SWITCH ERROR · '+(err?.message||err?.name||'camera unavailable'));
+      hideCaption(5000);
+    }finally{ window.__roboCameraStarting=false; }
   }
 
   $('#cameraBtn').addEventListener('click',toggleCamera);
@@ -1249,8 +1147,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   const conversation=[];
   const MAX_HISTORY=10;
   let aiRequestInFlight=false;
-  let aiAbortController=null;
-  let activeVisionRequestSession=null;
 
   function inferEmotion(text){
     const l=(text||'').toLowerCase();
@@ -1286,7 +1182,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       /\bwhat.*in\s+front\s+of\s+me\b/.test(l) ||
       /\bwhat.*around\s+me\b/.test(l) ||
       /\bdescribe.*scene\b/.test(l) ||
-      /\bidentify.*object\b/.test(l)
+      /\bidentify.*object\b/.test(l) ||
+      /\bwhat.*(holding|carrying|wearing|in my hand)\b/.test(l) ||
+      /\bwhat.*(is|are)\s+(this|that|these|those)\b/.test(l) ||
+      /\bwhat.*(object|objects|item|items)\b/.test(l) ||
+      /\bhow many\b/.test(l)
     );
   }
 
@@ -1319,15 +1219,56 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     };
   }
 
-  async function callRoboBrain(messages,image=null,requestCameraEnabled=false,requestCameraSession=null){
+  function clearVisionOverlay(){
+    const overlay=$('#visionOverlay');
+    const summary=$('#visionSummary');
+    if(overlay) overlay.innerHTML='';
+    if(summary){summary.textContent='';summary.classList.remove('show');}
+  }
+
+  function renderVisionResult(visionData){
+    latestVision=visionData || null;
+    const overlay=$('#visionOverlay');
+    const summary=$('#visionSummary');
+    if(!overlay || !summary) return;
+    overlay.innerHTML='';
+    summary.textContent='';
+    summary.classList.remove('show');
+    if(!visionData) return;
+    const objects=Array.isArray(visionData.objects) ? visionData.objects : [];
+    const scene=String(visionData.scene||'').trim();
+    objects.slice(0,12).forEach((object)=>{
+      const box=Array.isArray(object.box) ? object.box : [];
+      if(box.length!==4) return;
+      const [ymin,xmin,ymax,xmax]=box.map(Number);
+      const top=Math.max(0,Math.min(100,ymin/10));
+      const left=Math.max(0,Math.min(100,(1000-xmax)/10));
+      const width=Math.max(.5,Math.min(100-left,(xmax-xmin)/10));
+      const height=Math.max(.5,Math.min(100-top,(ymax-ymin)/10));
+      const el=document.createElement('div');
+      el.className='visionBox';
+      el.style.left=left+'%'; el.style.top=top+'%';
+      el.style.width=width+'%'; el.style.height=height+'%';
+      const label=document.createElement('span');
+      label.className='visionLabel';
+      const confidence=Number.isFinite(Number(object.confidence)) ? Math.round(Number(object.confidence)) : 0;
+      const count=Math.max(1,Number.parseInt(object.count,10)||1);
+      label.textContent=String(object.name||'object')+' ×'+count+' · '+confidence+'%';
+      el.appendChild(label); overlay.appendChild(el);
+    });
+    const headline=objects.length ? objects.slice(0,5).map(o=>String(o.name||'object')).join(' · ') : (scene || 'No confident objects detected');
+    summary.textContent=headline; summary.classList.add('show');
+    devLog('VISION','structured result received',{objects:objects.length,scene});
+  }
+
+  async function callRoboBrain(messages,image=null,signal=null){
     const started=performance.now();
     devLog("AI","request sent · provider adapter"+(image?' · vision frame attached':''));
-    aiAbortController=new AbortController();
     const res=await fetch('/api/robo',{
       method:'POST',
-      signal:aiAbortController.signal,
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({messages,image,cameraEnabled:requestCameraEnabled,cameraSession:requestCameraSession})
+      body:JSON.stringify({messages,image}),
+      ...(signal ? {signal} : {})
     });
     let data=null;
     try{data=await res.json();}catch(_){data=null;}
@@ -1366,46 +1307,47 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     setVoiceStatus('ROBO THINKING · contacting AI brain…');
     setState('thinking','thinking · Robo is processing');
 
+    const requestCameraSession=cameraSession;
+    let requestUsedVision=false;
+    visionRequestController=null;
+
     try{
       let visionImage=null;
       const wantsVision=isVisionQuestion(clean);
-      const requestCameraEnabled = cameraEnabled === true && !!cameraStream;
-      const requestCameraSession = cameraSession;
-      activeVisionRequestSession = (requestCameraEnabled && wantsVision) ? requestCameraSession : null;
 
-      if(requestCameraEnabled && wantsVision){
+      if(cameraEnabled && wantsVision && requestCameraSession===cameraSession){
         try{
           visionImage=captureVisionFrame();
           if(visionImage){
-            devLog("VISION","vision question · camera frame attached",{width:visionImage.width,height:visionImage.height});
+            requestUsedVision=true;
+            devLog("VISION","vision question · camera frame attached",{width:visionImage.width,height:visionImage.height,session:requestCameraSession});
           }else{
+            clearVisionOverlay(); latestVision=null;
             devLog("VISION","vision requested but no usable camera frame · continuing text-only");
           }
         }catch(visionErr){
+          clearVisionOverlay(); latestVision=null;
           devLog("VISION ERROR",visionErr?.message||'frame capture failed');
         }
-      }else if(requestCameraEnabled){
+      }else if(cameraEnabled){
         devLog("VISION","camera ON but request is voice/text-only · frame NOT attached");
       }else{
         devLog("VISION","camera OFF · voice/text-only request");
       }
 
-      if(requestCameraEnabled && (cameraSession!==requestCameraSession || !cameraEnabled)){
-        activeVisionRequestSession=null;
-        devLog('VISION','camera changed before request dispatch · frame discarded');
-        visionImage=null;
+      if(requestUsedVision && requestCameraSession!==cameraSession){
+        devLog("VISION","camera changed/off before AI send · request cancelled");
+        return;
       }
-      const effectiveCameraEnabled = requestCameraEnabled && cameraSession===requestCameraSession && cameraEnabled;
-      const data=await callRoboBrain(conversation,visionImage,effectiveCameraEnabled,effectiveCameraEnabled?requestCameraSession:null);
-      // A camera can be turned off or switched while Gemini is processing.
-      // Never draw stale object boxes onto the new camera session.
-      if(data?.visionData && data?.vision && requestCameraEnabled && requestCameraSession===cameraSession && cameraEnabled){
-        drawVisionObjects(data.visionData);
-        markVisionFrameSignature();
-        devLog('VISION','structured vision received · '+(data.visionData.objects?.length||0)+' object(s)');
-      } else if(data?.visionData && requestCameraSession!==cameraSession){
-        devLog('VISION','stale vision response ignored · camera session changed');
+
+      visionRequestController=new AbortController();
+      const data=await callRoboBrain(conversation,visionImage,visionRequestController.signal);
+      if(requestUsedVision && requestCameraSession!==cameraSession){
+        devLog("VISION","camera changed/off during AI request · response ignored");
+        return;
       }
+      if(data?.visionData && visionImage && cameraEnabled && requestCameraSession===cameraSession) renderVisionResult(data.visionData);
+      else if(!visionImage || !cameraEnabled){ clearVisionOverlay(); latestVision=null; }
       const reply=String(data.text).trim();
       conversation.push({role:'assistant',content:reply});
       while(conversation.length>MAX_HISTORY) conversation.shift();
@@ -1414,10 +1356,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       setState(emotion,emotion+' · AI response');
       speak(reply);
     }catch(err){
-      if(err?.name==='AbortError'){
-        devLog('VISION','vision request cancelled after camera state changed');
-        return;
-      }
       // v2.12 remains usable before an API key is installed.
       const fallback=localFallback(clean);
       conversation.push({role:'assistant',content:fallback});
@@ -1429,9 +1367,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       setState(emotion,emotion+' · local fallback');
       speak(fallback);
     }finally{
+      visionRequestController=null;
       aiRequestInFlight=false;
-      activeVisionRequestSession=null;
-      aiAbortController=null;
     }
   }
 
@@ -1464,6 +1401,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 /* ---------- Developer diagnostics runtime ---------- */
 const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript");
 const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
+window.__roboStructuredVisionReady=false;
 let devLogLines=["[BOOT] Developer diagnostics ready."];
 
 function devLog(type,msg,data){
@@ -1506,9 +1444,16 @@ async function refreshAIProviderDiagnostic(){
 
     const provider=String(data.provider||'AI').toUpperCase();
     const model=data.model||'unknown model';
+    window.__roboStructuredVisionReady=Boolean(data.configured && data.structuredVision);
     if(devAI)devAI.textContent=data.configured
       ? provider+' · CONNECTED'+(data.vision?' · VISION READY':'')
       : provider+' · KEY NOT CONFIGURED';
+    const visionRow=[...document.querySelectorAll('#devChecks .devCheck')]
+      .find(el=>el.firstElementChild?.textContent==='Structured vision state');
+    if(visionRow){
+      visionRow.className='devCheck '+(window.__roboStructuredVisionReady?'ok':'fail');
+      visionRow.lastElementChild.textContent=window.__roboStructuredVisionReady?'PASS':'FAIL';
+    }
 
     const row=[...document.querySelectorAll('#devChecks .devCheck')]
       .find(el=>el.firstElementChild?.textContent==='AI API key');
@@ -1537,7 +1482,7 @@ function runDevChecks(){
     ["AI adapter route",true],
     ["Camera vision capture",!!(cameraEnabled && cameraStream && $("#camera")?.videoWidth>1 && $("#camera")?.videoHeight>1)],
     ["Camera state",cameraEnabled && !!cameraStream],
-    ["Structured vision state",!!(cameraEnabled && cameraStream && visionOverlay)],
+    ["Structured vision state",!!window.__roboStructuredVisionReady],
     ["AI API key",null]
   ];
   $("#devChecks").innerHTML=list.map(x=>{
@@ -1685,11 +1630,10 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.12 CAM FIX booted · provider-neutral AI brain");
+  log("ROBO AIOS v2.15 CAMERA + OBJECT VISION booted · Gemini AI brain");
   log("3D floating emoji renderer online");
-  log("camera OFF by default · microphone/STT independent");
-  log("vision frames attached only for explicit vision questions while camera is ON");
-  log("AI provider adapter online · API key required for live AI");
+  log("camera OFF by default · microphone/STT independent · object detection ready");
+  log("AI provider adapter online · Gemini structured vision enabled");
   log("natural idle emotion cycle → ON");
 
   /* Developer convenience: desktop starts in portrait simulator. */
