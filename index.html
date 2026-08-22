@@ -1210,8 +1210,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const l=(text||'').toLowerCase().trim();
     return (
       /\b(now|currently|right now|at the moment)\b/.test(l) ||
-      /\b(where|left|right|behind|front|next to|near|far|moved|move|still there|still here)\b/.test(l) ||
-      /\b(is|are)\s+.*\b(still|there|here)\b/.test(l)
+      /\b(where|left|right|behind|front|next to|near|far|moved|move|still there|still here|changed|change|appeared|disappeared|gone)\b/.test(l) ||
+      /\b(is|are)\s+.*\b(still|there|here|gone)\b/.test(l) ||
+      /\bwhere did .* go\b/.test(l)
     );
   }
 
@@ -1254,6 +1255,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       `Observed approximately ${ageSeconds} seconds ago in camera session ${visualMemory.session}.`,
       `Scene: ${String(visualMemory.scene||'No scene description available.')}`,
       objectLines ? `Objects:\n${objectLines}` : 'Objects: none confidently detected.',
+      visualMemory.tracking?.summary
+        ? `Last same-session tracking result: ${visualMemory.tracking.summary}`
+        : '',
       'Use this memory only for questions about what was previously seen. Never claim that the camera currently sees these things.'
     ].join('\n');
   }
@@ -1309,6 +1313,82 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
   let visionBoxTimer = null;
 
+  function normalizeVisionObjectName(name){
+    return String(name||'object').toLowerCase().replace(/\s+/g,' ').trim();
+  }
+
+  function boxCenter(box){
+    if(!Array.isArray(box) || box.length!==4) return null;
+    const n=box.map(Number);
+    if(n.some(v=>!Number.isFinite(v))) return null;
+    return {x:(n[1]+n[3])/2,y:(n[0]+n[2])/2};
+  }
+
+  function compareVisualObjects(previous,current,sameSession){
+    if(!sameSession) return null;
+
+    const prevMap=new Map();
+    const currMap=new Map();
+
+    (previous||[]).forEach(o=>{
+      const key=normalizeVisionObjectName(o?.name);
+      if(!prevMap.has(key)) prevMap.set(key,[]);
+      prevMap.get(key).push(o);
+    });
+
+    (current||[]).forEach(o=>{
+      const key=normalizeVisionObjectName(o?.name);
+      if(!currMap.has(key)) currMap.set(key,[]);
+      currMap.get(key).push(o);
+    });
+
+    const appeared=[], disappeared=[], countChanged=[], moved=[];
+
+    for(const [key,currItems] of currMap){
+      const prevItems=prevMap.get(key)||[];
+      const prevCount=prevItems.reduce((sum,o)=>sum+(Number(o?.count)||1),0);
+      const currCount=currItems.reduce((sum,o)=>sum+(Number(o?.count)||1),0);
+
+      if(prevCount===0){
+        appeared.push({name:currItems[0]?.name||key,count:currCount});
+      }else if(prevCount!==currCount){
+        countChanged.push({name:currItems[0]?.name||key,from:prevCount,to:currCount});
+      }
+
+      const oldCenter=boxCenter(prevItems[0]?.box);
+      const newCenter=boxCenter(currItems[0]?.box);
+      if(oldCenter && newCenter){
+        const dx=newCenter.x-oldCenter.x;
+        const dy=newCenter.y-oldCenter.y;
+        const distance=Math.sqrt(dx*dx+dy*dy);
+        if(distance>=80){
+          moved.push({name:currItems[0]?.name||key,distance:Math.round(distance)});
+        }
+      }
+    }
+
+    for(const [key,prevItems] of prevMap){
+      if(!currMap.has(key)){
+        const count=prevItems.reduce((sum,o)=>sum+(Number(o?.count)||1),0);
+        disappeared.push({name:prevItems[0]?.name||key,count});
+      }
+    }
+
+    const parts=[];
+    if(appeared.length) parts.push('appeared: '+appeared.map(x=>`${x.name} ×${x.count}`).join(', '));
+    if(disappeared.length) parts.push('disappeared: '+disappeared.map(x=>`${x.name} ×${x.count}`).join(', '));
+    if(countChanged.length) parts.push('count changed: '+countChanged.map(x=>`${x.name} ${x.from}→${x.to}`).join(', '));
+    if(moved.length) parts.push('moved: '+moved.map(x=>x.name).join(', '));
+
+    return {
+      appeared,
+      disappeared,
+      countChanged,
+      moved,
+      summary:parts.length ? parts.join(' | ') : 'no significant object changes'
+    };
+  }
+
   function renderVisionResult(visionData){
     latestVision = visionData || null;
 
@@ -1334,18 +1414,36 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     const scene = String(visionData.scene || '').trim();
 
+    const previousVisualMemory = visualMemory;
+
+    const currentObjects = objects.map((object)=>({
+      name:String(object?.name||'object'),
+      count:Math.max(1,Number.parseInt(object?.count,10)||1),
+      confidence:Number.isFinite(Number(object?.confidence))
+        ? Math.max(0,Math.min(100,Number(object.confidence)))
+        : 0,
+      box:Array.isArray(object?.box) && object.box.length===4
+        ? object.box.slice(0,4).map(Number)
+        : null
+    }));
+
+    const tracking = compareVisualObjects(
+      previousVisualMemory?.objects || [],
+      currentObjects,
+      previousVisualMemory?.session === cameraSession
+    );
+
     visualMemory = {
       scene,
-      objects: objects.map((object)=>({
-        name:String(object?.name||'object'),
-        count:Math.max(1,Number.parseInt(object?.count,10)||1),
-        confidence:Number.isFinite(Number(object?.confidence))
-          ? Math.max(0,Math.min(100,Number(object.confidence)))
-          : 0
-      })),
+      objects: currentObjects,
+      tracking,
       session:cameraSession,
       timestamp:Date.now()
     };
+
+    if(tracking && tracking.summary){
+      devLog('VISION','object tracking update',tracking);
+    }
 
     objects.slice(0,12).forEach((object)=>{
       const box = Array.isArray(object.box) ? object.box : [];
