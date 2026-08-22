@@ -149,7 +149,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 /* Small phones */
 @media(max-width:380px){
-  .camera{width:108px;height:78px}
+  .camera{width:190px;height:135px}
   .brand{font-size:12px}.stateChip,.battery,.pill{font-size:7px}
   .avatarZone{top:116px;bottom:190px}
   .caption{bottom:75px}
@@ -1206,25 +1206,38 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   function captureVisionFrame(){
-    const video=$('#camera');
-    const track=cameraStream?.getVideoTracks?.()[0];
-    if(!video || !track || track.readyState!=='live' ||
-       video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
-       video.videoWidth < 2 || video.videoHeight < 2){
+    const video = $('#camera');
+    const track = cameraStream?.getVideoTracks?.()[0];
+
+    if(
+      !cameraEnabled ||
+      !cameraStream ||
+      !video ||
+      !track ||
+      track.readyState !== 'live' ||
+      video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+      video.videoWidth < 2 ||
+      video.videoHeight < 2
+    ){
       return null;
     }
 
-    const maxWidth=768;
-    const scale=Math.min(1,maxWidth/video.videoWidth);
-    const width=Math.max(2,Math.round(video.videoWidth*scale));
-    const height=Math.max(2,Math.round(video.videoHeight*scale));
-    visionCanvas.width=width;
-    visionCanvas.height=height;
+    const maxWidth = 768;
+    const scale = Math.min(1, maxWidth / video.videoWidth);
+    const width = Math.max(2, Math.round(video.videoWidth * scale));
+    const height = Math.max(2, Math.round(video.videoHeight * scale));
 
+    visionCanvas.width = width;
+    visionCanvas.height = height;
+
+    visionCtx.save();
+    visionCtx.setTransform(1,0,0,1,0,0);
     visionCtx.drawImage(video,0,0,width,height);
-    const dataUrl=visionCanvas.toDataURL('image/jpeg',0.68);
-    const comma=dataUrl.indexOf(',');
-    if(comma<0) return null;
+    visionCtx.restore();
+
+    const dataUrl = visionCanvas.toDataURL('image/jpeg',0.78);
+    const comma = dataUrl.indexOf(',');
+    if(comma < 0) return null;
 
     return {
       mimeType:'image/jpeg',
@@ -1242,63 +1255,171 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   function renderVisionResult(visionData){
-    latestVision=visionData || null;
-    const overlay=$('#visionOverlay');
-    const summary=$('#visionSummary');
+    latestVision = visionData || null;
+
+    const overlay = $('#visionOverlay');
+    const summary = $('#visionSummary');
+
     if(!overlay || !summary) return;
-    overlay.innerHTML='';
-    summary.textContent='';
+
+    overlay.innerHTML = '';
+    summary.textContent = '';
     summary.classList.remove('show');
+
     if(!visionData) return;
-    const objects=Array.isArray(visionData.objects) ? visionData.objects : [];
-    const scene=String(visionData.scene||'').trim();
+
+    const objects = Array.isArray(visionData.objects)
+      ? visionData.objects
+      : [];
+
+    const scene = String(visionData.scene || '').trim();
+
     objects.slice(0,12).forEach((object)=>{
-      const box=Array.isArray(object.box) ? object.box : [];
-      if(box.length!==4) return;
-      const [ymin,xmin,ymax,xmax]=box.map(Number);
-      const top=Math.max(0,Math.min(100,ymin/10));
-      const left=Math.max(0,Math.min(100,(1000-xmax)/10));
-      const width=Math.max(.5,Math.min(100-left,(xmax-xmin)/10));
-      const height=Math.max(.5,Math.min(100-top,(ymax-ymin)/10));
-      const el=document.createElement('div');
-      el.className='visionBox';
-      el.style.left=left+'%'; el.style.top=top+'%';
-      el.style.width=width+'%'; el.style.height=height+'%';
-      const label=document.createElement('span');
-      label.className='visionLabel';
-      const confidence=Number.isFinite(Number(object.confidence)) ? Math.round(Number(object.confidence)) : 0;
-      const count=Math.max(1,Number.parseInt(object.count,10)||1);
-      label.textContent=String(object.name||'object')+' ×'+count+' · '+confidence+'%';
-      el.appendChild(label); overlay.appendChild(el);
+      const box = Array.isArray(object.box) ? object.box : [];
+      if(box.length !== 4) return;
+
+      let [ymin,xmin,ymax,xmax] = box.map(Number);
+
+      if(
+        !Number.isFinite(ymin) ||
+        !Number.isFinite(xmin) ||
+        !Number.isFinite(ymax) ||
+        !Number.isFinite(xmax)
+      ) return;
+
+      ymin = Math.max(0,Math.min(1000,ymin));
+      xmin = Math.max(0,Math.min(1000,xmin));
+      ymax = Math.max(0,Math.min(1000,ymax));
+      xmax = Math.max(0,Math.min(1000,xmax));
+
+      if(ymax <= ymin || xmax <= xmin) return;
+
+      let left = xmin / 10;
+      const top = ymin / 10;
+      const width = (xmax - xmin) / 10;
+      const height = (ymax - ymin) / 10;
+
+      if(cameraFacingMode === 'user'){
+        left = 100 - (xmax / 10);
+      }
+
+      const safeLeft = Math.max(0,Math.min(100,left));
+      const safeTop = Math.max(0,Math.min(100,top));
+      const safeWidth = Math.max(1,Math.min(100-safeLeft,width));
+      const safeHeight = Math.max(1,Math.min(100-safeTop,height));
+
+      const el = document.createElement('div');
+      el.className = 'visionBox';
+      el.style.left = safeLeft + '%';
+      el.style.top = safeTop + '%';
+      el.style.width = safeWidth + '%';
+      el.style.height = safeHeight + '%';
+
+      const label = document.createElement('span');
+      label.className = 'visionLabel';
+
+      const confidence = Number.isFinite(Number(object.confidence))
+        ? Math.round(Number(object.confidence))
+        : 0;
+
+      const count = Math.max(
+        1,
+        Number.parseInt(object.count,10) || 1
+      );
+
+      label.textContent =
+        String(object.name || 'object') +
+        ' ×' + count +
+        ' · ' + confidence + '%';
+
+      el.appendChild(label);
+      overlay.appendChild(el);
     });
-    const headline=objects.length ? objects.slice(0,5).map(o=>String(o.name||'object')).join(' · ') : (scene || 'No confident objects detected');
-    summary.textContent=headline; summary.classList.add('show');
-    devLog('VISION','structured result received',{objects:objects.length,scene});
+
+    const headline = objects.length
+      ? objects.slice(0,5)
+          .map(o=>String(o.name || 'object'))
+          .join(' · ')
+      : (scene || 'No confident objects detected');
+
+    summary.textContent = headline;
+    summary.classList.add('show');
+
+    devLog('VISION','structured result received',{
+      objects:objects.length,
+      scene
+    });
   }
 
-  async function callRoboBrain(messages,image=null,signal=null){
-    const started=performance.now();
-    devLog("AI","request sent · provider adapter"+(image?' · vision frame attached':''));
-    const res=await fetch('/api/robo',{
+  async function callRoboBrain(
+    messages,
+    image=null,
+    signal=null,
+    cameraEnabledForRequest=false,
+    cameraSessionForRequest=null
+  ){
+    const started = performance.now();
+
+    devLog(
+      "AI",
+      "request sent · provider adapter" +
+        (image ? ' · vision frame attached' : '')
+    );
+
+    const payload = {
+      messages,
+      cameraEnabled: cameraEnabledForRequest === true,
+      cameraSession: Number.isInteger(cameraSessionForRequest)
+        ? cameraSessionForRequest
+        : null,
+      image:
+        cameraEnabledForRequest === true && image
+          ? image
+          : null
+    };
+
+    const res = await fetch('/api/robo',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({messages,image}),
+      body:JSON.stringify(payload),
       ...(signal ? {signal} : {})
     });
-    let data=null;
-    try{data=await res.json();}catch(_){data=null;}
-    const ms=Math.round(performance.now()-started);
-    if(!res.ok){
-      const code=data?.code||'AI_HTTP_ERROR';
-      const message=data?.error||`AI request failed (${res.status})`;
-      devLog("AI ERROR",`${code} · ${message} · ${ms}ms`);
-      const err=new Error(message); err.code=code; err.status=res.status; throw err;
+
+    let data = null;
+    try{
+      data = await res.json();
+    }catch(_){
+      data = null;
     }
+
+    const ms = Math.round(performance.now()-started);
+
+    if(!res.ok){
+      const code = data?.code || 'AI_HTTP_ERROR';
+      const message = data?.error || `AI request failed (${res.status})`;
+
+      devLog("AI ERROR",`${code} · ${message} · ${ms}ms`);
+
+      const err = new Error(message);
+      err.code = code;
+      err.status = res.status;
+      throw err;
+    }
+
     if(!data?.text){
       devLog("AI ERROR",`AI_EMPTY_RESPONSE · ${ms}ms`);
-      const err=new Error('AI returned no text'); err.code='AI_EMPTY_RESPONSE'; throw err;
+      const err = new Error('AI returned no text');
+      err.code = 'AI_EMPTY_RESPONSE';
+      throw err;
     }
-    devLog("AI","response received · "+ms+'ms · '+(data.provider||'unknown'));
+
+    devLog(
+      "AI",
+      "response received · " +
+        ms + 'ms · ' +
+        (data.provider || 'unknown')
+    );
+
     return data;
   }
 
@@ -1338,7 +1459,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             devLog("VISION","vision question · camera frame attached",{width:visionImage.width,height:visionImage.height,session:requestCameraSession});
           }else{
             clearVisionOverlay(); latestVision=null;
-            devLog("VISION","vision requested but no usable camera frame · continuing text-only");
+            devLog("VISION ERROR","camera enabled but captureVisionFrame() returned null");
           }
         }catch(visionErr){
           clearVisionOverlay(); latestVision=null;
@@ -1356,7 +1477,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       }
 
       visionRequestController=new AbortController();
-      const data=await callRoboBrain(conversation,visionImage,visionRequestController.signal);
+      const data = await callRoboBrain(
+        conversation,
+        visionImage,
+        visionRequestController.signal,
+        requestUsedVision && requestCameraSession === cameraSession,
+        requestCameraSession
+      );
       if(requestUsedVision && requestCameraSession!==cameraSession){
         devLog("VISION","camera changed/off during AI request · response ignored");
         return;
