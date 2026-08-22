@@ -1,14 +1,16 @@
 /**
- * ROBO AIOS v2.13 — provider-neutral AI adapter.
+ * ROBO AIOS v2.13 — provider-neutral Gemini AI + vision adapter.
  * Vercel serverless function: /api/robo
  *
  * Current provider: Gemini
  * Model: Gemini 3.1 Flash-Lite
  *
- * Supports text chat plus one optional camera image per request.
- * When an image is supplied, Gemini returns structured ROBO VISION data:
- * scene + detected objects + normalized bounding boxes.
- * The Gemini API key stays server-side in GEMINI_API_KEY.
+ * Supports:
+ * - spoken/text conversation
+ * - one optional camera frame per request
+ * - structured scene + object detection
+ *
+ * Secrets stay server-side in GEMINI_API_KEY.
  */
 
 const SYSTEM_PROMPT =
@@ -17,46 +19,56 @@ const SYSTEM_PROMPT =
   'Keep answers reasonably short unless the user asks for detail. ' +
   'Do not mention being a language model unless directly asked. ' +
   'When a camera image is attached, inspect it carefully and use it to answer the user. ' +
-  'Do not invent objects or details that are not visible. ' +
-  'When vision data is requested, report only objects that are reasonably visible in the image. ' +
-  'Bounding boxes are approximate and must be normalized to 0-1000 as [ymin, xmin, ymax, xmax].';
+  'Never invent objects or details that are not reasonably visible. ' +
+  'For object detection, report prominent visible objects only. ' +
+  'Bounding boxes must be [ymin, xmin, ymax, xmax] normalized to 0-1000. ' +
+  'If no camera image is attached, return an empty objects array and a clear scene message.';
 
 const VISION_SCHEMA = {
-  type: 'object',
+  type: 'OBJECT',
   properties: {
+    answer: {
+      type: 'STRING',
+      description: 'The natural spoken answer to the user’s latest question.',
+    },
     scene: {
-      type: 'string',
-      description: 'A concise description of the visible scene.',
+      type: 'STRING',
+      description:
+        'A brief factual description of the visible scene. If no image is attached, say that no camera image was provided.',
     },
     objects: {
-      type: 'array',
-      description: 'Visible objects detected in the image.',
+      type: 'ARRAY',
+      description:
+        'Prominent visible objects detected in the camera image. Empty when no image is attached or no object is confidently visible.',
       items: {
-        type: 'object',
+        type: 'OBJECT',
         properties: {
           name: {
-            type: 'string',
-            description: 'Short common name of the visible object.',
+            type: 'STRING',
+            description: 'A concise descriptive object label.',
           },
           count: {
-            type: 'integer',
-            description: 'Number of instances of this object visible in the image.',
+            type: 'INTEGER',
+            description: 'Number of instances represented by this object entry.',
           },
           confidence: {
-            type: 'integer',
-            description: 'Approximate visual confidence from 0 to 100.',
+            type: 'NUMBER',
+            description: 'Model confidence estimate from 0 to 100.',
           },
           box: {
-            type: 'array',
-            description: 'Approximate normalized bounding box [ymin, xmin, ymax, xmax], each value 0-1000.',
-            items: { type: 'integer' },
+            type: 'ARRAY',
+            description:
+              'Bounding box as [ymin, xmin, ymax, xmax], normalized to 0-1000.',
+            minItems: 4,
+            maxItems: 4,
+            items: { type: 'INTEGER' },
           },
         },
         required: ['name', 'count', 'confidence', 'box'],
       },
     },
   },
-  required: ['scene', 'objects'],
+  required: ['answer', 'scene', 'objects'],
 };
 
 function makeError(message, code, status) {
@@ -77,7 +89,9 @@ function normalizeImage(image) {
   }
 
   const comma = data.indexOf(',');
-  if (data.startsWith('data:') && comma >= 0) data = data.slice(comma + 1);
+  if (data.startsWith('data:') && comma >= 0) {
+    data = data.slice(comma + 1);
+  }
 
   if (!data) {
     throw makeError('Vision image data is empty', 'INVALID_IMAGE', 400);
@@ -91,10 +105,58 @@ function normalizeImage(image) {
 }
 
 function extractText(data) {
-  return data?.candidates?.[0]?.content?.parts
-    ?.map((part) => part?.text || '')
-    .join('')
-    .trim() || '';
+  return (
+    data?.candidates?.[0]?.content?.parts
+      ?.map((part) => part?.text || '')
+      .join('')
+      .trim() || ''
+  );
+}
+
+function normalizeVisionResult(value) {
+  const scene =
+    typeof value?.scene === 'string' && value.scene.trim()
+      ? value.scene.trim()
+      : 'No scene description available.';
+
+  const objects = Array.isArray(value?.objects)
+    ? value.objects
+        .map((object) => {
+          const name = String(object?.name || '').trim();
+          const count = Math.max(1, Number.parseInt(object?.count, 10) || 1);
+
+          const confidenceRaw = Number(object?.confidence);
+          const confidence = Number.isFinite(confidenceRaw)
+            ? Math.max(0, Math.min(100, confidenceRaw))
+            : 0;
+
+          const box = Array.isArray(object?.box)
+            ? object.box
+                .slice(0, 4)
+                .map((n) =>
+                  Math.max(
+                    0,
+                    Math.min(1000, Number.parseInt(n, 10) || 0),
+                  ),
+                )
+            : [];
+
+          if (!name || box.length !== 4) return null;
+
+          return {
+            name,
+            count,
+            confidence,
+            box,
+          };
+        })
+        .filter(Boolean)
+    : [];
+
+  return {
+    scene,
+    objects,
+  };
 }
 
 const PROVIDERS = {
@@ -111,11 +173,12 @@ const PROVIDERS = {
       }
 
       const normalizedImage = normalizeImage(image);
-      const visionMode = Boolean(normalizedImage);
 
       const contents = messages.map((message, index) => {
         const parts = [
-          { text: String(message.content ?? '') },
+          {
+            text: String(message.content ?? ''),
+          },
         ];
 
         if (
@@ -140,18 +203,6 @@ const PROVIDERS = {
       const model =
         process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 
-      const generationConfig = visionMode
-        ? {
-            temperature: 0.2,
-            maxOutputTokens: 700,
-            response_mime_type: 'application/json',
-            response_json_schema: VISION_SCHEMA,
-          }
-        : {
-            temperature: 0.7,
-            maxOutputTokens: 300,
-          };
-
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
         {
@@ -165,7 +216,12 @@ const PROVIDERS = {
               parts: [{ text: SYSTEM_PROMPT }],
             },
             contents,
-            generationConfig,
+            generationConfig: {
+              temperature: 0.4,
+              maxOutputTokens: 500,
+              responseMimeType: 'application/json',
+              responseSchema: VISION_SCHEMA,
+            },
           }),
         },
       );
@@ -190,87 +246,40 @@ const PROVIDERS = {
 
       if (!rawText) {
         throw makeError(
-          'Gemini returned no text',
+          'Gemini returned no structured text',
           'AI_EMPTY_RESPONSE',
           502,
         );
       }
 
-      if (visionMode) {
-        let visionData;
+      let parsed;
 
-        try {
-          visionData = JSON.parse(rawText);
-        } catch {
-          throw makeError(
-            'Gemini returned invalid structured vision JSON',
-            'VISION_INVALID_JSON',
-            502,
-          );
-        }
+      try {
+        parsed = JSON.parse(rawText);
+      } catch {
+        throw makeError(
+          'Gemini returned invalid structured JSON',
+          'AI_INVALID_JSON',
+          502,
+        );
+      }
 
-        const objects = Array.isArray(visionData.objects)
-          ? visionData.objects
-              .map((object) => ({
-                name: String(object?.name || 'unknown').trim(),
-                count: Math.max(
-                  1,
-                  Number.parseInt(object?.count, 10) || 1,
-                ),
-                confidence: Math.max(
-                  0,
-                  Math.min(
-                    100,
-                    Number.parseInt(object?.confidence, 10) || 0,
-                  ),
-                ),
-                box:
-                  Array.isArray(object?.box) &&
-                  object.box.length === 4
-                    ? object.box.map((value) =>
-                        Math.max(
-                          0,
-                          Math.min(
-                            1000,
-                            Number.parseInt(value, 10) || 0,
-                          ),
-                        ),
-                      )
-                    : [0, 0, 1000, 1000],
-              }))
-              .filter((object) => object.name)
-          : [];
+      const visionData = normalizeVisionResult(parsed);
 
-        const scene =
-          String(visionData.scene || '').trim() ||
-          'No clear scene description.';
-
-        const reply = objects.length
-          ? `I can see ${objects
-              .map(
-                (o) =>
-                  `${o.count > 1 ? `${o.count} ` : ''}${o.name}`,
-              )
-              .join(', ')}.`
-          : 'I do not see any clear objects I can identify confidently.';
-
-        return {
-          text: reply,
-          provider: 'gemini',
-          model,
-          vision: true,
-          visionData: {
-            scene,
-            objects,
-          },
-        };
+      if (!visionData.answer || !String(visionData.answer).trim()) {
+        throw makeError(
+          'Gemini returned no spoken answer',
+          'AI_EMPTY_RESPONSE',
+          502,
+        );
       }
 
       return {
-        text: rawText,
+        text: String(visionData.answer).trim(),
         provider: 'gemini',
         model,
-        vision: false,
+        vision: Boolean(normalizedImage),
+        visionData,
       };
     },
   },
@@ -301,11 +310,9 @@ export default async function handler(req, res) {
       configured,
       model:
         providerName === 'gemini'
-          ? process.env.GEMINI_MODEL ||
-            'gemini-3.1-flash-lite'
+          ? process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite'
           : null,
       vision: providerName === 'gemini',
-      objectDetection: providerName === 'gemini',
       structuredVision: providerName === 'gemini',
     });
   }
@@ -318,19 +325,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    let body;
-
-    try {
-      body =
-        typeof req.body === 'string'
-          ? JSON.parse(req.body)
-          : req.body || {};
-    } catch {
-      return json(res, 400, {
-        error: 'Invalid JSON body',
-        code: 'INVALID_JSON',
-      });
-    }
+    const body =
+      typeof req.body === 'string'
+        ? JSON.parse(req.body)
+        : req.body || {};
 
     const provider = PROVIDERS[providerName];
 
