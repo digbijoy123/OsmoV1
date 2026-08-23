@@ -1549,12 +1549,26 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     });
   }
 
+  function detectConversationLanguage(text){
+    const value=String(text||'').trim();
+    if(!value) return 'en';
+    if(/[\u0900-\u097F]/.test(value)) return 'hi';
+    if(/[\u0980-\u09FF]/.test(value)) return 'bn';
+    const lower=value.toLowerCase();
+    const hindiWords=['kya','hai','hain','nahi','nahin','mujhe','mujhko','aap','aapka','aapki','aapke','tum','tumhara','tumhari','mera','meri','mere','kaise','kyun','kyu','kahan','kab','kaun','kitna','kitni','kitne','chahiye','chahta','chahti','batao','bata','dikhao','dekho','suno','sun','bolo','bol','karo','karna','kar','ho','tha','thi','the','ye','yeh','woh','wo','iska','iski','iske','uska','uski','acha','achha','accha','samajh','dekh','raha','rahi','rahe','sakta','sakti','sakte','hoga','hogi','hona','mereko','mujhse','aapse','phir','abhi','bahut','thoda','kyon'];
+    const tokens=lower.replace(/[^a-z0-9' ]/g,' ').split(/\s+/).filter(Boolean);
+    let score=0;
+    for(const token of tokens) if(hindiWords.includes(token)) score++;
+    return (score>=2 || (score>=1 && tokens.length<=5)) ? 'hi' : 'en';
+  }
+
   async function callRoboBrain(
     messages,
     image=null,
     signal=null,
     cameraEnabledForRequest=false,
-    cameraSessionForRequest=null
+    cameraSessionForRequest=null,
+    languageHint='en'
   ){
     const started = performance.now();
 
@@ -1570,6 +1584,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       cameraSession: Number.isInteger(cameraSessionForRequest)
         ? cameraSessionForRequest
         : null,
+      languageHint: languageHint || 'en',
       image:
         cameraEnabledForRequest === true && image
           ? image
@@ -1633,6 +1648,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }
 
     const emotion=inferEmotion(clean);
+    const languageHint=detectConversationLanguage(clean);
+    devLog('LANGUAGE','input language detected · '+languageHint,{transcript:clean});
     conversation.push({role:'user',content:clean});
     while(conversation.length>MAX_HISTORY) conversation.shift();
     aiRequestInFlight=true;
@@ -1706,7 +1723,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         visionImage,
         visionRequestController.signal,
         requestUsedVision && requestCameraSession === cameraSession,
-        requestCameraSession
+        requestCameraSession,
+        languageHint
       );
       if(requestUsedVision && requestCameraSession!==cameraSession){
         devLog("VISION","camera changed/off during AI request · response ignored");
@@ -1720,7 +1738,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       if(devAI) devAI.textContent=(data.provider||'GEMINI').toUpperCase()+' · CONNECTED';
       if(devStage) devStage.textContent='AI RESPONSE RECEIVED';
       setState(emotion,emotion+' · AI response');
-      speak(reply);
+      speak(reply,languageHint);
     }catch(err){
       // v2.12 remains usable before an API key is installed.
       const fallback=localFallback(clean);
@@ -1731,7 +1749,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       devLog("BRAIN","local fallback response after AI failure");
       setVoiceStatus(err.code==='AI_NOT_CONFIGURED'?'LOCAL FALLBACK · AI key not configured':'LOCAL FALLBACK · AI unavailable');
       setState(emotion,emotion+' · local fallback');
-      speak(fallback);
+      speak(fallback,languageHint);
     }finally{
       visionRequestController=null;
       aiRequestInFlight=false;
@@ -1763,15 +1781,15 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(reason) log('TTS · '+reason);
   }
 
-  async function speakWithElevenLabs(text, token){
-    log('TTS · ENGINE ENTRY · ElevenLabs');
-    ttsDiag('ENGINE ENTRY · ElevenLabs');
-    console.info('[ROBO TTS DEBUG] ElevenLabs function entered');
+  async function speakWithElevenLabs(text, token, languageHint='en'){
+    log('TTS · ENGINE ENTRY · ElevenLabs · language='+languageHint);
+    ttsDiag('ENGINE ENTRY · ElevenLabs',{language:languageHint});
+    console.info('[ROBO TTS DEBUG] ElevenLabs function entered',languageHint);
     const response=await fetch('/api/robo',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       cache:'no-store',
-      body:JSON.stringify({tts:true,text:String(text||'')})
+      body:JSON.stringify({tts:true,text:String(text||''),languageHint:languageHint || 'en'})
     });
     log('TTS · ElevenLabs HTTP response · '+response.status);
     ttsDiag('ElevenLabs HTTP response · '+response.status, {contentType:response.headers.get('content-type')||'unknown'});
@@ -1793,8 +1811,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       throw err;
     }
 
-    log('TTS · ElevenLabs HTTP 200 · type='+(response.headers.get('content-type')||'unknown')+' · bytes='+(response.headers.get('content-length')||'unknown')+' · latency='+(response.headers.get('X-Robo-TTS-Latency')||'unknown'));
-    ttsDiag('ElevenLabs HTTP 200 · audio response received', {type:response.headers.get('content-type')||'unknown', bytes:response.headers.get('content-length')||'unknown', latency:response.headers.get('X-Robo-TTS-Latency')||'unknown'});
+    const ttsLanguage=response.headers.get('X-Robo-TTS-Language')||languageHint||'unknown';
+    const ttsVoice=response.headers.get('X-Robo-TTS-Voice')||'unknown';
+    log('TTS · ElevenLabs HTTP 200 · language='+ttsLanguage+' · voice='+ttsVoice+' · type='+(response.headers.get('content-type')||'unknown')+' · bytes='+(response.headers.get('content-length')||'unknown')+' · latency='+(response.headers.get('X-Robo-TTS-Latency')||'unknown'));
+    ttsDiag('ElevenLabs HTTP 200 · audio response received', {language:ttsLanguage,voice:ttsVoice,type:response.headers.get('content-type')||'unknown', bytes:response.headers.get('content-length')||'unknown', latency:response.headers.get('X-Robo-TTS-Latency')||'unknown'});
     const blob=await response.blob();
     if(!blob.size){ ttsDiag('ERROR · ElevenLabs returned empty audio'); throw new Error('ElevenLabs returned empty audio'); }
     if(token!==roboSpeechToken) return false;
@@ -1886,14 +1906,15 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       setState('curious','speech stopped');
     };
 
-    ttsDiag('browser fallback speech requested');
+    ttsDiag('browser fallback speech requested',{language:languageHint||'en'});
     speechSynthesis.speak(u);
   }
 
-  async function speak(text){
+  async function speak(text, languageHint=null){
     const clean=String(text||'').trim();
     if(!clean) return;
 
+    const ttsLanguage=languageHint || detectConversationLanguage(clean);
     stopRoboAudio('new response');
     if('speechSynthesis' in window) speechSynthesis.cancel();
 
@@ -1906,7 +1927,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     showCaption('ROBO SAYS\n'+clean,true);
 
     try{
-      const played=await speakWithElevenLabs(clean,token);
+      const played=await speakWithElevenLabs(clean,token,ttsLanguage);
       if(played){
         log('TTS · ElevenLabs ready');
       ttsDiag('ElevenLabs ready · browser fallback NOT used');
