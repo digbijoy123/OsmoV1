@@ -1204,7 +1204,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function isVisionQuestion(text){
     const l=(text||'').toLowerCase().trim();
     return (
-      /\b(see|seeing|look|looking|camera|image|picture|photo)\b/.test(l) ||
+      /\b(see|seeing|look|looking|camera|image|picture|photo|screen|display|visible|shown)\b/.test(l) ||
       /\bwhat\s+(do\s+you|can\s+you)\s+see\b/.test(l) ||
       /\bwhat.*in\s+front\s+of\s+me\b/.test(l) ||
       /\bwhat.*around\s+me\b/.test(l) ||
@@ -1213,7 +1213,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       /\bwhat.*(holding|carrying|wearing|in my hand)\b/.test(l) ||
       /\bwhat.*(is|are)\s+(this|that|these|those)\b/.test(l) ||
       /\bwhat.*(object|objects|item|items)\b/.test(l) ||
-      /\bhow many\b/.test(l)
+      /\bhow many\b/.test(l) ||
+      /\b(kya|kya hai|kya dikh|dikhta|dikhti|dikhao|dekho|dekh|batao|bata)\b/.test(l) ||
+      /\b(kya\s+dekh|kya\s+dikh|kitne|kitni|kaunsa|kaunsi|kaun)\b/.test(l) ||
+      /\b(क्या|दिख|दिखाओ|देख|देखो|कितने|कितनी|कौन|क्या है)\b/.test(l)
     );
   }
 
@@ -1277,16 +1280,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const video = $('#camera');
     const track = cameraStream?.getVideoTracks?.()[0];
 
-    if(
-      !cameraEnabled ||
-      !cameraStream ||
-      !video ||
-      !track ||
-      track.readyState !== 'live' ||
-      video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
-      video.videoWidth < 2 ||
-      video.videoHeight < 2
-    ){
+    if(!cameraEnabled || !cameraStream || !video || !track){
+      devLog('VISION ERROR','capture blocked · camera stream unavailable');
+      return null;
+    }
+
+    if(track.readyState !== 'live'){
+      devLog('VISION ERROR','capture blocked · video track is not live',{readyState:track.readyState});
+      return null;
+    }
+
+    if(video.videoWidth < 2 || video.videoHeight < 2){
+      devLog('VISION ERROR','capture blocked · video has no usable dimensions',{readyState:video.readyState,videoWidth:video.videoWidth,videoHeight:video.videoHeight});
       return null;
     }
 
@@ -1303,13 +1308,22 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     visionCtx.drawImage(video,0,0,width,height);
     visionCtx.restore();
 
-    const dataUrl = visionCanvas.toDataURL('image/jpeg',0.78);
+    const dataUrl = visionCanvas.toDataURL('image/jpeg',0.82);
     const comma = dataUrl.indexOf(',');
-    if(comma < 0) return null;
+    if(comma < 0){
+      devLog('VISION ERROR','canvas capture returned invalid data URL');
+      return null;
+    }
+
+    const data=dataUrl.slice(comma+1);
+    if(data.length < 1000){
+      devLog('VISION ERROR','camera frame unexpectedly small',{bytes:data.length,width,height});
+      return null;
+    }
 
     return {
       mimeType:'image/jpeg',
-      data:dataUrl.slice(comma+1),
+      data,
       width,
       height
     };
@@ -1672,24 +1686,42 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         (!cameraEnabled && baseVisionQuestion)
       );
 
-      if(cameraEnabled && wantsVision && requestCameraSession===cameraSession){
-        try{
-          visionImage=captureVisionFrame();
-          if(visionImage){
-            requestUsedVision=true;
-            devLog("VISION","vision question · camera frame attached",{width:visionImage.width,height:visionImage.height,session:requestCameraSession});
-          }else{
-            clearVisionOverlay(); latestVision=null;
-            devLog("VISION ERROR","camera enabled but captureVisionFrame() returned null");
+      /*
+       * IMPORTANT: when the camera is ON, Robo should actually see the
+       * current frame for every user request. Do not make vision depend on
+       * English-only keyword classification. The classifier is retained for
+       * diagnostics and visual-memory decisions, but it is no longer a gate
+       * for live camera attachment.
+       */
+      if(cameraEnabled && requestCameraSession===cameraSession){
+        let attempts=0;
+        while(!visionImage && attempts<2){
+          attempts++;
+          try{
+            visionImage=captureVisionFrame();
+          }catch(visionErr){
+            devLog('VISION ERROR',visionErr?.message||'frame capture failed',{attempt:attempts});
           }
-        }catch(visionErr){
-          clearVisionOverlay(); latestVision=null;
-          devLog("VISION ERROR",visionErr?.message||'frame capture failed');
+
+          if(!visionImage && attempts<2){
+            await new Promise(r=>setTimeout(r,120));
+          }
+        }
+
+        if(visionImage){
+          requestUsedVision=true;
+          devLog('VISION','live camera frame attached',{width:visionImage.width,height:visionImage.height,session:requestCameraSession,attempts});
+        }else{
+          clearVisionOverlay();
+          latestVision=null;
+          devLog('VISION ERROR','camera is ON but no usable frame could be captured',{session:requestCameraSession,videoWidth:$('#camera')?.videoWidth||0,videoHeight:$('#camera')?.videoHeight||0,readyState:$('#camera')?.readyState||0});
         }
       }else if(cameraEnabled){
-        devLog("VISION","camera ON but request is voice/text-only · frame NOT attached");
+        devLog('VISION','camera changed during request · frame NOT attached');
+      }else if(wantsVision && useVisualMemory){
+        devLog('VISION','camera OFF · using visual memory only');
       }else{
-        devLog("VISION","camera OFF · voice/text-only request");
+        devLog('VISION','camera OFF · voice/text-only request');
       }
 
       if(requestUsedVision && requestCameraSession!==cameraSession){
@@ -1717,6 +1749,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             : null
         });
       }
+
+      devLog('VISION','sending request',{attached:Boolean(visionImage),session:requestCameraSession});
 
       const data = await callRoboBrain(
         requestMessages,
