@@ -337,6 +337,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let state = "curious";
   let previousState = "curious";
   let stateBlend = 1;
+  // Personality/emotion engine v2: mood is separate from behavioural states.
+  let emotionalState = "curious";
+  let emotionalIntensity = 0.55;
+  let emotionalConfidence = 0.50;
+  let emotionalSince = performance.now();
   let talking = false;
   let listening = false;
   let cameraStream = null;
@@ -390,6 +395,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     previousState = state;
     state = next;
     stateBlend = 0;
+    if(!meta.behavioral && !["listening","thinking","talking"].includes(next)){
+      emotionalState = next;
+      emotionalIntensity = Math.max(0,Math.min(1,Number(meta.intensity ?? emotionalIntensity)));
+      emotionalConfidence = Math.max(0,Math.min(1,Number(meta.confidence ?? emotionalConfidence)));
+      emotionalSince = performance.now();
+    }
     if(!meta.auto) lastActivity = performance.now();
 
     $("#stateChip").textContent = next.toUpperCase();
@@ -492,7 +503,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       stateBlend = Math.min(1,stateBlend + dt/260);
       const a = stateData[previousState] || stateData.neutral;
-      const b = stateData[state] || stateData.neutral;
+      let b = stateData[state] || stateData.neutral;
+      if(!["listening","thinking","talking"].includes(state)){
+        const intensity = Math.max(.18,Math.min(1,emotionalIntensity));
+        b = {
+          scale: 1.02 + (b.scale - 1.02) * intensity,
+          eye: .92 + (b.eye - .92) * intensity,
+          brow: b.brow * intensity,
+          mouth: .02 + (b.mouth - .02) * intensity,
+          tilt: b.tilt * intensity,
+          glow: .20 + (b.glow - .20) * intensity
+        };
+      }
       const k = stateBlend < .5 ? 2*stateBlend*stateBlend : 1-Math.pow(-2*stateBlend+2,2)/2;
       const glow = lerp(a.glow,b.glow,k);
       const faceScale = lerp(a.scale||1,b.scale||1,k);
@@ -1175,16 +1197,77 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   const MAX_HISTORY=10;
   let aiRequestInFlight=false;
 
+  /* ---------- Personality / emotion engine v2 ----------
+     Uses negation, priority, context, intensity and confidence instead of
+     treating every keyword as an emotion. Behavioural states such as
+     listening/thinking/talking remain separate from the underlying mood.
+  */
+  const EMOTION_RULES = [
+    {state:'alert', intensity:.92, confidence:.96, words:['emergency','danger','dangerous','urgent','warning','help me','save me','fire','accident']},
+    {state:'angry', intensity:.78, confidence:.90, words:["i am angry","i'm angry","very angry","furious","enraged","annoyed","frustrated","pissed off","hate this"]},
+    {state:'sad', intensity:.70, confidence:.88, words:['sad','upset','hurt','lonely','crying','cry','depressed','heartbroken','miserable']},
+    {state:'love', intensity:.72, confidence:.86, words:["i love you","love you","you are cute","you're cute","adorable","my friend","miss you","missed you"]},
+    {state:'surprised', intensity:.76, confidence:.84, words:['wow','whoa','no way','seriously','really','surprise']},
+    {state:'excited', intensity:.82, confidence:.82, words:['excited','amazing',"let's go",'cannot wait',"can't wait",'this is awesome']},
+    {state:'happy', intensity:.62, confidence:.76, words:['great','awesome','excellent','fantastic','brilliant','thank you','thanks','glad','happy','nice']},
+    {state:'confused', intensity:.55, confidence:.70, words:["i do not understand","i don't understand",'confused','makes no sense','what do you mean','i am lost']},
+    {state:'curious', intensity:.48, confidence:.55, words:['tell me','i wonder','curious','interesting','show me','explain']}
+  ];
+
+  const EMOTION_NEGATION = /\b(no|not|never|dont|don't|do not|isnt|isn't|wasnt|wasn't|cannot|can't|cant|without)\b/;
+
+  function emotionWordsMatch(text, phrase){
+    const normalized=text.replace(/[^a-z0-9' ]/g,' ').replace(/\s+/g,' ').trim();
+    return normalized.includes(phrase);
+  }
+
   function inferEmotion(text){
-    const l=(text||'').toLowerCase();
-    if(/\b(hi|hello|hey|great|awesome|thanks|thank you)\b/.test(l)) return 'happy';
-    if(/\b(love|cute|adorable|friend|miss)\b/.test(l)) return 'love';
-    if(/\b(sad|bad|upset|hurt|lonely|cry)\b/.test(l)) return 'sad';
-    if(/\b(angry|mad|annoyed|frustrated)\b/.test(l)) return 'angry';
-    if(/\b(wow|whoa|really|seriously|surprise)\b/.test(l)) return 'surprised';
-    if(/\b(help|warning|urgent|danger|emergency)\b/.test(l)) return 'alert';
-    if(/\b(thinking|think|question|why|how|what)\b/.test(l)) return 'thinking';
-    return 'curious';
+    const raw=String(text||'').trim();
+    const l=raw.toLowerCase().replace(/[^a-z0-9' ]/g,' ').replace(/\s+/g,' ').trim();
+    if(!l) return {state:'curious',intensity:.35,confidence:.20,reason:'empty'};
+
+    const explicit=l.match(/\b(?:be|act|make yourself|show|look|turn|become)\s+(happy|sad|angry|excited|sleepy|surprised|confused|curious|love|alert|neutral)\b/);
+    if(explicit) return {state:explicit[1],intensity:.88,confidence:.98,reason:'explicit mood command'};
+
+    const scores=new Map();
+    for(const rule of EMOTION_RULES){
+      for(const phrase of rule.words){
+        const index=l.indexOf(phrase);
+        if(index<0) continue;
+        const before=l.slice(Math.max(0,index-24),index);
+        if(EMOTION_NEGATION.test(before)) continue;
+        const score=rule.confidence+(phrase.includes(' ')?.04:0);
+        const existing=scores.get(rule.state);
+        if(!existing || score>existing.score){
+          scores.set(rule.state,{score,intensity:rule.intensity,confidence:rule.confidence,reason:phrase});
+        }
+      }
+    }
+
+    if(/\b(think about|think through|reason|work this out|figure this out|analyze|analyse|calculate)\b/.test(l)){
+      scores.set('thinking',{score:.68,intensity:.52,confidence:.78,reason:'reasoning request'});
+    }
+
+    if(scores.size){
+      const ranked=[...scores.entries()].sort((a,b)=>b[1].score-a[1].score);
+      const [state,data]=ranked[0];
+      return {state,intensity:data.intensity,confidence:data.confidence,reason:data.reason};
+    }
+
+    if(/\?|\b(why|how|what|where|when|who|which|can you|could you)\b/.test(l)){
+      return {state:'curious',intensity:.42,confidence:.58,reason:'question'};
+    }
+
+    return {state:'neutral',intensity:.28,confidence:.35,reason:'no emotional evidence'};
+  }
+
+  function getEmotionSnapshot(){
+    return {
+      state:emotionalState,
+      intensity:Number(emotionalIntensity.toFixed(2)),
+      confidence:Number(emotionalConfidence.toFixed(2)),
+      ageMs:Math.max(0,Math.round(performance.now()-emotionalSince))
+    };
   }
 
   function localFallback(text){
@@ -1661,8 +1744,14 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return;
     }
 
-    const emotion=inferEmotion(clean);
+    const emotionResult=inferEmotion(clean);
+    const emotion=emotionResult.state;
     const languageHint=detectConversationLanguage(clean);
+    devLog('EMOTION','inferred '+emotion,{
+      intensity:Number(emotionResult.intensity.toFixed(2)),
+      confidence:Number(emotionResult.confidence.toFixed(2)),
+      reason:emotionResult.reason
+    });
     devLog('LANGUAGE','input language detected · '+languageHint,{transcript:clean});
     conversation.push({role:'user',content:clean});
     while(conversation.length>MAX_HISTORY) conversation.shift();
@@ -1670,7 +1759,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(devAI) devAI.textContent='CONNECTING · PROVIDER ADAPTER';
     if(devStage) devStage.textContent='AI REQUEST ACTIVE';
     setVoiceStatus('ROBO THINKING · contacting AI brain…');
-    setState('thinking','thinking · Robo is processing');
+    setState('thinking','thinking · Robo is processing',{behavioral:true});
 
     const requestCameraSession=cameraSession;
     let requestUsedVision=false;
@@ -1771,7 +1860,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       while(conversation.length>MAX_HISTORY) conversation.shift();
       if(devAI) devAI.textContent=(data.provider||'GEMINI').toUpperCase()+' · CONNECTED';
       if(devStage) devStage.textContent='AI RESPONSE RECEIVED';
-      setState(emotion,emotion+' · AI response');
+      setState(emotion,emotion+' · AI response',{intensity:emotionResult.intensity,confidence:emotionResult.confidence});
       speak(reply,languageHint);
     }catch(err){
       // v2.12 remains usable before an API key is installed.
@@ -1782,7 +1871,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       if(devStage) devStage.textContent='LOCAL FALLBACK';
       devLog("BRAIN","local fallback response after AI failure");
       setVoiceStatus(err.code==='AI_NOT_CONFIGURED'?'LOCAL FALLBACK · AI key not configured':'LOCAL FALLBACK · AI unavailable');
-      setState(emotion,emotion+' · local fallback');
+      setState(emotion,emotion+' · local fallback',{intensity:emotionResult.intensity,confidence:emotionResult.confidence});
       speak(fallback,languageHint);
     }finally{
       visionRequestController=null;
@@ -1864,7 +1953,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       ttsDiag('ElevenLabs speech start');
       talking=true;
       micBtn.classList.add('talking');
-      setState('talking','talking · Robo is speaking');
+      setState('talking','talking · Robo is speaking',{behavioral:true});
     };
 
     audio.onended=()=>{
@@ -1920,7 +2009,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       log('TTS · browser fallback speech start');
       talking=true;
       micBtn.classList.add('talking');
-      setState('talking','talking · Robo is speaking');
+      setState('talking','talking · Robo is speaking',{behavioral:true});
     };
 
     u.onend=()=>{
