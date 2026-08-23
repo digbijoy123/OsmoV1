@@ -25,6 +25,16 @@ const SYSTEM_PROMPT =
   'For counting questions such as fingers, people, objects, or items, inspect the image and give the best visible count. ' +
   'If no camera image is attached, return an empty objects array and clearly say that no camera image was provided.';
 
+function buildSystemPrompt(languageHint='en'){
+  const languageInstruction =
+    languageHint === 'hi'
+      ? 'The latest user message is Hindi or Hinglish. Reply in natural Hindi or Hinglish, preserving the user\'s mix of Hindi and English where appropriate. Do not switch to English unless the user clearly asks in English.'
+      : languageHint === 'bn'
+        ? 'The latest user message is Bengali. Reply naturally in Bengali unless the user clearly asks in another language.'
+        : 'Reply in natural English unless the latest user message clearly uses another supported language.';
+  return SYSTEM_PROMPT + ' ' + languageInstruction;
+}
+
 const VISION_SCHEMA = {
   type: 'OBJECT',
   properties: {
@@ -219,6 +229,7 @@ const PROVIDERS = {
       image,
       cameraEnabled = false,
       cameraSession = null,
+      languageHint = 'en',
     }) {
       const key = process.env.GEMINI_API_KEY;
 
@@ -297,7 +308,7 @@ const PROVIDERS = {
           systemInstruction: {
             parts: [
               {
-                text: SYSTEM_PROMPT,
+                text: buildSystemPrompt(languageHint),
               },
             ],
           },
@@ -403,7 +414,7 @@ function detectTTSLanguage(text) {
   return 'en';
 }
 
-async function elevenLabsTTS(text) {
+async function elevenLabsTTS(text, languageHint='en') {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   const voiceId = process.env.ELEVENLABS_VOICE_ID;
 
@@ -423,7 +434,11 @@ async function elevenLabsTTS(text) {
     );
   }
 
-  const languageCode = detectTTSLanguage(text);
+  const detectedLanguage = detectTTSLanguage(text);
+  const languageCode =
+    languageHint === 'hi' || languageHint === 'bn'
+      ? languageHint
+      : detectedLanguage;
 
   const modelId =
     process.env.ELEVENLABS_MODEL ||
@@ -636,8 +651,13 @@ export default async function handler(req, res) {
       }
 
       try {
+        const languageHint =
+          body.languageHint === 'hi' || body.languageHint === 'bn'
+            ? body.languageHint
+            : detectTTSLanguage(text);
+
         const result =
-          await elevenLabsTTS(text);
+          await elevenLabsTTS(text, languageHint);
 
         res.setHeader(
           'Content-Type',
@@ -685,6 +705,16 @@ export default async function handler(req, res) {
             result.requestId,
           );
         }
+
+        const maskedVoice =
+          result.voiceId.length > 8
+            ? result.voiceId.slice(0, 4) + '…' + result.voiceId.slice(-4)
+            : result.voiceId;
+
+        res.setHeader(
+          'X-Robo-TTS-Voice',
+          maskedVoice,
+        );
 
         return res
           .status(200)
@@ -783,6 +813,11 @@ export default async function handler(req, res) {
       });
     }
 
+    const languageHint =
+      body.languageHint === 'hi' || body.languageHint === 'bn'
+        ? body.languageHint
+        : 'en';
+
     const cameraEnabled =
       body.cameraEnabled === true;
 
@@ -808,6 +843,8 @@ export default async function handler(req, res) {
         cameraEnabled,
 
         cameraSession,
+
+        languageHint,
       });
 
     return json(res, 200, result);
