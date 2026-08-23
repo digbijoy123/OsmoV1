@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.19 MODULE 7 MEMORY + IDENTITY · ROBO AIOS — v2.19 camera + social awareness + persistent memory</title>
+<title>ROBO AIOS v2.20 MODULE 7 MEMORY + IDENTITY · INITIALIZATION FIX · ROBO AIOS — v2.19 camera + social awareness + persistent memory</title>
 <style>
 :root{
   --void:#090d15;
@@ -192,7 +192,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 </style>
 </head>
 <body>
-<div id="roboBuildMarker" style="position:fixed;bottom:6px;left:6px;z-index:99999;font:10px monospace;opacity:.45;pointer-events:none">ROBO v2.19 MODULE 7 MEMORY + IDENTITY</div>
+<div id="roboBuildMarker" style="position:fixed;bottom:6px;left:6px;z-index:99999;font:10px monospace;opacity:.45;pointer-events:none">ROBO v2.20 MODULE 7 MEMORY + IDENTITY</div>
 
 <div id="app">
   <main class="device" id="device">
@@ -202,7 +202,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.19 MEM + IDENTITY + VISION</small></div>
+          <div class="brand">ROBO <small>v2.20 MEM + IDENTITY + VISION</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -690,8 +690,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     return null;
   }
-
-  loadRoboMemory();
 
   let micStream = null;
   let recognition = null;
@@ -2566,6 +2564,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 /* ---------- Developer diagnostics runtime ---------- */
 const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript"), devMemoryStatus=$("#devMemoryStatus"), devMemoryIdentity=$("#devMemoryIdentity"), devMemoryCount=$("#devMemoryCount"), devMemoryFacts=$("#devMemoryFacts"), devMemoryChange=$("#devMemoryChange");
+  loadRoboMemory();
 const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
 const devSocialPresence=$("#devSocialPresence"), devSocialCount=$("#devSocialCount"), devSocialInteraction=$("#devSocialInteraction"), devSocialConfidence=$("#devSocialConfidence"), devSocialChange=$("#devSocialChange");
 window.__roboStructuredVisionReady=false;
@@ -2690,7 +2689,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.19 MODULE 7 MEMORY + IDENTITY DIAGNOSTICS",
+    "ROBO AIOS v2.20 MODULE 7 MEMORY + IDENTITY · INITIALIZATION FIX DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
