@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS — v2.15 camera + object vision</title>
+<title>ROBO AIOS — v2.16 camera + object vision + ElevenLabs TTS</title>
 <style>
 :root{
   --void:#090d15;
@@ -188,7 +188,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.15 CAM + OBJECT VISION</small></div>
+          <div class="brand">ROBO <small>v2.16 CAM + OBJECT VISION + ELEVEN TTS</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -255,7 +255,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.15 CAM + OBJECT VISION</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.16 CAM + OBJECT VISION + ELEVEN TTS</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -268,6 +268,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       <div class="devRow"><span>Mic permission</span><b id="devMicPermission">—</b></div>
       <div class="devRow"><span>On-device STT</span><b id="devLocalStt">—</b></div>
       <div class="devRow"><span>AI brain</span><b id="devAI">—</b></div>
+      <div class="devRow"><span>ElevenLabs API</span><b id="devTTSApi">CHECKING</b></div>
+      <div class="devRow"><span>ElevenLabs voice</span><b id="devTTSVoice">CHECKING</b></div>
+      <div class="devRow"><span>TTS playback</span><b id="devTTSPlayback">NOT TESTED</b></div>
       <div class="devRow"><span>Current stage</span><b id="devStage">IDLE</b></div>
       <div class="devLevel"><span>MIC LEVEL</span><div class="devTrack"><i id="devLevel"></i></div></div>
     </section>
@@ -1772,6 +1775,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       throw err;
     }
 
+    const contentType=response.headers.get('content-type')||'';
+    const ttsEngine=response.headers.get('x-robo-tts')||'missing';
+    const ttsLanguage=response.headers.get('x-robo-tts-language')||'unknown';
+    const ttsLatency=response.headers.get('x-robo-tts-latency')||'unknown';
+    log('TTS','ElevenLabs HTTP 200 · engine='+ttsEngine+' · type='+contentType+' · lang='+ttsLanguage+' · server='+ttsLatency);
+    if(!contentType.toLowerCase().includes('audio/')) throw new Error('TTS endpoint returned non-audio content-type: '+contentType);
+
     const blob=await response.blob();
     if(!blob.size) throw new Error('ElevenLabs returned empty audio');
     if(token!==roboSpeechToken) return false;
@@ -1815,7 +1825,17 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       }
     };
 
-    await audio.play();
+    try{
+      await audio.play();
+    }catch(playErr){
+      window.__roboTTSPlayback='FAIL';
+      if(devTTSPlayback) devTTSPlayback.textContent='FAIL';
+      log('TTS ERROR','ElevenLabs playback blocked/failed · '+(playErr?.name||'unknown')+' · '+(playErr?.message||''));
+      throw playErr;
+    }
+    window.__roboTTSPlayback='PASS';
+    if(devTTSPlayback) devTTSPlayback.textContent='PASS';
+    log('TTS','ElevenLabs playback accepted by browser');
     return true;
   }
 
@@ -1879,9 +1899,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       }
     }catch(err){
       if(token!==roboSpeechToken) return;
-      log('TTS · ElevenLabs failed · '+(err?.message||err?.name||'unknown')+' · browser fallback');
+      window.__roboTTSPlayback='FAIL';
+      if(devTTSPlayback) devTTSPlayback.textContent='FAIL · FALLBACK';
+      log('TTS ERROR','ElevenLabs failed · code='+(err?.code||'unknown')+' · '+(err?.message||err?.name||'unknown')+' · switching to browser fallback');
     }
 
+    log('TTS','BROWSER FALLBACK ACTIVE · if you hear the old voice, ElevenLabs failed before playback');
     speakWithBrowserFallback(clean,token);
   }
 
@@ -1901,7 +1924,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 /* ---------- Developer diagnostics runtime ---------- */
 const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript");
-const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
+const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI"), devTTSApi=$("#devTTSApi"), devTTSVoice=$("#devTTSVoice"), devTTSPlayback=$("#devTTSPlayback");
+window.__roboTTSDiagnostic={status:"NOT_TESTED",voiceConfigured:false};
+window.__roboTTSPlayback="NOT_TESTED";
 window.__roboStructuredVisionReady=false;
 let devLogLines=["[BOOT] Developer diagnostics ready."];
 
@@ -1964,6 +1989,22 @@ async function refreshAIProviderDiagnostic(){
     }
 
     devLog('CHECK','AI provider: '+provider+' · '+model+' · configured='+(data.configured?'yes':'no')+' · vision='+(data.vision?'yes':'no'));
+
+    try{
+      const ttsRes=await fetch('/api/robo?ttsDiagnostic=1',{method:'GET',cache:'no-store'});
+      const ttsData=await ttsRes.json().catch(()=>({}));
+      const tts=ttsData?.elevenLabs||{};
+      window.__roboTTSDiagnostic=tts;
+      if(devTTSApi) devTTSApi.textContent=tts.status==='PASS'?'PASS':(tts.configured?'API ERROR':'NOT CONFIGURED');
+      if(devTTSVoice) devTTSVoice.textContent=tts.voiceConfigured?'CONFIGURED':'NOT CONFIGURED';
+      devLog('TTS','ElevenLabs diagnostic · '+(tts.status||'UNKNOWN')+' · model='+(tts.model||'unknown')+' · voiceConfigured='+(tts.voiceConfigured?'yes':'no')+(tts.error?' · '+tts.error:''));
+      if(tts.status==='PASS') devLog('TTS','server test audio generated · '+(tts.audioBytes||0)+' bytes · '+(tts.latencyMs||0)+'ms · '+(tts.languageCode||'unknown'));
+      else devLog('TTS ERROR','server diagnostic failed · '+(tts.code||'unknown')+' · '+(tts.error||'unknown'));
+    }catch(ttsErr){
+      window.__roboTTSDiagnostic={status:'FAIL',error:ttsErr?.message||ttsErr?.name||'unreachable'};
+      if(devTTSApi) devTTSApi.textContent='ROUTE ERROR';
+      devLog('TTS ERROR','diagnostic route unreachable · '+(ttsErr?.message||ttsErr?.name||'unknown'));
+    }
   }catch(e){
     if(devAI)devAI.textContent='AI ERROR · ROUTE UNREACHABLE';
     devLog('AI ERROR','diagnostic request failed · '+(e?.message||e?.name||'unknown'));
@@ -2028,6 +2069,9 @@ $("#copyLogs").addEventListener("click",async()=>{
     "STT: "+devStt.textContent,
     "On-device STT: "+devLocalStt.textContent,
     "AI brain: "+devAI.textContent,
+    "ElevenLabs API: "+(devTTSApi?.textContent||"—"),
+    "ElevenLabs voice: "+(devTTSVoice?.textContent||"—"),
+    "TTS playback: "+(devTTSPlayback?.textContent||"—"),
     "",
     "TRANSCRIPT:",
     devTranscript.textContent,
@@ -2131,7 +2175,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.15 CAMERA + OBJECT VISION booted · Gemini AI brain");
+  log("ROBO AIOS v2.16 CAMERA + OBJECT VISION + ELEVENLABS TTS booted · Gemini AI brain");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
   log("AI provider adapter online · Gemini structured vision enabled");
