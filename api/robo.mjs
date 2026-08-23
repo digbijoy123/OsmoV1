@@ -706,9 +706,11 @@ export default async function handler(req, res) {
           );
         }
 
+        // Diagnostic headers must contain ASCII only.
+        // Do not expose the full voice ID.
         const maskedVoice =
           result.voiceId.length > 8
-            ? result.voiceId.slice(0, 4) + '…' + result.voiceId.slice(-4)
+            ? result.voiceId.slice(0, 4) + '-' + result.voiceId.slice(-4)
             : result.voiceId;
 
         res.setHeader(
