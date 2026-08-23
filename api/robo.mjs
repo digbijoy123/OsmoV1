@@ -230,11 +230,6 @@ const PROVIDERS = {
         );
       }
 
-      /*
-       * IMPORTANT:
-       * A camera frame is valid only when the browser explicitly says
-       * the camera is currently enabled.
-       */
       if (image && !cameraEnabled) {
         throw makeError(
           'Vision frame supplied while camera is disabled',
@@ -255,11 +250,6 @@ const PROVIDERS = {
         ? normalizeImage(image)
         : null;
 
-      /*
-       * The image is attached to the LAST USER MESSAGE.
-       * This is critical because the user's current question must be
-       * evaluated together with the current camera frame.
-       */
       const contents = messages.map((message, index) => {
         const parts = [
           {
@@ -394,6 +384,166 @@ const PROVIDERS = {
   },
 };
 
+
+/* =====================================================
+ * ElevenLabs TTS
+ * =================================================== */
+
+function detectTTSLanguage(text) {
+  const value = String(text || '');
+
+  if (/[\u0900-\u097F]/.test(value)) {
+    return 'hi';
+  }
+
+  if (/[\u0980-\u09FF]/.test(value)) {
+    return 'bn';
+  }
+
+  return 'en';
+}
+
+async function elevenLabsTTS(text) {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const voiceId = process.env.ELEVENLABS_VOICE_ID;
+
+  if (!apiKey) {
+    throw makeError(
+      'ELEVENLABS_API_KEY is not configured',
+      'TTS_NOT_CONFIGURED',
+      503,
+    );
+  }
+
+  if (!voiceId) {
+    throw makeError(
+      'ELEVENLABS_VOICE_ID is not configured',
+      'TTS_VOICE_NOT_CONFIGURED',
+      503,
+    );
+  }
+
+  const languageCode = detectTTSLanguage(text);
+
+  const modelId =
+    process.env.ELEVENLABS_MODEL ||
+    'eleven_flash_v2_5';
+
+  const outputFormat = 'mp3_44100_128';
+
+  const endpoint =
+    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${encodeURIComponent(outputFormat)}`;
+
+  const started = Date.now();
+
+  let response;
+
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+        'Accept': 'audio/mpeg',
+      },
+
+      body: JSON.stringify({
+        text: String(text),
+        model_id: modelId,
+        language_code: languageCode,
+
+        voice_settings: {
+          stability: 0.48,
+          similarity_boost: 0.82,
+          style: 0.22,
+          use_speaker_boost: true,
+        },
+      }),
+    });
+  } catch (networkError) {
+    throw makeError(
+      `ElevenLabs network request failed: ${
+        networkError?.message ||
+        networkError?.name ||
+        'unknown'
+      }`,
+      'ELEVENLABS_NETWORK_ERROR',
+      502,
+    );
+  }
+
+  const latency = Date.now() - started;
+
+  const contentType =
+    response.headers.get('content-type') || '';
+
+  const requestId =
+    response.headers.get('request-id') ||
+    response.headers.get('x-request-id') ||
+    '';
+
+  if (!response.ok) {
+    const raw =
+      await response.text().catch(() => '');
+
+    let detail = raw;
+
+    try {
+      const parsed = JSON.parse(raw);
+
+      detail =
+        parsed?.detail?.message ||
+        parsed?.detail?.status ||
+        parsed?.message ||
+        raw;
+    } catch (_) {}
+
+    throw makeError(
+      `ElevenLabs HTTP ${response.status}: ${
+        detail ||
+        response.statusText ||
+        'unknown error'
+      }`,
+      'ELEVENLABS_API_ERROR',
+      response.status,
+    );
+  }
+
+  const audioBuffer =
+    Buffer.from(await response.arrayBuffer());
+
+  if (!audioBuffer.length) {
+    throw makeError(
+      'ElevenLabs returned empty audio',
+      'ELEVENLABS_EMPTY_AUDIO',
+      502,
+    );
+  }
+
+  if (!contentType.toLowerCase().includes('audio/')) {
+    throw makeError(
+      `ElevenLabs returned unexpected content type: ${
+        contentType || 'unknown'
+      }`,
+      'ELEVENLABS_BAD_CONTENT_TYPE',
+      502,
+    );
+  }
+
+  return {
+    audioBuffer,
+    languageCode,
+    modelId,
+    voiceId,
+    outputFormat,
+    latency,
+    bytes: audioBuffer.length,
+    contentType,
+    requestId,
+  };
+}
+
 function json(res, status, body) {
   return res.status(status).json(body);
 }
@@ -407,6 +557,9 @@ export default async function handler(req, res) {
     process.env.AI_PROVIDER || 'gemini',
   ).toLowerCase();
 
+  /*
+   * GET = diagnostics
+   */
   if (req.method === 'GET') {
     const configured =
       providerName === 'gemini'
@@ -415,6 +568,7 @@ export default async function handler(req, res) {
 
     return json(res, 200, {
       ok: true,
+
       provider: providerName,
 
       configured,
@@ -425,10 +579,29 @@ export default async function handler(req, res) {
             'gemini-3.1-flash-lite'
           : null,
 
-      vision: providerName === 'gemini',
+      vision:
+        providerName === 'gemini',
 
       structuredVision:
         providerName === 'gemini',
+
+      elevenLabs: {
+        configured:
+          Boolean(process.env.ELEVENLABS_API_KEY),
+
+        voiceConfigured:
+          Boolean(process.env.ELEVENLABS_VOICE_ID),
+
+        model:
+          process.env.ELEVENLABS_MODEL ||
+          'eleven_flash_v2_5',
+
+        endpoint:
+          '/v1/text-to-speech/:voice_id',
+
+        authentication:
+          'xi-api-key',
+      },
     });
   }
 
@@ -445,6 +618,119 @@ export default async function handler(req, res) {
         ? JSON.parse(req.body)
         : req.body || {};
 
+    /*
+     * ---------------------------------------------------
+     * ELEVENLABS TTS REQUEST
+     * ---------------------------------------------------
+     */
+
+    if (body.tts === true) {
+      const text =
+        String(body.text || '').trim();
+
+      if (!text) {
+        return json(res, 400, {
+          error: 'No TTS text supplied',
+          code: 'EMPTY_TTS_INPUT',
+        });
+      }
+
+      try {
+        const result =
+          await elevenLabsTTS(text);
+
+        res.setHeader(
+          'Content-Type',
+          result.contentType,
+        );
+
+        res.setHeader(
+          'Content-Length',
+          String(result.bytes),
+        );
+
+        res.setHeader(
+          'Cache-Control',
+          'no-store',
+        );
+
+        res.setHeader(
+          'X-Robo-TTS',
+          'elevenlabs',
+        );
+
+        res.setHeader(
+          'X-Robo-TTS-Language',
+          result.languageCode,
+        );
+
+        res.setHeader(
+          'X-Robo-TTS-Model',
+          result.modelId,
+        );
+
+        res.setHeader(
+          'X-Robo-TTS-Bytes',
+          String(result.bytes),
+        );
+
+        res.setHeader(
+          'X-Robo-TTS-Latency',
+          `${result.latency}ms`,
+        );
+
+        if (result.requestId) {
+          res.setHeader(
+            'X-Robo-TTS-Request-ID',
+            result.requestId,
+          );
+        }
+
+        return res
+          .status(200)
+          .send(result.audioBuffer);
+
+      } catch (error) {
+        return json(
+          res,
+          Number.isInteger(error?.status)
+            ? error.status
+            : 502,
+          {
+            error:
+              error?.message ||
+              'ElevenLabs TTS failed',
+
+            code:
+              error?.code ||
+              'ELEVENLABS_TTS_ERROR',
+
+            elevenLabs: {
+              configured:
+                Boolean(
+                  process.env.ELEVENLABS_API_KEY,
+                ),
+
+              voiceConfigured:
+                Boolean(
+                  process.env.ELEVENLABS_VOICE_ID,
+                ),
+
+              model:
+                process.env.ELEVENLABS_MODEL ||
+                'eleven_flash_v2_5',
+            },
+          },
+        );
+      }
+    }
+
+    /*
+     * ---------------------------------------------------
+     * GEMINI REQUEST
+     * ---------------------------------------------------
+     */
+
     const provider =
       PROVIDERS[providerName];
 
@@ -452,7 +738,9 @@ export default async function handler(req, res) {
       return json(res, 400, {
         error:
           `Unsupported AI provider: ${providerName}`,
-        code: 'UNSUPPORTED_PROVIDER',
+
+        code:
+          'UNSUPPORTED_PROVIDER',
       });
     }
 
@@ -466,42 +754,42 @@ export default async function handler(req, res) {
         .filter(
           (m) =>
             m &&
-            (m.role === 'user' ||
-              m.role === 'assistant'),
+            (
+              m.role === 'user' ||
+              m.role === 'assistant'
+            ),
         )
         .slice(-12)
         .map((m) => ({
           role: m.role,
 
-          content: String(
-            m.content || '',
-          ).slice(0, 12000),
+          content:
+            String(
+              m.content || '',
+            ).slice(0, 12000),
         }))
         .filter(
-          (m) => m.content.trim(),
+          (m) =>
+            m.content.trim(),
         );
 
     if (!cleanMessages.length) {
       return json(res, 400, {
         error:
           'No conversation messages supplied',
-        code: 'EMPTY_INPUT',
+
+        code:
+          'EMPTY_INPUT',
       });
     }
 
-    /*
-     * THIS IS THE IMPORTANT PART.
-     *
-     * The old version read cameraEnabled/cameraSession,
-     * but the browser never sent them.
-     *
-     * The fixed index file now sends both explicitly.
-     */
     const cameraEnabled =
       body.cameraEnabled === true;
 
     const cameraSession =
-      Number.isInteger(body.cameraSession)
+      Number.isInteger(
+        body.cameraSession,
+      )
         ? body.cameraSession
         : null;
 
@@ -512,7 +800,8 @@ export default async function handler(req, res) {
 
     const result =
       await provider.generate({
-        messages: cleanMessages,
+        messages:
+          cleanMessages,
 
         image,
 
@@ -522,6 +811,7 @@ export default async function handler(req, res) {
       });
 
     return json(res, 200, result);
+
   } catch (error) {
     const status =
       Number.isInteger(error?.status)
