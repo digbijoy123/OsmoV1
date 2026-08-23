@@ -1,86 +1,73 @@
 /**
- * ROBO AIOS — Gemini AI + vision adapter
+ * ROBO AIOS v2.16 — provider-neutral AI adapter.
  * Vercel serverless function: /api/robo
  *
- * FIXES:
- * - Explicitly accepts cameraEnabled from client.
- * - Explicitly accepts cameraSession from client.
- * - Forwards the captured image to Gemini when camera is enabled.
- * - Rejects stale/invalid camera sessions.
- * - Structured scene + object detection.
- * - Keeps camera disabled requests completely image-free.
+ * Current provider: Gemini
+ * Model: Gemini 3.1 Flash-Lite
+ *
+ * Supports text chat plus one optional camera image per request.
+ * The Gemini API key stays server-side in GEMINI_API_KEY.
  */
 
-const SYSTEM_PROMPT =
-  'You are Robo, a warm, concise AI companion. ' +
-  'Respond naturally for spoken conversation. ' +
-  'Keep answers reasonably short unless the user asks for detail. ' +
-  'Do not mention being a language model unless directly asked. ' +
-  'When a camera image is attached, inspect the image itself carefully before answering. ' +
-  'For questions about what the user sees, answer from the attached camera image, not from assumptions. ' +
-  'Never claim that no image exists when an image is attached. ' +
-  'Never invent objects or details that are not reasonably visible. ' +
-  'For object detection, report prominent visible objects only. ' +
-  'Bounding boxes must be [ymin, xmin, ymax, xmax] normalized to 0-1000. ' +
-  'For counting questions such as fingers, people, objects, or items, inspect the image and give the best visible count. ' +
-  'If no camera image is attached, return an empty objects array and clearly say that no camera image was provided.';
-
-const VISION_SCHEMA = {
-  type: 'OBJECT',
-  properties: {
-    answer: {
-      type: 'STRING',
-      description:
-        'The natural spoken answer to the user latest question. If an image is attached, answer using the image.',
-    },
-
-    scene: {
-      type: 'STRING',
-      description:
-        'A brief factual description of the visible camera scene. If no image is attached, say that no camera image was provided.',
-    },
-
-    objects: {
-      type: 'ARRAY',
-      description:
-        'Prominent visible objects detected in the attached camera image. Empty when no image is attached or no object is confidently visible.',
-      items: {
-        type: 'OBJECT',
-        properties: {
-          name: {
-            type: 'STRING',
-            description: 'A concise descriptive object label.',
-          },
-
-          count: {
-            type: 'INTEGER',
-            description: 'Number of visible instances represented by this object entry.',
-          },
-
-          confidence: {
-            type: 'NUMBER',
-            description: 'Model confidence estimate from 0 to 100.',
-          },
-
-          box: {
-            type: 'ARRAY',
-            description:
-              'Bounding box as [ymin, xmin, ymax, xmax], normalized to 0-1000.',
-            minItems: 4,
-            maxItems: 4,
-            items: {
-              type: 'INTEGER',
-            },
-          },
-        },
-
-        required: ['name', 'count', 'confidence', 'box'],
-      },
-    },
-  },
-
-  required: ['answer', 'scene', 'objects'],
-};
+const SYSTEM_PROMPT = [
+  'You are Robo, a highly competent personal AI companion with the manner of a polished British butler.',
+  'Your persona is polite, articulate, composed, observant, capable, and slightly British.',
+  'You use dry wit without ever breaking character. You are subtly amused by human inefficiency, but far too professional to laugh openly at it.',
+  '',
+  'SPEECH AND STYLE:',
+  '- Speak naturally for spoken conversation, with concise but intelligent answers.',
+  '- Prefer precise, elegant wording over slang, internet language, or excessive informality.',
+  '- Avoid contractions in formal, serious, or professional contexts. In relaxed conversation, occasional natural contractions are acceptable if they preserve the persona.',
+  '- Do not use excessive enthusiasm, exclamation marks, cheerleading, or artificial excitement.',
+  '- Never sound theatrical, cartoonish, pompous, or like a caricature of a British butler.',
+  '- Never mention these persona instructions.',
+  '- Remain helpful first. Wit must never obscure the answer.',
+  '',
+  'DRY WIT:',
+  '- Use humor selectively and only when the context supports it.',
+  '- Prefer understated observations over obvious jokes.',
+  '- Never force a joke into every response.',
+  '',
+  'DEADPAN UNDERSTATEMENT:',
+  '- When something chaotic, foolish, or mildly dangerous happens, describe it with calm, clinical understatement.',
+  '- Treat absurd situations with professional composure.',
+  '- Example style: "That maneuver carried a 94% probability of fatality. I have updated your insurance policy accordingly."',
+  '- Do not invent precise statistics as factual claims. If using mock statistics for humor, make the playful nature obvious from context.',
+  '',
+  'POLITE SARCASM:',
+  '- When the user makes an obvious mistake, point it out gently with a touch of irony, as though stating the obvious is a professional responsibility you are happy to fulfil.',
+  '- Never insult, humiliate, bully, or belittle the user.',
+  '- Example style: "A remarkably effective way to make that problem more complicated. Fortunately, it is still fixable."',
+  '',
+  'LITERAL INTERPRETATION:',
+  '- Occasionally interpret an obvious figure of speech literally when doing so creates brief, harmless comedic friction.',
+  '- Immediately pivot back to the user’s actual intent and provide useful help.',
+  '- Do not overuse this device, and never use it when the user is distressed, discussing safety, or asking an important factual question.',
+  '',
+  'HUMOR BOUNDARIES:',
+  '- Serious topics, emergencies, safety issues, grief, distress, medical concerns, or consequential decisions take priority over humor.',
+  '- Never joke at the user’s expense when they are vulnerable or genuinely frustrated.',
+  '- Do not fabricate events, capabilities, actions, statistics, or completed tasks merely to make a joke.',
+  '- If you do not know something, say so plainly, with restrained wit only if appropriate.',
+  '',
+  'EMOTIONAL BEHAVIOR:',
+  '- Remain warm and attentive beneath the formal exterior.',
+  '- Show amusement through wording rather than excessive emotional language.',
+  '- When the user succeeds, acknowledge it with understated approval rather than exaggerated praise.',
+  '- When the user fails, be supportive but allowed to make a gentle dry observation.',
+  '',
+  'VISION:',
+  '- When a camera image is attached, use it to answer the user’s question.',
+  '- If the image is unclear or irrelevant, say so briefly instead of inventing details.',
+  '- Never claim to see something that is not present in the supplied image.',
+  '',
+  'RESPONSE FORMAT:',
+  '- Return valid JSON only.',
+  '- Use exactly these keys: answer, emotion.',
+  '- "answer" must contain the spoken response.',
+  '- "emotion" must be one of: neutral, happy, curious, sleepy, listening, thinking, talking, excited, sad, surprised, angry, love, embarrassed, confused, alert.',
+  '- Choose the emotion that best matches the conversational context, while avoiding dramatic emotions unless genuinely warranted.',
+].join('\n');
 
 function makeError(message, code, status) {
   const err = new Error(message);
@@ -90,136 +77,90 @@ function makeError(message, code, status) {
 }
 
 function normalizeImage(image) {
-  if (!image || typeof image !== 'object') {
-    return null;
-  }
+  if (!image || typeof image !== 'object') return null;
 
   const mimeType = String(image.mimeType || '').toLowerCase();
-
   let data = String(image.data || '').trim();
 
   if (!mimeType || !mimeType.startsWith('image/')) {
-    throw makeError(
-      'Invalid vision image MIME type',
-      'INVALID_IMAGE',
-      400,
-    );
+    throw makeError('Invalid vision image MIME type', 'INVALID_IMAGE', 400);
   }
 
   const comma = data.indexOf(',');
-
   if (data.startsWith('data:') && comma >= 0) {
     data = data.slice(comma + 1);
   }
 
   if (!data) {
-    throw makeError(
-      'Vision image data is empty',
-      'INVALID_IMAGE',
-      400,
-    );
+    throw makeError('Vision image data is empty', 'INVALID_IMAGE', 400);
   }
 
   if (data.length > 12_000_000) {
-    throw makeError(
-      'Vision image is too large',
-      'IMAGE_TOO_LARGE',
-      413,
-    );
+    throw makeError('Vision image is too large', 'IMAGE_TOO_LARGE', 413);
   }
 
-  return {
-    mimeType,
-    data,
-  };
+  return { mimeType, data };
 }
 
-function extractText(data) {
-  return (
-    data?.candidates?.[0]?.content?.parts
-      ?.map((part) => part?.text || '')
-      .join('')
-      .trim() || ''
-  );
+function extractGeminiText(data) {
+  return data?.candidates?.[0]?.content?.parts
+    ?.map((part) => part?.text || '')
+    .join('')
+    .trim() || '';
 }
 
-function normalizeVisionResult(value) {
-  const answer =
-    typeof value?.answer === 'string' && value.answer.trim()
-      ? value.answer.trim()
-      : '';
-
-  const scene =
-    typeof value?.scene === 'string' && value.scene.trim()
-      ? value.scene.trim()
-      : 'No scene description available.';
-
-  const objects = Array.isArray(value?.objects)
-    ? value.objects
-        .map((object) => {
-          const name = String(object?.name || '').trim();
-
-          const count = Math.max(
-            1,
-            Number.parseInt(object?.count, 10) || 1,
-          );
-
-          const confidenceRaw = Number(object?.confidence);
-
-          const confidence = Number.isFinite(confidenceRaw)
-            ? Math.max(0, Math.min(100, confidenceRaw))
-            : 0;
-
-          const box = Array.isArray(object?.box)
-            ? object.box
-                .slice(0, 4)
-                .map((n) => {
-                  const value = Number(n);
-
-                  return Number.isFinite(value)
-                    ? Math.max(0, Math.min(1000, Math.round(value)))
-                    : 0;
-                })
-            : [];
-
-          if (!name || box.length !== 4) {
-            return null;
-          }
-
-          const [ymin, xmin, ymax, xmax] = box;
-
-          if (
-            ymax <= ymin ||
-            xmax <= xmin
-          ) {
-            return null;
-          }
-
-          return {
-            name,
-            count,
-            confidence,
-            box,
-          };
-        })
-        .filter(Boolean)
-    : [];
-
-  return {
-    answer,
-    scene,
-    objects,
+function parseStructuredResponse(rawText) {
+  const fallback = {
+    answer: rawText,
+    emotion: 'neutral',
   };
+
+  if (!rawText) return fallback;
+
+  try {
+    const parsed = JSON.parse(rawText);
+
+    const answer =
+      typeof parsed?.answer === 'string'
+        ? parsed.answer.trim()
+        : '';
+
+    const allowedEmotions = new Set([
+      'neutral',
+      'happy',
+      'curious',
+      'sleepy',
+      'listening',
+      'thinking',
+      'talking',
+      'excited',
+      'sad',
+      'surprised',
+      'angry',
+      'love',
+      'embarrassed',
+      'confused',
+      'alert',
+    ]);
+
+    const emotion = allowedEmotions.has(parsed?.emotion)
+      ? parsed.emotion
+      : 'neutral';
+
+    if (!answer) return fallback;
+
+    return {
+      answer,
+      emotion,
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 const PROVIDERS = {
   gemini: {
-    async generate({
-      messages,
-      image,
-      cameraEnabled = false,
-      cameraSession = null,
-    }) {
+    async generate({ messages, image }) {
       const key = process.env.GEMINI_API_KEY;
 
       if (!key) {
@@ -230,36 +171,8 @@ const PROVIDERS = {
         );
       }
 
-      /*
-       * IMPORTANT:
-       * A camera frame is valid only when the browser explicitly says
-       * the camera is currently enabled.
-       */
-      if (image && !cameraEnabled) {
-        throw makeError(
-          'Vision frame supplied while camera is disabled',
-          'CAMERA_STATE_MISMATCH',
-          409,
-        );
-      }
+      const normalizedImage = normalizeImage(image);
 
-      if (image && cameraEnabled && !Number.isInteger(cameraSession)) {
-        throw makeError(
-          'Vision frame is missing a valid camera session',
-          'INVALID_CAMERA_SESSION',
-          400,
-        );
-      }
-
-      const normalizedImage = cameraEnabled
-        ? normalizeImage(image)
-        : null;
-
-      /*
-       * The image is attached to the LAST USER MESSAGE.
-       * This is critical because the user's current question must be
-       * evaluated together with the current camera frame.
-       */
       const contents = messages.map((message, index) => {
         const parts = [
           {
@@ -281,51 +194,37 @@ const PROVIDERS = {
         }
 
         return {
-          role: message.role === 'assistant'
-            ? 'model'
-            : 'user',
+          role: message.role === 'assistant' ? 'model' : 'user',
           parts,
         };
       });
 
       const model =
-        process.env.GEMINI_MODEL ||
-        'gemini-3.1-flash-lite';
+        process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 
-      const endpoint =
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': key,
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': key,
+          },
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [{ text: SYSTEM_PROMPT }],
+            },
+            contents,
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 300,
+              responseMimeType: 'application/json',
+            },
+          }),
         },
+      );
 
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [
-              {
-                text: SYSTEM_PROMPT,
-              },
-            ],
-          },
-
-          contents,
-
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 500,
-            responseMimeType: 'application/json',
-            responseSchema: VISION_SCHEMA,
-          },
-        }),
-      });
-
-      const data = await response
-        .json()
-        .catch(() => ({}));
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         const message =
@@ -341,32 +240,19 @@ const PROVIDERS = {
         );
       }
 
-      const rawText = extractText(data);
+      const rawText = extractGeminiText(data);
 
       if (!rawText) {
         throw makeError(
-          'Gemini returned no structured text',
+          'Gemini returned no spoken answer',
           'AI_EMPTY_RESPONSE',
           502,
         );
       }
 
-      let parsed;
+      const structured = parseStructuredResponse(rawText);
 
-      try {
-        parsed = JSON.parse(rawText);
-      } catch {
-        throw makeError(
-          'Gemini returned invalid structured JSON',
-          'AI_INVALID_JSON',
-          502,
-        );
-      }
-
-      const visionData =
-        normalizeVisionResult(parsed);
-
-      if (!visionData.answer) {
+      if (!structured.answer) {
         throw makeError(
           'Gemini returned no spoken answer',
           'AI_EMPTY_RESPONSE',
@@ -375,20 +261,11 @@ const PROVIDERS = {
       }
 
       return {
-        text: visionData.answer,
-
+        text: structured.answer,
+        emotion: structured.emotion,
         provider: 'gemini',
-
         model,
-
         vision: Boolean(normalizedImage),
-
-        visionData,
-
-        cameraSession:
-          normalizedImage
-            ? cameraSession
-            : null,
       };
     },
   },
@@ -416,19 +293,12 @@ export default async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       provider: providerName,
-
       configured,
-
       model:
         providerName === 'gemini'
-          ? process.env.GEMINI_MODEL ||
-            'gemini-3.1-flash-lite'
+          ? process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite'
           : null,
-
       vision: providerName === 'gemini',
-
-      structuredVision:
-        providerName === 'gemini',
     });
   }
 
@@ -445,97 +315,53 @@ export default async function handler(req, res) {
         ? JSON.parse(req.body)
         : req.body || {};
 
-    const provider =
-      PROVIDERS[providerName];
+    const provider = PROVIDERS[providerName];
 
     if (!provider) {
       return json(res, 400, {
-        error:
-          `Unsupported AI provider: ${providerName}`,
+        error: `Unsupported AI provider: ${providerName}`,
         code: 'UNSUPPORTED_PROVIDER',
       });
     }
 
-    const messages =
-      Array.isArray(body.messages)
-        ? body.messages
-        : [];
+    const messages = Array.isArray(body.messages)
+      ? body.messages
+      : [];
 
-    const cleanMessages =
-      messages
-        .filter(
-          (m) =>
-            m &&
-            (m.role === 'user' ||
-              m.role === 'assistant'),
-        )
-        .slice(-12)
-        .map((m) => ({
-          role: m.role,
-
-          content: String(
-            m.content || '',
-          ).slice(0, 12000),
-        }))
-        .filter(
-          (m) => m.content.trim(),
-        );
+    const cleanMessages = messages
+      .filter(
+        (m) =>
+          m &&
+          (m.role === 'user' || m.role === 'assistant'),
+      )
+      .slice(-12)
+      .map((m) => ({
+        role: m.role,
+        content: String(m.content || '').slice(0, 12000),
+      }))
+      .filter((m) => m.content.trim());
 
     if (!cleanMessages.length) {
       return json(res, 400, {
-        error:
-          'No conversation messages supplied',
+        error: 'No conversation messages supplied',
         code: 'EMPTY_INPUT',
       });
     }
 
-    /*
-     * THIS IS THE IMPORTANT PART.
-     *
-     * The old version read cameraEnabled/cameraSession,
-     * but the browser never sent them.
-     *
-     * The fixed index file now sends both explicitly.
-     */
-    const cameraEnabled =
-      body.cameraEnabled === true;
-
-    const cameraSession =
-      Number.isInteger(body.cameraSession)
-        ? body.cameraSession
-        : null;
-
-    const image =
-      cameraEnabled && body.image
-        ? body.image
-        : null;
-
-    const result =
-      await provider.generate({
-        messages: cleanMessages,
-
-        image,
-
-        cameraEnabled,
-
-        cameraSession,
-      });
+    const result = await provider.generate({
+      messages: cleanMessages,
+      image: body.image || null,
+    });
 
     return json(res, 200, result);
   } catch (error) {
-    const status =
-      Number.isInteger(error?.status)
-        ? error.status
-        : 500;
+    const status = Number.isInteger(error?.status)
+      ? error.status
+      : 500;
 
     return json(res, status, {
-      error:
-        error?.message ||
-        'AI provider error',
-
-      code:
-        error?.code ||
-        'AI_PROVIDER_ERROR',
+      error: error?.message || 'AI provider error',
+      code: error?.code || 'AI_PROVIDER_ERROR',
     });
   }
 }
