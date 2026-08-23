@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.16 ELEVENLABS TTS DEBUG · ROBO AIOS — v2.15 camera + object vision</title>
+<title>ROBO AIOS v2.17 MODULE 6 SOCIAL AWARENESS · ROBO AIOS — v2.17 camera + social awareness</title>
 <style>
 :root{
   --void:#090d15;
@@ -65,7 +65,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 .camera .visionOverlay{position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden}
 .camera .visionBox{position:absolute;border:2px solid var(--cyan);border-radius:6px;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 12px rgba(95,212,208,.28);background:rgba(95,212,208,.06)}
 .camera .visionLabel{position:absolute;left:-2px;top:-19px;max-width:120px;padding:3px 5px;border-radius:5px;background:rgba(9,13,21,.82);color:#fff;font-size:6px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.camera .visionSummary{position:absolute;left:7px;right:7px;top:7px;padding:5px 6px;border-radius:7px;background:rgba(9,13,21,.72);color:#fff;font-size:6px;line-height:1.25;letter-spacing:.04em;opacity:0;transform:translateY(-3px);transition:.2s}
+.camera /* Module 6 social-awareness status badge */
+.socialAwareness{position:absolute;left:10px;bottom:10px;z-index:8;padding:5px 8px;border:1px solid rgba(95,212,208,.35);border-radius:999px;background:rgba(9,13,21,.72);backdrop-filter:blur(8px);font-size:9px;letter-spacing:.08em;color:#dffefa;opacity:0;transform:translateY(5px);transition:opacity .2s ease,transform .2s ease}
+.socialAwareness.show{opacity:1;transform:translateY(0)}
+.socialAwareness[data-state="present"]{border-color:rgba(85,197,140,.55)}
+.socialAwareness[data-state="no-person"]{border-color:rgba(119,168,255,.45)}
+.socialAwareness[data-state="unknown"]{border-color:rgba(240,180,91,.45)}
+.visionSummary{position:absolute;left:7px;right:7px;top:7px;padding:5px 6px;border-radius:7px;background:rgba(9,13,21,.72);color:#fff;font-size:6px;line-height:1.25;letter-spacing:.04em;opacity:0;transform:translateY(-3px);transition:.2s}
 .camera .visionSummary.show{opacity:1;transform:none}
 
 /* Avatar zone */
@@ -180,7 +186,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 </style>
 </head>
 <body>
-<div id="roboBuildMarker" style="position:fixed;bottom:6px;left:6px;z-index:99999;font:10px monospace;opacity:.45;pointer-events:none">ROBO v2.16 ELEVENLABS TTS DEBUG</div>
+<div id="roboBuildMarker" style="position:fixed;bottom:6px;left:6px;z-index:99999;font:10px monospace;opacity:.45;pointer-events:none">ROBO v2.17 MODULE 6 SOCIAL AWARENESS</div>
 
 <div id="app">
   <main class="device" id="device">
@@ -204,6 +210,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         <video id="camera" autoplay playsinline muted></video>
         <div class="visionOverlay" id="visionOverlay"></div>
         <div class="visionSummary" id="visionSummary"></div>
+        <div class="socialAwareness" id="socialAwareness" data-state="unknown">SOCIAL · UNKNOWN</div>
         <span class="camRec"></span>
         <span class="camLabel">what I see</span>
       </div>
@@ -283,6 +290,14 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       <pre class="devPre" id="devLogs">[BOOT] Developer diagnostics ready.</pre>
     </section>
     <section class="devCard">
+      <div class="devTitle">SOCIAL AWARENESS · MODULE 6</div>
+      <div class="devRow"><span>Human presence</span><b id="devSocialPresence">UNKNOWN</b></div>
+      <div class="devRow"><span>People detected</span><b id="devSocialCount">0</b></div>
+      <div class="devRow"><span>Interaction state</span><b id="devSocialInteraction">IDLE</b></div>
+      <div class="devRow"><span>Perception confidence</span><b id="devSocialConfidence">0%</b></div>
+      <div class="devRow"><span>Last social change</span><b id="devSocialChange">none</b></div>
+    </section>
+    <section class="devCard">
       <div class="devTitle">SYSTEM CHECK</div>
       <div class="devChecks" id="devChecks"></div>
     </section>
@@ -351,6 +366,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let visionRequestController = null;
   let latestVision = null;
   let visualMemory = null;
+
+  /* ---------- User Perception & Social Awareness v1 (Module 6) ----------
+     Interprets structured vision into social context. Identity, gaze, and
+     continuous face tracking are intentionally NOT claimed here; those belong
+     to later Memory & Identity + Active Face Tracking modules.
+  */
+  let socialAwareness = {
+    presence: 'unknown', personCount: 0, primaryPerson: null, people: [],
+    interaction: 'idle', confidence: 0, lastChange: 'none', timestamp: 0, session: 0
+  };
+  let previousSocialAwareness = null;
+
   let micStream = null;
   let recognition = null;
   let bleDevice = null;
@@ -1497,6 +1524,96 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     };
   }
 
+  function normalizeSocialPersonName(name){
+    const value=String(name||'').toLowerCase().trim();
+    return /\b(person|people|human|man|woman|boy|girl|child|adult|someone|somebody|face|human face)\b/.test(value);
+  }
+
+  function personArea(box){
+    if(!Array.isArray(box) || box.length!==4) return 0;
+    const n=box.map(Number);
+    if(n.some(v=>!Number.isFinite(v))) return 0;
+    return Math.max(0,n[3]-n[1])*Math.max(0,n[2]-n[0]);
+  }
+
+  function deriveSocialAwareness(visionData){
+    const objects=Array.isArray(visionData?.objects) ? visionData.objects : [];
+    const people=[];
+    objects.forEach((object,index)=>{
+      if(!normalizeSocialPersonName(object?.name)) return;
+      const count=Math.max(1,Number.parseInt(object?.count,10)||1);
+      const confidence=Number.isFinite(Number(object?.confidence))
+        ? Math.max(0,Math.min(100,Number(object.confidence))) : 0;
+      const box=Array.isArray(object?.box) && object.box.length===4
+        ? object.box.slice(0,4).map(Number) : null;
+      people.push({id:'person-'+index,label:String(object?.name||'person'),count,confidence,box,area:personArea(box)});
+    });
+
+    const personCount=people.reduce((sum,p)=>sum+p.count,0);
+    const sorted=[...people].sort((a,b)=>b.area-a.area || b.confidence-a.confidence);
+    const primary=sorted[0] || null;
+    const presence=personCount>0 ? 'present' : 'no-person';
+    let interaction='idle';
+    if(listening || talking) interaction=personCount>0 ? 'active-conversation' : 'voice-active';
+    else if(personCount===1) interaction='single-person-present';
+    else if(personCount>1) interaction='multiple-people-present';
+
+    const previous=previousSocialAwareness;
+    let lastChange='none';
+    if(previous){
+      if(previous.personCount===0 && personCount>0) lastChange='person-entered';
+      else if(previous.personCount>0 && personCount===0) lastChange='person-left';
+      else if(previous.personCount!==personCount) lastChange='person-count-changed';
+    }
+
+    const confidence=people.length
+      ? Math.round(people.reduce((sum,p)=>sum+p.confidence,0)/people.length) : 0;
+    const snapshot={
+      presence,personCount,
+      primaryPerson:primary ? {label:primary.label,confidence:primary.confidence,box:primary.box,relativeArea:Number((primary.area/1000000).toFixed(4))}:null,
+      people,interaction,confidence,lastChange,timestamp:Date.now(),session:cameraSession
+    };
+    previousSocialAwareness=snapshot;
+    socialAwareness=snapshot;
+    return snapshot;
+  }
+
+  function buildSocialAwarenessMessage(){
+    const s=socialAwareness;
+    if(!s || !s.timestamp) return null;
+    const primary=s.primaryPerson;
+    return [
+      'SOCIAL AWARENESS CONTEXT — derived from the latest structured camera observation.',
+      `Human presence: ${s.presence}.`,
+      `People detected: ${s.personCount}.`,
+      `Interaction state: ${s.interaction}.`,
+      `Perception confidence: ${s.confidence}/100.`,
+      primary ? `Primary visible person candidate: ${primary.label}, confidence ${Math.round(primary.confidence)}/100.` : 'Primary person: none.',
+      `Last social change: ${s.lastChange}.`,
+      'Perception only: do not claim face identity, gaze direction, emotion, or continuous tracking from this context.',
+      'Use this context to make the response socially appropriate when relevant.'
+    ].join('\n');
+  }
+
+  function renderSocialAwarenessBadge(){
+    const badge=$('#socialAwareness');
+    if(!badge) return;
+    const s=socialAwareness;
+    badge.textContent=s.personCount===0 ? 'SOCIAL · NO PERSON' : s.personCount===1 ? 'SOCIAL · 1 PERSON' : `SOCIAL · ${s.personCount} PEOPLE`;
+    badge.dataset.state=s.presence;
+    badge.classList.toggle('show',Boolean(s.timestamp));
+  }
+
+  function renderSocialDiagnostics(){
+    if(typeof devSocialPresence==='undefined' || !devSocialPresence) return;
+    const s=socialAwareness;
+    devSocialPresence.textContent=s.presence.toUpperCase();
+    devSocialCount.textContent=String(s.personCount);
+    devSocialInteraction.textContent=s.interaction.toUpperCase();
+    devSocialConfidence.textContent=s.confidence+'%';
+    devSocialChange.textContent=s.lastChange;
+  }
+
   function renderVisionResult(visionData){
     latestVision = visionData || null;
 
@@ -1548,6 +1665,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       session:cameraSession,
       timestamp:Date.now()
     };
+
+    const social=deriveSocialAwareness({scene,objects:currentObjects});
+    renderSocialAwarenessBadge();
+    renderSocialDiagnostics();
+    devLog('SOCIAL','social awareness update',{presence:social.presence,personCount:social.personCount,interaction:social.interaction,confidence:social.confidence,lastChange:social.lastChange});
 
     if(tracking && tracking.summary){
       devLog('VISION','object tracking update',tracking);
@@ -1820,15 +1942,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       visionRequestController=new AbortController();
 
-      const requestMessages = useVisualMemory
-        ? [
-            ...conversation,
-            {
-              role:'assistant',
-              content:buildVisualMemoryMessage()
-            }
-          ]
-        : conversation;
+      const contextMessages=[];
+      const visualContext=useVisualMemory ? buildVisualMemoryMessage() : null;
+      const socialContext=buildSocialAwarenessMessage();
+      if(visualContext) contextMessages.push({role:'assistant',content:visualContext});
+      if(socialContext && requestUsedVision) contextMessages.push({role:'assistant',content:socialContext});
+      const requestMessages=contextMessages.length ? [...conversation,...contextMessages] : conversation;
 
       if(useVisualMemory){
         devLog('VISION','visual memory attached to request',{
@@ -2082,6 +2201,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 /* ---------- Developer diagnostics runtime ---------- */
 const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript");
 const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
+const devSocialPresence=$("#devSocialPresence"), devSocialCount=$("#devSocialCount"), devSocialInteraction=$("#devSocialInteraction"), devSocialConfidence=$("#devSocialConfidence"), devSocialChange=$("#devSocialChange");
 window.__roboStructuredVisionReady=false;
 let devLogLines=["[BOOT] Developer diagnostics ready."];
 
@@ -2166,6 +2286,8 @@ function runDevChecks(){
     ["Camera vision capture",!!(cameraEnabled && cameraStream && $("#camera")?.videoWidth>1 && $("#camera")?.videoHeight>1)],
     ["Camera state",cameraEnabled && !!cameraStream],
     ["Structured vision state",!!window.__roboStructuredVisionReady],
+    ["Module 6 social awareness engine",typeof deriveSocialAwareness==="function"],
+    ["Social awareness UI",!!$("#socialAwareness")],
     ["AI API key",null]
   ];
   $("#devChecks").innerHTML=list.map(x=>{
@@ -2199,7 +2321,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.16 ELEVENLABS TTS DEBUG DIAGNOSTICS",
+    "ROBO AIOS v2.17 MODULE 6 SOCIAL AWARENESS DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -2210,6 +2332,11 @@ $("#copyLogs").addEventListener("click",async()=>{
     "STT: "+devStt.textContent,
     "On-device STT: "+devLocalStt.textContent,
     "AI brain: "+devAI.textContent,
+    "Social presence: "+devSocialPresence.textContent,
+    "People detected: "+devSocialCount.textContent,
+    "Social interaction: "+devSocialInteraction.textContent,
+    "Social confidence: "+devSocialConfidence.textContent,
+    "Social change: "+devSocialChange.textContent,
     "",
     "TRANSCRIPT:",
     devTranscript.textContent,
@@ -2313,11 +2440,13 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.16 ELEVENLABS TTS DEBUG · CAMERA + OBJECT VISION booted · Gemini AI brain");
+  log("ROBO AIOS v2.17 MODULE 6 SOCIAL AWARENESS · CAMERA + OBJECT VISION booted · Gemini AI brain");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
   log("AI provider adapter online · Gemini structured vision enabled");
   log("natural idle emotion cycle → ON");
+  log("Module 6 social awareness online · presence/person count/context enabled");
+  renderSocialDiagnostics();
 
   /* Developer convenience: desktop starts in portrait simulator. */
   const mq=window.matchMedia("(orientation: landscape)");
