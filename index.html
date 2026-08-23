@@ -1868,7 +1868,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     return true;
   }
 
-  function speakWithBrowserFallback(text, token){
+  function speakWithBrowserFallback(text, token, languageHint='en'){
     if(token!==roboSpeechToken) return;
     if(!('speechSynthesis' in window)){
       setState('curious','speech output unavailable');
@@ -1939,7 +1939,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       ttsDiag('ElevenLabs failed · browser fallback ACTIVE', {code:err?.code||'unknown', http:err?.httpStatus||'n/a', message:err?.message||err?.name||'unknown'});
     }
 
-    speakWithBrowserFallback(clean,token);
+    speakWithBrowserFallback(clean,token,ttsLanguage);
   }
 
   micBtn.addEventListener('click',async()=>{
