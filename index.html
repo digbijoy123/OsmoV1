@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.18 MODULE 6 LIVE VISION AUTHORITY · ROBO AIOS — v2.18 camera + social awareness</title>
+<title>ROBO AIOS v2.19 MODULE 7 MEMORY + IDENTITY · ROBO AIOS — v2.19 camera + social awareness + persistent memory</title>
 <style>
 :root{
   --void:#090d15;
@@ -71,6 +71,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 .socialAwareness[data-state="present"]{border-color:rgba(85,197,140,.55)}
 .socialAwareness[data-state="no-person"]{border-color:rgba(119,168,255,.45)}
 .socialAwareness[data-state="unknown"]{border-color:rgba(240,180,91,.45)}
+
+/* Module 7 memory/identity status badge */
+.memoryIdentity{position:absolute;right:10px;bottom:10px;z-index:8;padding:5px 8px;border:1px solid rgba(119,168,255,.35);border-radius:999px;background:rgba(9,13,21,.72);backdrop-filter:blur(8px);font-size:9px;letter-spacing:.08em;color:#e8efff;opacity:0;transform:translateY(5px);transition:opacity .2s ease,transform .2s ease;max-width:52%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.memoryIdentity.show{opacity:1;transform:none}
+.memoryIdentity[data-state="known"]{border-color:rgba(85,197,140,.55)}
+.memoryIdentity[data-state="unknown"]{border-color:rgba(240,180,91,.45)}
 .visionSummary{position:absolute;left:7px;right:7px;top:7px;padding:5px 6px;border-radius:7px;background:rgba(9,13,21,.72);color:#fff;font-size:6px;line-height:1.25;letter-spacing:.04em;opacity:0;transform:translateY(-3px);transition:.2s}
 .camera .visionSummary.show{opacity:1;transform:none}
 
@@ -186,7 +192,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 </style>
 </head>
 <body>
-<div id="roboBuildMarker" style="position:fixed;bottom:6px;left:6px;z-index:99999;font:10px monospace;opacity:.45;pointer-events:none">ROBO v2.18 MODULE 6 LIVE VISION AUTHORITY</div>
+<div id="roboBuildMarker" style="position:fixed;bottom:6px;left:6px;z-index:99999;font:10px monospace;opacity:.45;pointer-events:none">ROBO v2.19 MODULE 7 MEMORY + IDENTITY</div>
 
 <div id="app">
   <main class="device" id="device">
@@ -196,7 +202,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.15 CAM + OBJECT VISION</small></div>
+          <div class="brand">ROBO <small>v2.19 MEM + IDENTITY + VISION</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -211,6 +217,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         <div class="visionOverlay" id="visionOverlay"></div>
         <div class="visionSummary" id="visionSummary"></div>
         <div class="socialAwareness" id="socialAwareness" data-state="unknown">SOCIAL · UNKNOWN</div>
+        <div class="memoryIdentity" id="memoryIdentity" data-state="unknown">MEMORY · NO PROFILE</div>
         <span class="camRec"></span>
         <span class="camLabel">what I see</span>
       </div>
@@ -264,7 +271,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.15 CAM + OBJECT VISION</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.19 MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -377,6 +384,314 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     interaction: 'idle', confidence: 0, lastChange: 'none', timestamp: 0, session: 0
   };
   let previousSocialAwareness = null;
+
+  /* ---------- Memory & Identity v1 (Module 7) ----------
+     Persistent browser-local memory for the primary Robo user. The schema is
+     deliberately identity-first and recognition-ready: a stable personId can
+     later be linked to face recognition without redesigning stored memories.
+     Robo only stores explicit/high-confidence user facts and supports explicit
+     remember/forget commands. No face identity is claimed here.
+  */
+  const MEMORY_STORAGE_KEY = 'robo_aios_memory_v1';
+  const MEMORY_SCHEMA_VERSION = 1;
+  const DEFAULT_MEMORY = {
+    schemaVersion: MEMORY_SCHEMA_VERSION,
+    primaryPersonId: 'primary-user',
+    identity: {
+      displayName: '',
+      aliases: [],
+      personId: 'primary-user',
+      recognitionReady: false
+    },
+    facts: [],
+    preferences: {},
+    memories: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+
+  let roboMemory = null;
+  let memoryReady = false;
+  let lastMemoryChange = 'none';
+
+  function cloneDefaultMemory(){
+    return JSON.parse(JSON.stringify(DEFAULT_MEMORY));
+  }
+
+  function loadRoboMemory(){
+    let next = cloneDefaultMemory();
+    try{
+      const raw = localStorage.getItem(MEMORY_STORAGE_KEY);
+      if(raw){
+        const parsed = JSON.parse(raw);
+        if(parsed && typeof parsed === 'object'){
+          next = {
+            ...next,
+            ...parsed,
+            identity:{...next.identity,...(parsed.identity||{})},
+            preferences:{...(parsed.preferences||{})},
+            facts:Array.isArray(parsed.facts)?parsed.facts:[],
+            memories:Array.isArray(parsed.memories)?parsed.memories:[]
+          };
+          next.schemaVersion = MEMORY_SCHEMA_VERSION;
+          next.primaryPersonId = 'primary-user';
+          next.identity.personId = 'primary-user';
+          next.updatedAt = Number(parsed.updatedAt)||Date.now();
+        }
+      }
+    }catch(err){
+      console.warn('ROBO MEMORY load failed',err);
+      next = cloneDefaultMemory();
+    }
+    roboMemory = next;
+    memoryReady = true;
+    renderMemoryIdentity();
+    renderMemoryDiagnostics();
+    return roboMemory;
+  }
+
+  function saveRoboMemory(change='updated'){
+    if(!roboMemory) return false;
+    roboMemory.schemaVersion = MEMORY_SCHEMA_VERSION;
+    roboMemory.primaryPersonId = 'primary-user';
+    roboMemory.identity.personId = 'primary-user';
+    roboMemory.updatedAt = Date.now();
+    try{
+      localStorage.setItem(MEMORY_STORAGE_KEY, JSON.stringify(roboMemory));
+      lastMemoryChange = change;
+      renderMemoryIdentity();
+      renderMemoryDiagnostics();
+      devLog('MEMORY',change);
+      return true;
+    }catch(err){
+      lastMemoryChange = 'save-failed';
+      devLog('MEMORY ERROR','persistent storage failed',{name:err?.name,message:err?.message});
+      renderMemoryDiagnostics();
+      return false;
+    }
+  }
+
+  function normalizeMemoryText(text){
+    return String(text||'').replace(/\s+/g,' ').trim();
+  }
+
+  function addMemoryRecord(text,type='memory'){
+    const value=normalizeMemoryText(text);
+    if(!value || !roboMemory) return false;
+    const key=value.toLowerCase();
+    const duplicate=roboMemory.memories.some(m=>String(m.text||'').toLowerCase()===key);
+    if(duplicate){
+      lastMemoryChange='already-known';
+      renderMemoryDiagnostics();
+      return false;
+    }
+    roboMemory.memories.unshift({id:'mem-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),text:value,type,personId:'primary-user',createdAt:Date.now(),updatedAt:Date.now()});
+    if(roboMemory.memories.length>100) roboMemory.memories.length=100;
+    saveRoboMemory('memory-added');
+    return true;
+  }
+
+  function addFact(key,value,source='explicit'){
+    if(!roboMemory) return false;
+    const k=normalizeMemoryText(key).toLowerCase();
+    const v=normalizeMemoryText(value);
+    if(!k || !v) return false;
+    const existing=roboMemory.facts.find(f=>String(f.key).toLowerCase()===k && f.personId==='primary-user');
+    if(existing){
+      existing.value=v; existing.source=source; existing.updatedAt=Date.now();
+    }else{
+      roboMemory.facts.push({key:k,value:v,source,personId:'primary-user',createdAt:Date.now(),updatedAt:Date.now()});
+    }
+    saveRoboMemory('fact-updated');
+    return true;
+  }
+
+  function setIdentityName(name){
+    const value=normalizeMemoryText(name).replace(/[.?!]+$/,'').trim();
+    if(!value || !roboMemory) return false;
+    const old=roboMemory.identity.displayName;
+    roboMemory.identity.displayName=value;
+    roboMemory.identity.recognitionReady=true;
+    addFact('name',value,'identity');
+    lastMemoryChange=old && old!==value ? 'identity-updated' : 'identity-saved';
+    saveRoboMemory(lastMemoryChange);
+    return true;
+  }
+
+  function addAlias(alias){
+    const value=normalizeMemoryText(alias).replace(/[.?!]+$/,'').trim();
+    if(!value || !roboMemory) return false;
+    if(!roboMemory.identity.aliases.some(a=>a.toLowerCase()===value.toLowerCase())){
+      roboMemory.identity.aliases.push(value);
+      saveRoboMemory('alias-added');
+    }
+    return true;
+  }
+
+  function forgetMemoryByText(query){
+    const q=normalizeMemoryText(query).toLowerCase();
+    if(!q || !roboMemory) return false;
+    let changed=false;
+    roboMemory.memories=roboMemory.memories.filter(m=>{
+      const hit=String(m.text||'').toLowerCase().includes(q);
+      if(hit) changed=true;
+      return !hit;
+    });
+    roboMemory.facts=roboMemory.facts.filter(f=>{
+      const hit=String(f.key||'').toLowerCase().includes(q) || String(f.value||'').toLowerCase().includes(q);
+      if(hit) changed=true;
+      return !hit;
+    });
+    if(changed) saveRoboMemory('memory-forgotten');
+    return changed;
+  }
+
+  function clearAllRoboMemory(){
+    roboMemory=cloneDefaultMemory();
+    try{localStorage.removeItem(MEMORY_STORAGE_KEY);}catch(_){}
+    memoryReady=true;
+    lastMemoryChange='memory-cleared';
+    renderMemoryIdentity();
+    renderMemoryDiagnostics();
+    devLog('MEMORY','all persistent memory cleared');
+  }
+
+  function getMemorySummary(){
+    if(!roboMemory) return 'I do not have persistent memory yet.';
+    const parts=[];
+    if(roboMemory.identity.displayName) parts.push(`Your name is ${roboMemory.identity.displayName}.`);
+    const facts=roboMemory.facts.filter(f=>f.key!=='name').slice(0,12);
+    if(facts.length) parts.push(facts.map(f=>`${f.key}: ${f.value}`).join('; ')+'.');
+    const memories=roboMemory.memories.slice(0,8);
+    if(memories.length) parts.push(memories.map(m=>m.text).join(' | '));
+    return parts.length ? parts.join(' ') : 'I do not have any persistent memories about you yet.';
+  }
+
+  function buildMemoryContextMessage(){
+    if(!roboMemory || !memoryReady) return null;
+    const name=roboMemory.identity.displayName;
+    const facts=roboMemory.facts.slice(0,15);
+    const memories=roboMemory.memories.slice(0,15);
+    const lines=[
+      'MEMORY & IDENTITY CONTEXT — persistent browser-local memory for the primary user.',
+      'Person ID: primary-user.',
+      `Known name: ${name || 'unknown'}.`,
+      `Recognition-ready profile: ${roboMemory.identity.recognitionReady ? 'yes' : 'no face identity linked yet'}.`,
+      facts.length ? 'Facts: '+facts.map(f=>`${f.key}=${f.value}`).join(' | ') : 'Facts: none stored.',
+      memories.length ? 'Remembered notes: '+memories.map(m=>m.text).join(' | ') : 'Remembered notes: none stored.',
+      'Use memory only when relevant. Do not claim face recognition or visual identity unless a future identity module explicitly provides it.',
+      'Do not invent memories. Treat these stored items as user-provided facts, not model guesses.'
+    ];
+    return lines.join('\n');
+  }
+
+  function renderMemoryIdentity(){
+    const badge=$('#memoryIdentity');
+    if(!badge || !roboMemory) return;
+    const name=roboMemory.identity.displayName;
+    badge.textContent=name ? `MEMORY · ${name}` : 'MEMORY · NO PROFILE';
+    badge.dataset.state=name ? 'known' : 'unknown';
+    badge.classList.toggle('show',Boolean(memoryReady));
+  }
+
+  function renderMemoryDiagnostics(){
+    if(typeof devMemoryStatus==='undefined' || !devMemoryStatus || !roboMemory) return;
+    devMemoryStatus.textContent=memoryReady ? 'ONLINE' : 'OFFLINE';
+    devMemoryIdentity.textContent=roboMemory.identity.displayName || 'UNKNOWN';
+    devMemoryCount.textContent=String(roboMemory.memories.length);
+    devMemoryFacts.textContent=String(roboMemory.facts.length);
+    devMemoryChange.textContent=lastMemoryChange;
+  }
+
+  function handleMemoryCommand(text){
+    const raw=normalizeMemoryText(text);
+    const l=raw.toLowerCase();
+    if(!raw || !roboMemory) return null;
+
+    if(/^(what do you remember|what do you know about me|what do you remember about me|show my memory|show me what you remember)/.test(l)){
+      return {handled:true,reply:getMemorySummary(),emotion:'happy'};
+    }
+
+    if(/^(forget everything|forget all memories|clear all memory|erase all memory|delete all memories)$/.test(l)){
+      clearAllRoboMemory();
+      return {handled:true,reply:'I cleared my persistent memory about you.',emotion:'neutral'};
+    }
+
+    const forgetName=/^(?:forget my name|delete my name|remove my name from memory)$/i.test(raw);
+    if(forgetName){
+      const had=Boolean(roboMemory.identity.displayName);
+      roboMemory.identity.displayName='';
+      roboMemory.identity.recognitionReady=false;
+      roboMemory.facts=roboMemory.facts.filter(f=>String(f.key).toLowerCase()!=='name');
+      if(had) saveRoboMemory('identity-forgotten');
+      else { lastMemoryChange='name-not-found'; renderMemoryDiagnostics(); }
+      return {handled:true,reply:had ? 'Okay. I forgot your name.' : 'I do not currently have your name stored.',emotion:'neutral'};
+    }
+
+    const rememberedName=raw.match(/^remember(?: that)?\s+(?:my name is|i am|i\'m)\s+([A-Za-z][A-Za-z .\'-]{1,40})[.!?]?$/i);
+    if(rememberedName){
+      const value=rememberedName[1].trim();
+      if(setIdentityName(value)) return {handled:true,reply:`I will remember your name as ${value}.`,emotion:'happy'};
+    }
+
+    const forget=l.match(/^(?:forget|remove from memory|delete from memory)\s+(.+)$/);
+    if(forget){
+      const ok=forgetMemoryByText(forget[1]);
+      return {handled:true,reply:ok ? 'Okay. I removed that from my persistent memory.' : 'I could not find that memory to remove.',emotion:ok?'neutral':'confused'};
+    }
+
+    const remember=raw.match(/^(?:remember that|remember)\s+(.+)$/i);
+    if(remember){
+      const note=normalizeMemoryText(remember[1]).replace(/[.?!]+$/,'');
+      const ok=addMemoryRecord(note,'explicit');
+      return {handled:true,reply:ok ? 'Got it. I will remember that.' : 'I already have that in memory.',emotion:'happy'};
+    }
+
+    const name=raw.match(/^(?:my name is|i am|i'm)\s+([A-Za-z][A-Za-z .\'-]{1,40})[.!?]?$/i);
+    if(name){
+      const value=name[1].trim();
+      if(setIdentityName(value)) return {handled:true,reply:`Nice to meet you, ${value}. I will remember your name.`,emotion:'happy'};
+    }
+
+    const callMe=raw.match(/^(?:call me|you can call me)\s+([A-Za-z][A-Za-z .\'-]{1,40})[.!?]?$/i);
+    if(callMe){
+      const value=callMe[1].trim();
+      if(setIdentityName(value)){ addAlias(value); return {handled:true,reply:`Understood. I will call you ${value}.`,emotion:'happy'}; }
+    }
+
+    const like=raw.match(/^(?:i like|i love|i enjoy)\s+(.+)$/i);
+    if(like){
+      const value=normalizeMemoryText(like[1]).replace(/[.?!]+$/,'');
+      addFact('likes',value);
+      return {handled:true,reply:'Got it. I will keep that preference in mind.',emotion:'happy'};
+    }
+
+    const dislike=raw.match(/^(?:i dislike|i hate|i don't like|i do not like)\s+(.+)$/i);
+    if(dislike){
+      const value=normalizeMemoryText(dislike[1]).replace(/[.?!]+$/,'');
+      addFact('dislikes',value);
+      return {handled:true,reply:'Understood. I will keep that preference in mind.',emotion:'neutral'};
+    }
+
+    const prefer=raw.match(/^(?:i prefer|my preference is)\s+(.+)$/i);
+    if(prefer){
+      const value=normalizeMemoryText(prefer[1]).replace(/[.?!]+$/,'');
+      addFact('preferences',value);
+      return {handled:true,reply:'Got it. I will remember that preference.',emotion:'happy'};
+    }
+
+    const favorite=raw.match(/^my favorite\s+(.+?)\s+is\s+(.+)$/i);
+    if(favorite){
+      const category=normalizeMemoryText(favorite[1]).replace(/[.?!]+$/,'');
+      const value=normalizeMemoryText(favorite[2]).replace(/[.?!]+$/,'');
+      addFact(`favorite ${category}`,value);
+      return {handled:true,reply:`Got it. Your favorite ${category} is ${value}.`,emotion:'happy'};
+    }
+
+    return null;
+  }
+
+  loadRoboMemory();
 
   let micStream = null;
   let recognition = null;
@@ -1866,6 +2181,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return;
     }
 
+    const memoryCommand=handleMemoryCommand(clean);
+    if(memoryCommand?.handled){
+      devLog('MEMORY','handled explicit memory command',{reply:memoryCommand.reply});
+      setState(memoryCommand.emotion || 'happy','memory · '+(memoryCommand.emotion || 'updated'),{
+        intensity:.7,
+        confidence:.95
+      });
+      showCaption('ROBO SAYS\n'+memoryCommand.reply,true);
+      speak(memoryCommand.reply,detectConversationLanguage(clean));
+      return;
+    }
+
     const emotionResult=inferEmotion(clean);
     const emotion=emotionResult.state;
     const languageHint=detectConversationLanguage(clean);
@@ -1944,6 +2271,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       const contextMessages=[];
       const visualContext=useVisualMemory ? buildVisualMemoryMessage() : null;
+      const memoryContext=buildMemoryContextMessage();
+      if(memoryContext) contextMessages.push({role:'assistant',content:memoryContext});
 
       /*
        * LIVE-VISION AUTHORITY FIX (v2.18):
@@ -2236,7 +2565,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 
 /* ---------- Developer diagnostics runtime ---------- */
-const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript");
+const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript"), devMemoryStatus=$("#devMemoryStatus"), devMemoryIdentity=$("#devMemoryIdentity"), devMemoryCount=$("#devMemoryCount"), devMemoryFacts=$("#devMemoryFacts"), devMemoryChange=$("#devMemoryChange");
 const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
 const devSocialPresence=$("#devSocialPresence"), devSocialCount=$("#devSocialCount"), devSocialInteraction=$("#devSocialInteraction"), devSocialConfidence=$("#devSocialConfidence"), devSocialChange=$("#devSocialChange");
 window.__roboStructuredVisionReady=false;
@@ -2325,6 +2654,9 @@ function runDevChecks(){
     ["Structured vision state",!!window.__roboStructuredVisionReady],
     ["Module 6 social awareness engine",typeof deriveSocialAwareness==="function"],
     ["Social awareness UI",!!$("#socialAwareness")],
+    ["Module 7 memory engine",typeof handleMemoryCommand==="function"],
+    ["Persistent memory storage",typeof localStorage!=="undefined"],
+    ["Memory identity UI",!!$("#memoryIdentity")],
     ["AI API key",null]
   ];
   $("#devChecks").innerHTML=list.map(x=>{
@@ -2358,7 +2690,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.18 MODULE 6 LIVE VISION AUTHORITY DIAGNOSTICS",
+    "ROBO AIOS v2.19 MODULE 7 MEMORY + IDENTITY DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -2374,6 +2706,11 @@ $("#copyLogs").addEventListener("click",async()=>{
     "Social interaction: "+devSocialInteraction.textContent,
     "Social confidence: "+devSocialConfidence.textContent,
     "Social change: "+devSocialChange.textContent,
+    "Memory status: "+devMemoryStatus.textContent,
+    "Memory identity: "+devMemoryIdentity.textContent,
+    "Persistent memories: "+devMemoryCount.textContent,
+    "Profile facts: "+devMemoryFacts.textContent,
+    "Last memory change: "+devMemoryChange.textContent,
     "",
     "TRANSCRIPT:",
     devTranscript.textContent,
@@ -2483,7 +2820,10 @@ function hookRecognitionDiagnostics(r){
   log("AI provider adapter online · Gemini structured vision enabled");
   log("natural idle emotion cycle → ON");
   log("Module 6 social awareness online · presence/person count/context enabled");
+  log("Module 7 memory + identity online · persistent profile enabled");
   renderSocialDiagnostics();
+  renderMemoryIdentity();
+  renderMemoryDiagnostics();
 
   /* Developer convenience: desktop starts in portrait simulator. */
   const mq=window.matchMedia("(orientation: landscape)");
