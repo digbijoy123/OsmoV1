@@ -1,14 +1,12 @@
 /**
- * ROBO AIOS — Gemini AI + vision adapter
+ * ROBO AIOS — Gemini AI + Vision + ElevenLabs TTS
  * Vercel serverless function: /api/robo
  *
- * FIXES:
- * - Explicitly accepts cameraEnabled from client.
- * - Explicitly accepts cameraSession from client.
- * - Forwards the captured image to Gemini when camera is enabled.
- * - Rejects stale/invalid camera sessions.
- * - Structured scene + object detection.
- * - Keeps camera disabled requests completely image-free.
+ * Environment variables:
+ *   GEMINI_API_KEY
+ *   GEMINI_MODEL
+ *   ELEVENLABS_API_KEY
+ *   ELEVENLABS_VOICE_ID
  */
 
 const SYSTEM_PROMPT =
@@ -17,13 +15,12 @@ const SYSTEM_PROMPT =
   'Keep answers reasonably short unless the user asks for detail. ' +
   'Do not mention being a language model unless directly asked. ' +
   'When a camera image is attached, inspect the image itself carefully before answering. ' +
-  'For questions about what the user sees, answer from the attached camera image, not from assumptions. ' +
-  'Never claim that no image exists when an image is attached. ' +
-  'Never invent objects or details that are not reasonably visible. ' +
+  'For questions about what the user sees, answer using the attached camera image. ' +
+  'Never invent objects or visual details. ' +
   'For object detection, report prominent visible objects only. ' +
   'Bounding boxes must be [ymin, xmin, ymax, xmax] normalized to 0-1000. ' +
-  'For counting questions such as fingers, people, objects, or items, inspect the image and give the best visible count. ' +
-  'If no camera image is attached, return an empty objects array and clearly say that no camera image was provided.';
+  'For counting questions, inspect the image carefully and give the best visible count. ' +
+  'If no camera image is attached, do not pretend that you can see the user.';
 
 const VISION_SCHEMA = {
   type: 'OBJECT',
@@ -31,41 +28,43 @@ const VISION_SCHEMA = {
     answer: {
       type: 'STRING',
       description:
-        'The natural spoken answer to the user latest question. If an image is attached, answer using the image.',
+        'Natural spoken answer to the user’s latest question.',
     },
 
     scene: {
       type: 'STRING',
       description:
-        'A brief factual description of the visible camera scene. If no image is attached, say that no camera image was provided.',
+        'Brief factual description of the visible camera scene.',
     },
 
     objects: {
       type: 'ARRAY',
       description:
-        'Prominent visible objects detected in the attached camera image. Empty when no image is attached or no object is confidently visible.',
+        'Prominent visible objects detected in the camera image.',
       items: {
         type: 'OBJECT',
         properties: {
           name: {
             type: 'STRING',
-            description: 'A concise descriptive object label.',
+            description: 'Concise object label.',
           },
 
           count: {
             type: 'INTEGER',
-            description: 'Number of visible instances represented by this object entry.',
+            description:
+              'Number of visible instances represented by this entry.',
           },
 
           confidence: {
             type: 'NUMBER',
-            description: 'Model confidence estimate from 0 to 100.',
+            description:
+              'Confidence estimate from 0 to 100.',
           },
 
           box: {
             type: 'ARRAY',
             description:
-              'Bounding box as [ymin, xmin, ymax, xmax], normalized to 0-1000.',
+              'Bounding box [ymin, xmin, ymax, xmax], normalized 0-1000.',
             minItems: 4,
             maxItems: 4,
             items: {
@@ -74,31 +73,58 @@ const VISION_SCHEMA = {
           },
         },
 
-        required: ['name', 'count', 'confidence', 'box'],
+        required: [
+          'name',
+          'count',
+          'confidence',
+          'box',
+        ],
       },
     },
   },
 
-  required: ['answer', 'scene', 'objects'],
+  required: [
+    'answer',
+    'scene',
+    'objects',
+  ],
 };
 
-function makeError(message, code, status) {
-  const err = new Error(message);
-  err.code = code;
-  err.status = status;
-  return err;
+function makeError(
+  message,
+  code,
+  status,
+) {
+  const error = new Error(message);
+
+  error.code = code;
+  error.status = status;
+
+  return error;
 }
 
 function normalizeImage(image) {
-  if (!image || typeof image !== 'object') {
+  if (
+    !image ||
+    typeof image !== 'object'
+  ) {
     return null;
   }
 
-  const mimeType = String(image.mimeType || '').toLowerCase();
+  const mimeType =
+    String(
+      image.mimeType || '',
+    ).toLowerCase();
 
-  let data = String(image.data || '').trim();
+  let data =
+    String(
+      image.data || '',
+    ).trim();
 
-  if (!mimeType || !mimeType.startsWith('image/')) {
+  if (
+    !mimeType ||
+    !mimeType.startsWith('image/')
+  ) {
     throw makeError(
       'Invalid vision image MIME type',
       'INVALID_IMAGE',
@@ -106,10 +132,17 @@ function normalizeImage(image) {
     );
   }
 
-  const comma = data.indexOf(',');
+  const comma =
+    data.indexOf(',');
 
-  if (data.startsWith('data:') && comma >= 0) {
-    data = data.slice(comma + 1);
+  if (
+    data.startsWith('data:') &&
+    comma >= 0
+  ) {
+    data =
+      data.slice(
+        comma + 1,
+      );
   }
 
   if (!data) {
@@ -120,7 +153,10 @@ function normalizeImage(image) {
     );
   }
 
-  if (data.length > 12_000_000) {
+  if (
+    data.length >
+    12_000_000
+  ) {
     throw makeError(
       'Vision image is too large',
       'IMAGE_TOO_LARGE',
@@ -136,74 +172,140 @@ function normalizeImage(image) {
 
 function extractText(data) {
   return (
-    data?.candidates?.[0]?.content?.parts
-      ?.map((part) => part?.text || '')
+    data
+      ?.candidates?.[0]
+      ?.content?.parts
+      ?.map(
+        (part) =>
+          part?.text || '',
+      )
       .join('')
       .trim() || ''
   );
 }
 
-function normalizeVisionResult(value) {
+function normalizeVisionResult(
+  value,
+) {
   const answer =
-    typeof value?.answer === 'string' && value.answer.trim()
+    typeof value?.answer ===
+      'string'
       ? value.answer.trim()
       : '';
 
   const scene =
-    typeof value?.scene === 'string' && value.scene.trim()
+    typeof value?.scene ===
+      'string'
       ? value.scene.trim()
-      : 'No scene description available.';
+      : '';
 
-  const objects = Array.isArray(value?.objects)
-    ? value.objects
-        .map((object) => {
-          const name = String(object?.name || '').trim();
+  const objects =
+    Array.isArray(
+      value?.objects,
+    )
+      ? value.objects
+          .map(
+            (object) => {
+              const name =
+                String(
+                  object?.name ||
+                    '',
+                ).trim();
 
-          const count = Math.max(
-            1,
-            Number.parseInt(object?.count, 10) || 1,
-          );
+              const countRaw =
+                Number(
+                  object?.count,
+                );
 
-          const confidenceRaw = Number(object?.confidence);
+              const count =
+                Number.isFinite(
+                  countRaw,
+                )
+                  ? Math.max(
+                      0,
+                      Math.round(
+                        countRaw,
+                      ),
+                    )
+                  : 0;
 
-          const confidence = Number.isFinite(confidenceRaw)
-            ? Math.max(0, Math.min(100, confidenceRaw))
-            : 0;
+              const confidenceRaw =
+                Number(
+                  object?.confidence,
+                );
 
-          const box = Array.isArray(object?.box)
-            ? object.box
-                .slice(0, 4)
-                .map((n) => {
-                  const value = Number(n);
+              const confidence =
+                Number.isFinite(
+                  confidenceRaw,
+                )
+                  ? Math.max(
+                      0,
+                      Math.min(
+                        100,
+                        confidenceRaw,
+                      ),
+                    )
+                  : 0;
 
-                  return Number.isFinite(value)
-                    ? Math.max(0, Math.min(1000, Math.round(value)))
-                    : 0;
-                })
-            : [];
+              const box =
+                Array.isArray(
+                  object?.box,
+                )
+                  ? object.box
+                      .slice(0, 4)
+                      .map(
+                        (n) => {
+                          const value =
+                            Number(n);
 
-          if (!name || box.length !== 4) {
-            return null;
-          }
+                          return Number.isFinite(
+                            value,
+                          )
+                            ? Math.max(
+                                0,
+                                Math.min(
+                                  1000,
+                                  Math.round(
+                                    value,
+                                  ),
+                                ),
+                              )
+                            : 0;
+                        },
+                      )
+                  : [];
 
-          const [ymin, xmin, ymax, xmax] = box;
+              if (
+                !name ||
+                box.length !== 4
+              ) {
+                return null;
+              }
 
-          if (
-            ymax <= ymin ||
-            xmax <= xmin
-          ) {
-            return null;
-          }
+              const [
+                ymin,
+                xmin,
+                ymax,
+                xmax,
+              ] = box;
 
-          return {
-            name,
-            count,
-            confidence,
-            box,
-          };
-        })
-        .filter(Boolean)
-    : [];
+              if (
+                ymax <= ymin ||
+                xmax <= xmin
+              ) {
+                return null;
+              }
+
+              return {
+                name,
+                count,
+                confidence,
+                box,
+              };
+            },
+          )
+          .filter(Boolean)
+      : [];
 
   return {
     answer,
@@ -220,7 +322,9 @@ const PROVIDERS = {
       cameraEnabled = false,
       cameraSession = null,
     }) {
-      const key = process.env.GEMINI_API_KEY;
+      const key =
+        process.env
+          .GEMINI_API_KEY;
 
       if (!key) {
         throw makeError(
@@ -230,7 +334,10 @@ const PROVIDERS = {
         );
       }
 
-      if (image && !cameraEnabled) {
+      if (
+        image &&
+        !cameraEnabled
+      ) {
         throw makeError(
           'Vision frame supplied while camera is disabled',
           'CAMERA_STATE_MISMATCH',
@@ -238,7 +345,13 @@ const PROVIDERS = {
         );
       }
 
-      if (image && cameraEnabled && !Number.isInteger(cameraSession)) {
+      if (
+        image &&
+        cameraEnabled &&
+        !Number.isInteger(
+          cameraSession,
+        )
+      ) {
         throw makeError(
           'Vision frame is missing a valid camera session',
           'INVALID_CAMERA_SESSION',
@@ -246,92 +359,138 @@ const PROVIDERS = {
         );
       }
 
-      const normalizedImage = cameraEnabled
-        ? normalizeImage(image)
-        : null;
+      const normalizedImage =
+        cameraEnabled
+          ? normalizeImage(
+              image,
+            )
+          : null;
 
-      const contents = messages.map((message, index) => {
-        const parts = [
-          {
-            text: String(message.content ?? ''),
+      const contents =
+        messages.map(
+          (
+            message,
+            index,
+          ) => {
+            const parts = [
+              {
+                text: String(
+                  message.content ??
+                    '',
+                ),
+              },
+            ];
+
+            if (
+              normalizedImage &&
+              message.role ===
+                'user' &&
+              index ===
+                messages.length - 1
+            ) {
+              parts.push({
+                inline_data: {
+                  mime_type:
+                    normalizedImage.mimeType,
+                  data:
+                    normalizedImage.data,
+                },
+              });
+            }
+
+            return {
+              role:
+                message.role ===
+                'assistant'
+                  ? 'model'
+                  : 'user',
+
+              parts,
+            };
           },
-        ];
-
-        if (
-          normalizedImage &&
-          message.role === 'user' &&
-          index === messages.length - 1
-        ) {
-          parts.push({
-            inline_data: {
-              mime_type: normalizedImage.mimeType,
-              data: normalizedImage.data,
-            },
-          });
-        }
-
-        return {
-          role: message.role === 'assistant'
-            ? 'model'
-            : 'user',
-          parts,
-        };
-      });
+        );
 
       const model =
-        process.env.GEMINI_MODEL ||
+        process.env
+          .GEMINI_MODEL ||
         'gemini-3.1-flash-lite';
 
       const endpoint =
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+          model,
+        )}:generateContent`;
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
+      const response =
+        await fetch(
+          endpoint,
+          {
+            method: 'POST',
 
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': key,
-        },
+            headers: {
+              'Content-Type':
+                'application/json',
 
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [
-              {
-                text: SYSTEM_PROMPT,
+              'x-goog-api-key':
+                key,
+            },
+
+            body: JSON.stringify({
+              systemInstruction: {
+                parts: [
+                  {
+                    text:
+                      SYSTEM_PROMPT,
+                  },
+                ],
               },
-            ],
+
+              contents,
+
+              generationConfig: {
+                temperature: 0.3,
+
+                maxOutputTokens:
+                  500,
+
+                responseMimeType:
+                  'application/json',
+
+                responseSchema:
+                  VISION_SCHEMA,
+              },
+            }),
           },
+        );
 
-          contents,
-
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 500,
-            responseMimeType: 'application/json',
-            responseSchema: VISION_SCHEMA,
-          },
-        }),
-      });
-
-      const data = await response
-        .json()
-        .catch(() => ({}));
+      const data =
+        await response
+          .json()
+          .catch(
+            () => ({}),
+          );
 
       if (!response.ok) {
         const message =
-          data?.error?.message ||
+          data?.error
+            ?.message ||
           `Gemini request failed (${response.status})`;
 
         throw makeError(
           message,
-          data?.error?.status ||
+
+          data?.error
+            ?.status ||
             data?.error?.code ||
             'GEMINI_API_ERROR',
+
           response.status,
         );
       }
 
-      const rawText = extractText(data);
+      const rawText =
+        extractText(
+          data,
+        );
 
       if (!rawText) {
         throw makeError(
@@ -344,7 +503,10 @@ const PROVIDERS = {
       let parsed;
 
       try {
-        parsed = JSON.parse(rawText);
+        parsed =
+          JSON.parse(
+            rawText,
+          );
       } catch {
         throw makeError(
           'Gemini returned invalid structured JSON',
@@ -354,9 +516,13 @@ const PROVIDERS = {
       }
 
       const visionData =
-        normalizeVisionResult(parsed);
+        normalizeVisionResult(
+          parsed,
+        );
 
-      if (!visionData.answer) {
+      if (
+        !visionData.answer
+      ) {
         throw makeError(
           'Gemini returned no spoken answer',
           'AI_EMPTY_RESPONSE',
@@ -365,11 +531,21 @@ const PROVIDERS = {
       }
 
       return {
-        text: visionData.answer,
-        provider: 'gemini',
+        text:
+          visionData.answer,
+
+        provider:
+          'gemini',
+
         model,
-        vision: Boolean(normalizedImage),
+
+        vision:
+          Boolean(
+            normalizedImage,
+          ),
+
         visionData,
+
         cameraSession:
           normalizedImage
             ? cameraSession
@@ -379,20 +555,55 @@ const PROVIDERS = {
   },
 };
 
-function detectTTSLanguage(text) {
-  const value = String(text || '');
+/* =====================================================
+ * ElevenLabs TTS
+ * =================================================== */
 
-  if (/[\u0900-\u097F]/.test(value)) return 'hi';
-  if (/[\u0980-\u09FF]/.test(value)) return 'bn';
+function detectTTSLanguage(
+  text,
+) {
+  const value =
+    String(
+      text || '',
+    );
+
+  /*
+   * Hindi / Devanagari
+   */
+  if (
+    /[\u0900-\u097F]/.test(
+      value,
+    )
+  ) {
+    return 'hi';
+  }
+
+  /*
+   * Bengali
+   */
+  if (
+    /[\u0980-\u09FF]/.test(
+      value,
+    )
+  ) {
+    return 'bn';
+  }
 
   return 'en';
 }
 
-async function elevenLabsTTS(text) {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  const voiceId = process.env.ELEVENLABS_VOICE_ID;
+async function elevenLabsTTS(
+  text,
+) {
+  const apiKey =
+    process.env
+      .ELEVENLABS_API_KEY;
 
-  if(!apiKey){
+  const voiceId =
+    process.env
+      .ELEVENLABS_VOICE_ID;
+
+  if (!apiKey) {
     throw makeError(
       'ELEVENLABS_API_KEY is not configured',
       'TTS_NOT_CONFIGURED',
@@ -400,7 +611,7 @@ async function elevenLabsTTS(text) {
     );
   }
 
-  if(!voiceId){
+  if (!voiceId) {
     throw makeError(
       'ELEVENLABS_VOICE_ID is not configured',
       'TTS_VOICE_NOT_CONFIGURED',
@@ -408,210 +619,558 @@ async function elevenLabsTTS(text) {
     );
   }
 
-  const languageCode = detectTTSLanguage(text);
+  const languageCode =
+    detectTTSLanguage(
+      text,
+    );
 
   const endpoint =
-    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`;
+    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(
+      voiceId,
+    )}`;
 
-  const response = await fetch(endpoint,{
-    method:'POST',
-    headers:{
-      'Content-Type':'application/json',
-      'xi-api-key':apiKey,
-      'Accept':'audio/mpeg',
-    },
-    body:JSON.stringify({
-      text:String(text),
-      model_id:'eleven_flash_v2_5',
-      language_code:languageCode,
-      voice_settings:{
-        stability:0.48,
-        similarity_boost:0.82,
-        style:0.22,
-        use_speaker_boost:true,
+  const started =
+    Date.now();
+
+  const response =
+    await fetch(
+      endpoint,
+      {
+        method: 'POST',
+
+        headers: {
+          'Content-Type':
+            'application/json',
+
+          'xi-api-key':
+            apiKey,
+
+          Accept:
+            'audio/mpeg',
+        },
+
+        body: JSON.stringify({
+          text:
+            String(text),
+
+          model_id:
+            'eleven_flash_v2_5',
+
+          language_code:
+            languageCode,
+
+          voice_settings: {
+            stability:
+              0.48,
+
+            similarity_boost:
+              0.82,
+
+            style:
+              0.22,
+
+            use_speaker_boost:
+              true,
+          },
+
+          output_format:
+            'mp3_44100_128',
+        }),
       },
-      output_format:'mp3_44100_128',
-    }),
-  });
+    );
 
-  if(!response.ok){
-    const detail=await response.text().catch(()=> '');
+  const elapsed =
+    Date.now() -
+    started;
+
+  if (!response.ok) {
+    const detail =
+      await response
+        .text()
+        .catch(
+          () => '',
+        );
+
     throw makeError(
-      detail || `ElevenLabs request failed (${response.status})`,
+      detail ||
+        `ElevenLabs request failed (${response.status})`,
+
       'ELEVENLABS_API_ERROR',
+
       response.status,
     );
   }
 
+  const arrayBuffer =
+    await response.arrayBuffer();
+
+  const audioBuffer =
+    Buffer.from(
+      arrayBuffer,
+    );
+
+  if (
+    !audioBuffer.length
+  ) {
+    throw makeError(
+      'ElevenLabs returned an empty audio response',
+      'ELEVENLABS_EMPTY_AUDIO',
+      502,
+    );
+  }
+
   return {
-    audioBuffer:Buffer.from(await response.arrayBuffer()),
+    audioBuffer,
+
     languageCode,
+
+    voiceId,
+
+    model:
+      'eleven_flash_v2_5',
+
+    latency:
+      elapsed,
+
+    bytes:
+      audioBuffer.length,
   };
 }
 
-function json(res, status, body) {
-  return res.status(status).json(body);
+/* =====================================================
+ * JSON helper
+ * =================================================== */
+
+function json(
+  res,
+  status,
+  body,
+) {
+  return res
+    .status(status)
+    .json(body);
 }
 
-export default async function handler(req, res) {
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
+/* =====================================================
+ * API handler
+ * =================================================== */
+
+export default async function handler(
+  req,
+  res,
+) {
+  if (
+    req.method ===
+    'OPTIONS'
+  ) {
+    return res
+      .status(204)
+      .end();
   }
 
-  const providerName = String(
-    process.env.AI_PROVIDER || 'gemini',
-  ).toLowerCase();
+  const providerName =
+    String(
+      process.env
+        .AI_PROVIDER ||
+        'gemini',
+    ).toLowerCase();
 
-  if (req.method === 'GET') {
-    const configured =
-      providerName === 'gemini'
-        ? Boolean(process.env.GEMINI_API_KEY)
-        : false;
+  /* ---------------------------------------------------
+   * GET diagnostics
+   * ------------------------------------------------- */
 
-    return json(res, 200, {
-      ok: true,
-      provider: providerName,
-      configured,
+  if (
+    req.method ===
+    'GET'
+  ) {
+    const geminiConfigured =
+      Boolean(
+        process.env
+          .GEMINI_API_KEY,
+      );
 
-      model:
-        providerName === 'gemini'
-          ? process.env.GEMINI_MODEL ||
-            'gemini-3.1-flash-lite'
-          : null,
+    const elevenConfigured =
+      Boolean(
+        process.env
+          .ELEVENLABS_API_KEY,
+      );
 
-      vision: providerName === 'gemini',
-      structuredVision: providerName === 'gemini',
+    const voiceConfigured =
+      Boolean(
+        process.env
+          .ELEVENLABS_VOICE_ID,
+      );
 
-      elevenLabs: {
+    return json(
+      res,
+      200,
+      {
+        ok: true,
+
+        provider:
+          providerName,
+
         configured:
-          Boolean(process.env.ELEVENLABS_API_KEY),
+          providerName ===
+          'gemini'
+            ? geminiConfigured
+            : false,
 
-        voiceConfigured:
-          Boolean(process.env.ELEVENLABS_VOICE_ID),
+        model:
+          process.env
+            .GEMINI_MODEL ||
+          'gemini-3.1-flash-lite',
+
+        vision:
+          providerName ===
+          'gemini',
+
+        structuredVision:
+          providerName ===
+          'gemini',
+
+        elevenLabs: {
+          configured:
+            elevenConfigured,
+
+          voiceConfigured:
+            voiceConfigured,
+
+          model:
+            'eleven_flash_v2_5',
+        },
       },
-    });
+    );
   }
 
-  if (req.method !== 'POST') {
-    return json(res, 405, {
-      error: 'Method not allowed',
-      code: 'METHOD_NOT_ALLOWED',
-    });
+  if (
+    req.method !==
+    'POST'
+  ) {
+    return json(
+      res,
+      405,
+      {
+        error:
+          'Method not allowed',
+
+        code:
+          'METHOD_NOT_ALLOWED',
+      },
+    );
   }
 
   try {
-    const earlyBody =
-      typeof req.body === 'string'
-        ? JSON.parse(req.body)
+    const body =
+      typeof req.body ===
+      'string'
+        ? JSON.parse(
+            req.body,
+          )
         : req.body || {};
 
-    if(earlyBody.tts === true){
-      const text=String(earlyBody.text || '').trim();
+    /* -------------------------------------------------
+     * TTS request
+     *
+     * Request:
+     * {
+     *   "tts": true,
+     *   "text": "Hello Robo"
+     * }
+     * ----------------------------------------------- */
 
-      if(!text){
-        return json(res,400,{
-          error:'No TTS text supplied',
-          code:'EMPTY_TTS_INPUT',
-        });
+    if (
+      body.tts === true
+    ) {
+      const text =
+        String(
+          body.text || '',
+        ).trim();
+
+      if (!text) {
+        return json(
+          res,
+          400,
+          {
+            error:
+              'No TTS text supplied',
+
+            code:
+              'EMPTY_TTS_INPUT',
+          },
+        );
       }
 
-      const started=Date.now();
-      const audio=await elevenLabsTTS(text);
+      try {
+        const result =
+          await elevenLabsTTS(
+            text,
+          );
 
-      res.setHeader('Content-Type','audio/mpeg');
-      res.setHeader('Content-Length',String(audio.audioBuffer.length));
-      res.setHeader('Cache-Control','no-store');
-      res.setHeader('X-Robo-TTS','elevenlabs');
-      res.setHeader('X-Robo-TTS-Language',audio.languageCode);
-      res.setHeader('X-Robo-TTS-Latency',`${Date.now()-started}ms`);
+        res.setHeader(
+          'Content-Type',
+          'audio/mpeg',
+        );
 
-      return res.status(200).send(audio.audioBuffer);
+        res.setHeader(
+          'Content-Length',
+          String(
+            result.bytes,
+          ),
+        );
+
+        res.setHeader(
+          'Cache-Control',
+          'no-store',
+        );
+
+        /*
+         * Diagnostics headers.
+         */
+        res.setHeader(
+          'X-Robo-TTS',
+          'elevenlabs',
+        );
+
+        res.setHeader(
+          'X-Robo-TTS-Language',
+          result.languageCode,
+        );
+
+        res.setHeader(
+          'X-Robo-TTS-Model',
+          result.model,
+        );
+
+        res.setHeader(
+          'X-Robo-TTS-Voice',
+          result.voiceId,
+        );
+
+        res.setHeader(
+          'X-Robo-TTS-Bytes',
+          String(
+            result.bytes,
+          ),
+        );
+
+        res.setHeader(
+          'X-Robo-TTS-Latency',
+          `${result.latency}ms`,
+        );
+
+        return res
+          .status(200)
+          .send(
+            result.audioBuffer,
+          );
+      } catch (
+        error
+      ) {
+        /*
+         * IMPORTANT:
+         * Do NOT silently convert an ElevenLabs
+         * server error into a fake successful
+         * audio response.
+         *
+         * The browser can decide whether to use
+         * its fallback voice.
+         */
+        return json(
+          res,
+          Number.isInteger(
+            error?.status,
+          )
+            ? error.status
+            : 500,
+
+          {
+            error:
+              error?.message ||
+              'ElevenLabs TTS failed',
+
+            code:
+              error?.code ||
+              'ELEVENLABS_TTS_ERROR',
+
+            elevenLabs: {
+              configured:
+                Boolean(
+                  process.env
+                    .ELEVENLABS_API_KEY,
+                ),
+
+              voiceConfigured:
+                Boolean(
+                  process.env
+                    .ELEVENLABS_VOICE_ID,
+                ),
+            },
+          },
+        );
+      }
     }
 
-    const body =
-      typeof req.body === 'string'
-        ? JSON.parse(req.body)
-        : req.body || {};
+    /* -------------------------------------------------
+     * Normal Gemini request
+     * ----------------------------------------------- */
 
     const provider =
-      PROVIDERS[providerName];
+      PROVIDERS[
+        providerName
+      ];
 
     if (!provider) {
-      return json(res, 400, {
-        error:
-          `Unsupported AI provider: ${providerName}`,
-        code: 'UNSUPPORTED_PROVIDER',
-      });
+      return json(
+        res,
+        400,
+        {
+          error:
+            `Unsupported AI provider: ${providerName}`,
+
+          code:
+            'UNSUPPORTED_PROVIDER',
+        },
+      );
     }
 
     const messages =
-      Array.isArray(body.messages)
+      Array.isArray(
+        body.messages,
+      )
         ? body.messages
         : [];
 
     const cleanMessages =
       messages
         .filter(
-          (m) =>
-            m &&
-            (m.role === 'user' ||
-              m.role === 'assistant'),
+          (message) =>
+            message &&
+            (
+              message.role ===
+                'user' ||
+              message.role ===
+                'assistant'
+            ),
         )
         .slice(-12)
-        .map((m) => ({
-          role: m.role,
-          content: String(
-            m.content || '',
-          ).slice(0, 12000),
-        }))
+        .map(
+          (message) => ({
+            role:
+              message.role,
+
+            content:
+              String(
+                message.content ||
+                  '',
+              ).slice(
+                0,
+                12000,
+              ),
+          }),
+        )
         .filter(
-          (m) => m.content.trim(),
+          (message) =>
+            message.content.trim(),
         );
 
-    if (!cleanMessages.length) {
-      return json(res, 400, {
-        error:
-          'No conversation messages supplied',
-        code: 'EMPTY_INPUT',
-      });
+    if (
+      !cleanMessages.length
+    ) {
+      return json(
+        res,
+        400,
+        {
+          error:
+            'No conversation messages supplied',
+
+          code:
+            'EMPTY_INPUT',
+        },
+      );
     }
 
     const cameraEnabled =
-      body.cameraEnabled === true;
+      body.cameraEnabled ===
+      true;
 
     const cameraSession =
-      Number.isInteger(body.cameraSession)
+      Number.isInteger(
+        body.cameraSession,
+      )
         ? body.cameraSession
         : null;
 
     const image =
-      cameraEnabled && body.image
+      cameraEnabled &&
+      body.image
         ? body.image
         : null;
 
-    const result =
-      await provider.generate({
-        messages: cleanMessages,
-        image,
-        cameraEnabled,
-        cameraSession,
-      });
+    /*
+     * HARD CAMERA SAFETY RULE:
+     *
+     * When cameraEnabled is false,
+     * never send an image to Gemini.
+     */
+    if (
+      !cameraEnabled &&
+      image
+    ) {
+      return json(
+        res,
+        409,
+        {
+          error:
+            'Camera is disabled but a vision frame was supplied',
 
-    return json(res, 200, result);
-  } catch (error) {
+          code:
+            'CAMERA_STATE_MISMATCH',
+        },
+      );
+    }
+
+    const result =
+      await provider.generate(
+        {
+          messages:
+            cleanMessages,
+
+          image,
+
+          cameraEnabled,
+
+          cameraSession,
+        },
+      );
+
+    return json(
+      res,
+      200,
+      result,
+    );
+  } catch (
+    error
+  ) {
     const status =
-      Number.isInteger(error?.status)
+      Number.isInteger(
+        error?.status,
+      )
         ? error.status
         : 500;
 
-    return json(res, status, {
-      error:
-        error?.message ||
-        'AI provider error',
+    return json(
+      res,
+      status,
+      {
+        error:
+          error?.message ||
+          'AI provider error',
 
-      code:
-        error?.code ||
-        'AI_PROVIDER_ERROR',
-    });
+        code:
+          error?.code ||
+          'AI_PROVIDER_ERROR',
+      },
+    );
   }
 }
