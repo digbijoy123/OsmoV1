@@ -1,5 +1,5 @@
 /**
- * ROBO AIOS v2.18 — Gemini AI + vision adapter · LIVE VISION AUTHORITY
+ * ROBO AIOS — Gemini AI + vision adapter
  * Vercel serverless function: /api/robo
  *
  * FIXES:
@@ -17,9 +17,7 @@ const SYSTEM_PROMPT =
   'Keep answers reasonably short unless the user asks for detail. ' +
   'Do not mention being a language model unless directly asked. ' +
   'When a camera image is attached, inspect the image itself carefully before answering. ' +
-  'For questions about what the user sees, answer from the attached CURRENT camera image, not from assumptions or earlier camera observations. ' +
-  'The newest attached camera image is authoritative for the current visual state and overrides previous visual claims in conversation history. ' +
-  'Never repeat a previous visual observation merely because it appeared earlier in the conversation. Re-evaluate the current image every time a new image is attached. ' +
+  'For questions about what the user sees, answer from the attached camera image, not from assumptions. ' +
   'Never claim that no image exists when an image is attached. ' +
   'Never invent objects or details that are not reasonably visible. ' +
   'For object detection, report prominent visible objects only. ' +
@@ -710,9 +708,12 @@ export default async function handler(req, res) {
 
         const maskedVoice =
           result.voiceId.length > 8
-            ? result.voiceId.slice(0, 4) + '…' + result.voiceId.slice(-4)
+            ? result.voiceId.slice(0, 4) + '...' + result.voiceId.slice(-4)
             : result.voiceId;
 
+        // HTTP header values must remain ASCII-safe.
+        // Do not use a Unicode ellipsis here; it causes Node/Vercel
+        // to throw ERR_INVALID_CHAR and breaks successful ElevenLabs TTS.
         res.setHeader(
           'X-Robo-TTS-Voice',
           maskedVoice,
