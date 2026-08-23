@@ -1,14 +1,14 @@
 /**
- * ROBO AIOS — Gemini AI + vision adapter
+ * ROBO AIOS v2.18 — Gemini AI + vision adapter · LIVE VISION AUTHORITY
  * Vercel serverless function: /api/robo
  *
- * FIXED:
- * - Gemini is the active provider.
- * - Camera frames are forwarded to Gemini.
+ * FIXES:
+ * - Explicitly accepts cameraEnabled from client.
+ * - Explicitly accepts cameraSession from client.
+ * - Forwards the captured image to Gemini when camera is enabled.
+ * - Rejects stale/invalid camera sessions.
  * - Structured scene + object detection.
- * - Hindi / Bengali language hints.
- * - ElevenLabs TTS remains in the same server route.
- * - ASCII-only diagnostic headers.
+ * - Keeps camera disabled requests completely image-free.
  */
 
 const SYSTEM_PROMPT =
@@ -17,7 +17,9 @@ const SYSTEM_PROMPT =
   'Keep answers reasonably short unless the user asks for detail. ' +
   'Do not mention being a language model unless directly asked. ' +
   'When a camera image is attached, inspect the image itself carefully before answering. ' +
-  'For questions about what the user sees, answer from the attached camera image, not from assumptions. ' +
+  'For questions about what the user sees, answer from the attached CURRENT camera image, not from assumptions or earlier camera observations. ' +
+  'The newest attached camera image is authoritative for the current visual state and overrides previous visual claims in conversation history. ' +
+  'Never repeat a previous visual observation merely because it appeared earlier in the conversation. Re-evaluate the current image every time a new image is attached. ' +
   'Never claim that no image exists when an image is attached. ' +
   'Never invent objects or details that are not reasonably visible. ' +
   'For object detection, report prominent visible objects only. ' +
@@ -25,14 +27,13 @@ const SYSTEM_PROMPT =
   'For counting questions such as fingers, people, objects, or items, inspect the image and give the best visible count. ' +
   'If no camera image is attached, return an empty objects array and clearly say that no camera image was provided.';
 
-function buildSystemPrompt(languageHint = 'en') {
+function buildSystemPrompt(languageHint='en'){
   const languageInstruction =
     languageHint === 'hi'
-      ? 'The latest user message is Hindi or Hinglish. Reply in natural Hindi or Hinglish, preserving the user mix of Hindi and English where appropriate. Do not switch to English unless the user clearly asks in English.'
+      ? 'The latest user message is Hindi or Hinglish. Reply in natural Hindi or Hinglish, preserving the user\'s mix of Hindi and English where appropriate. Do not switch to English unless the user clearly asks in English.'
       : languageHint === 'bn'
         ? 'The latest user message is Bengali. Reply naturally in Bengali unless the user clearly asks in another language.'
         : 'Reply in natural English unless the latest user message clearly uses another supported language.';
-
   return SYSTEM_PROMPT + ' ' + languageInstruction;
 }
 
@@ -65,14 +66,12 @@ const VISION_SCHEMA = {
 
           count: {
             type: 'INTEGER',
-            description:
-              'Number of visible instances represented by this object entry.',
+            description: 'Number of visible instances represented by this object entry.',
           },
 
           confidence: {
             type: 'NUMBER',
-            description:
-              'Model confidence estimate from 0 to 100.',
+            description: 'Model confidence estimate from 0 to 100.',
           },
 
           box: {
@@ -87,21 +86,12 @@ const VISION_SCHEMA = {
           },
         },
 
-        required: [
-          'name',
-          'count',
-          'confidence',
-          'box',
-        ],
+        required: ['name', 'count', 'confidence', 'box'],
       },
     },
   },
 
-  required: [
-    'answer',
-    'scene',
-    'objects',
-  ],
+  required: ['answer', 'scene', 'objects'],
 };
 
 function makeError(message, code, status) {
@@ -116,16 +106,11 @@ function normalizeImage(image) {
     return null;
   }
 
-  const mimeType =
-    String(image.mimeType || '').toLowerCase();
+  const mimeType = String(image.mimeType || '').toLowerCase();
 
-  let data =
-    String(image.data || '').trim();
+  let data = String(image.data || '').trim();
 
-  if (
-    !mimeType ||
-    !mimeType.startsWith('image/')
-  ) {
+  if (!mimeType || !mimeType.startsWith('image/')) {
     throw makeError(
       'Invalid vision image MIME type',
       'INVALID_IMAGE',
@@ -135,10 +120,7 @@ function normalizeImage(image) {
 
   const comma = data.indexOf(',');
 
-  if (
-    data.startsWith('data:') &&
-    comma >= 0
-  ) {
+  if (data.startsWith('data:') && comma >= 0) {
     data = data.slice(comma + 1);
   }
 
@@ -175,98 +157,65 @@ function extractText(data) {
 
 function normalizeVisionResult(value) {
   const answer =
-    typeof value?.answer === 'string' &&
-    value.answer.trim()
+    typeof value?.answer === 'string' && value.answer.trim()
       ? value.answer.trim()
       : '';
 
   const scene =
-    typeof value?.scene === 'string' &&
-    value.scene.trim()
+    typeof value?.scene === 'string' && value.scene.trim()
       ? value.scene.trim()
       : 'No scene description available.';
 
-  const objects =
-    Array.isArray(value?.objects)
-      ? value.objects
-          .map((object) => {
-            const name =
-              String(object?.name || '').trim();
+  const objects = Array.isArray(value?.objects)
+    ? value.objects
+        .map((object) => {
+          const name = String(object?.name || '').trim();
 
-            const count = Math.max(
-              1,
-              Number.parseInt(
-                object?.count,
-                10,
-              ) || 1,
-            );
+          const count = Math.max(
+            1,
+            Number.parseInt(object?.count, 10) || 1,
+          );
 
-            const confidenceRaw =
-              Number(object?.confidence);
+          const confidenceRaw = Number(object?.confidence);
 
-            const confidence =
-              Number.isFinite(confidenceRaw)
-                ? Math.max(
-                    0,
-                    Math.min(
-                      100,
-                      confidenceRaw,
-                    ),
-                  )
-                : 0;
+          const confidence = Number.isFinite(confidenceRaw)
+            ? Math.max(0, Math.min(100, confidenceRaw))
+            : 0;
 
-            const box =
-              Array.isArray(object?.box)
-                ? object.box
-                    .slice(0, 4)
-                    .map((n) => {
-                      const value =
-                        Number(n);
+          const box = Array.isArray(object?.box)
+            ? object.box
+                .slice(0, 4)
+                .map((n) => {
+                  const value = Number(n);
 
-                      return Number.isFinite(
-                        value,
-                      )
-                        ? Math.max(
-                            0,
-                            Math.min(
-                              1000,
-                              Math.round(value),
-                            ),
-                          )
-                        : 0;
-                    })
-                : [];
+                  return Number.isFinite(value)
+                    ? Math.max(0, Math.min(1000, Math.round(value)))
+                    : 0;
+                })
+            : [];
 
-            if (
-              !name ||
-              box.length !== 4
-            ) {
-              return null;
-            }
+          if (!name || box.length !== 4) {
+            return null;
+          }
 
-            const [
-              ymin,
-              xmin,
-              ymax,
-              xmax,
-            ] = box;
+          const [ymin, xmin, ymax, xmax] = box;
 
-            if (
-              ymax <= ymin ||
-              xmax <= xmin
-            ) {
-              return null;
-            }
+          if (
+            ymax <= ymin ||
+            xmax <= xmin
+          ) {
+            return null;
+          }
 
-            return {
-              name,
-              count,
-              confidence,
-              box,
-            };
-          })
-          .filter(Boolean)
-      : [];
+          return {
+            name,
+            count,
+            confidence,
+            box,
+          };
+        })
+        .filter(Boolean)
+    : [];
 
   return {
     answer,
@@ -284,8 +233,7 @@ const PROVIDERS = {
       cameraSession = null,
       languageHint = 'en',
     }) {
-      const key =
-        process.env.GEMINI_API_KEY;
+      const key = process.env.GEMINI_API_KEY;
 
       if (!key) {
         throw makeError(
@@ -295,10 +243,7 @@ const PROVIDERS = {
         );
       }
 
-      if (
-        image &&
-        !cameraEnabled
-      ) {
+      if (image && !cameraEnabled) {
         throw makeError(
           'Vision frame supplied while camera is disabled',
           'CAMERA_STATE_MISMATCH',
@@ -306,13 +251,7 @@ const PROVIDERS = {
         );
       }
 
-      if (
-        image &&
-        cameraEnabled &&
-        !Number.isInteger(
-          cameraSession,
-        )
-      ) {
+      if (image && cameraEnabled && !Number.isInteger(cameraSession)) {
         throw makeError(
           'Vision frame is missing a valid camera session',
           'INVALID_CAMERA_SESSION',
@@ -320,49 +259,37 @@ const PROVIDERS = {
         );
       }
 
-      const normalizedImage =
-        cameraEnabled
-          ? normalizeImage(image)
-          : null;
+      const normalizedImage = cameraEnabled
+        ? normalizeImage(image)
+        : null;
 
-      const contents =
-        messages.map(
-          (message, index) => {
-            const parts = [
-              {
-                text: String(
-                  message.content ?? '',
-                ),
-              },
-            ];
-
-            if (
-              normalizedImage &&
-              message.role === 'user' &&
-              index ===
-                messages.length - 1
-            ) {
-              parts.push({
-                inline_data: {
-                  mime_type:
-                    normalizedImage.mimeType,
-                  data:
-                    normalizedImage.data,
-                },
-              });
-            }
-
-            return {
-              role:
-                message.role ===
-                'assistant'
-                  ? 'model'
-                  : 'user',
-
-              parts,
-            };
+      const contents = messages.map((message, index) => {
+        const parts = [
+          {
+            text: String(message.content ?? ''),
           },
-        );
+        ];
+
+        if (
+          normalizedImage &&
+          message.role === 'user' &&
+          index === messages.length - 1
+        ) {
+          parts.push({
+            inline_data: {
+              mime_type: normalizedImage.mimeType,
+              data: normalizedImage.data,
+            },
+          });
+        }
+
+        return {
+          role: message.role === 'assistant'
+            ? 'model'
+            : 'user',
+          parts,
+        };
+      });
 
       const model =
         process.env.GEMINI_MODEL ||
@@ -371,50 +298,37 @@ const PROVIDERS = {
       const endpoint =
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
-      const response =
-        await fetch(
-          endpoint,
-          {
-            method: 'POST',
+      const response = await fetch(endpoint, {
+        method: 'POST',
 
-            headers: {
-              'Content-Type':
-                'application/json',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': key,
+        },
 
-              'x-goog-api-key':
-                key,
-            },
-
-            body: JSON.stringify({
-              systemInstruction: {
-                parts: [
-                  {
-                    text:
-                      buildSystemPrompt(
-                        languageHint,
-                      ),
-                  },
-                ],
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [
+              {
+                text: buildSystemPrompt(languageHint),
               },
-
-              contents,
-
-              generationConfig: {
-                temperature: 0.3,
-                maxOutputTokens: 500,
-                responseMimeType:
-                  'application/json',
-                responseSchema:
-                  VISION_SCHEMA,
-              },
-            }),
+            ],
           },
-        );
 
-      const data =
-        await response
-          .json()
-          .catch(() => ({}));
+          contents,
+
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 500,
+            responseMimeType: 'application/json',
+            responseSchema: VISION_SCHEMA,
+          },
+        }),
+      });
+
+      const data = await response
+        .json()
+        .catch(() => ({}));
 
       if (!response.ok) {
         const message =
@@ -430,8 +344,7 @@ const PROVIDERS = {
         );
       }
 
-      const rawText =
-        extractText(data);
+      const rawText = extractText(data);
 
       if (!rawText) {
         throw makeError(
@@ -444,8 +357,7 @@ const PROVIDERS = {
       let parsed;
 
       try {
-        parsed =
-          JSON.parse(rawText);
+        parsed = JSON.parse(rawText);
       } catch {
         throw makeError(
           'Gemini returned invalid structured JSON',
@@ -455,9 +367,7 @@ const PROVIDERS = {
       }
 
       const visionData =
-        normalizeVisionResult(
-          parsed,
-        );
+        normalizeVisionResult(parsed);
 
       if (!visionData.answer) {
         throw makeError(
@@ -468,18 +378,13 @@ const PROVIDERS = {
       }
 
       return {
-        text:
-          visionData.answer,
+        text: visionData.answer,
 
-        provider:
-          'gemini',
+        provider: 'gemini',
 
         model,
 
-        vision:
-          Boolean(
-            normalizedImage,
-          ),
+        vision: Boolean(normalizedImage),
 
         visionData,
 
@@ -498,33 +403,22 @@ const PROVIDERS = {
  * =================================================== */
 
 function detectTTSLanguage(text) {
-  const value =
-    String(text || '');
+  const value = String(text || '');
 
-  if (
-    /[\u0900-\u097F]/.test(value)
-  ) {
+  if (/[\u0900-\u097F]/.test(value)) {
     return 'hi';
   }
 
-  if (
-    /[\u0980-\u09FF]/.test(value)
-  ) {
+  if (/[\u0980-\u09FF]/.test(value)) {
     return 'bn';
   }
 
   return 'en';
 }
 
-async function elevenLabsTTS(
-  text,
-  languageHint = 'en',
-) {
-  const apiKey =
-    process.env.ELEVENLABS_API_KEY;
-
-  const voiceId =
-    process.env.ELEVENLABS_VOICE_ID;
+async function elevenLabsTTS(text, languageHint='en') {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const voiceId = process.env.ELEVENLABS_VOICE_ID;
 
   if (!apiKey) {
     throw makeError(
@@ -542,12 +436,9 @@ async function elevenLabsTTS(
     );
   }
 
-  const detectedLanguage =
-    detectTTSLanguage(text);
-
+  const detectedLanguage = detectTTSLanguage(text);
   const languageCode =
-    languageHint === 'hi' ||
-    languageHint === 'bn'
+    languageHint === 'hi' || languageHint === 'bn'
       ? languageHint
       : detectedLanguage;
 
@@ -555,61 +446,38 @@ async function elevenLabsTTS(
     process.env.ELEVENLABS_MODEL ||
     'eleven_flash_v2_5';
 
-  const outputFormat =
-    'mp3_44100_128';
+  const outputFormat = 'mp3_44100_128';
 
   const endpoint =
     `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${encodeURIComponent(outputFormat)}`;
 
-  const started =
-    Date.now();
+  const started = Date.now();
 
   let response;
 
   try {
-    response =
-      await fetch(
-        endpoint,
-        {
-          method: 'POST',
+    response = await fetch(endpoint, {
+      method: 'POST',
 
-          headers: {
-            'Content-Type':
-              'application/json',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+        'Accept': 'audio/mpeg',
+      },
 
-            'xi-api-key':
-              apiKey,
+      body: JSON.stringify({
+        text: String(text),
+        model_id: modelId,
+        language_code: languageCode,
 
-            Accept:
-              'audio/mpeg',
-          },
-
-          body:
-            JSON.stringify({
-              text: String(text),
-
-              model_id:
-                modelId,
-
-              language_code:
-                languageCode,
-
-              voice_settings: {
-                stability:
-                  0.48,
-
-                similarity_boost:
-                  0.82,
-
-                style:
-                  0.22,
-
-                use_speaker_boost:
-                  true,
-              },
-            }),
+        voice_settings: {
+          stability: 0.48,
+          similarity_boost: 0.82,
+          style: 0.22,
+          use_speaker_boost: true,
         },
-      );
+      }),
+    });
   } catch (networkError) {
     throw makeError(
       `ElevenLabs network request failed: ${
@@ -622,34 +490,24 @@ async function elevenLabsTTS(
     );
   }
 
-  const latency =
-    Date.now() - started;
+  const latency = Date.now() - started;
 
   const contentType =
-    response.headers.get(
-      'content-type',
-    ) || '';
+    response.headers.get('content-type') || '';
 
   const requestId =
-    response.headers.get(
-      'request-id',
-    ) ||
-    response.headers.get(
-      'x-request-id',
-    ) ||
+    response.headers.get('request-id') ||
+    response.headers.get('x-request-id') ||
     '';
 
   if (!response.ok) {
     const raw =
-      await response
-        .text()
-        .catch(() => '');
+      await response.text().catch(() => '');
 
     let detail = raw;
 
     try {
-      const parsed =
-        JSON.parse(raw);
+      const parsed = JSON.parse(raw);
 
       detail =
         parsed?.detail?.message ||
@@ -670,9 +528,7 @@ async function elevenLabsTTS(
   }
 
   const audioBuffer =
-    Buffer.from(
-      await response.arrayBuffer(),
-    );
+    Buffer.from(await response.arrayBuffer());
 
   if (!audioBuffer.length) {
     throw makeError(
@@ -682,15 +538,10 @@ async function elevenLabsTTS(
     );
   }
 
-  if (
-    !contentType
-      .toLowerCase()
-      .includes('audio/')
-  ) {
+  if (!contentType.toLowerCase().includes('audio/')) {
     throw makeError(
       `ElevenLabs returned unexpected content type: ${
-        contentType ||
-        'unknown'
+        contentType || 'unknown'
       }`,
       'ELEVENLABS_BAD_CONTENT_TYPE',
       502,
@@ -699,147 +550,89 @@ async function elevenLabsTTS(
 
   return {
     audioBuffer,
-
     languageCode,
-
     modelId,
-
     voiceId,
-
     outputFormat,
-
     latency,
-
-    bytes:
-      audioBuffer.length,
-
+    bytes: audioBuffer.length,
     contentType,
-
     requestId,
   };
 }
 
-function json(
-  res,
-  status,
-  body,
-) {
-  return res
-    .status(status)
-    .json(body);
+function json(res, status, body) {
+  return res.status(status).json(body);
 }
 
-export default async function handler(
-  req,
-  res,
-) {
-  if (
-    req.method ===
-    'OPTIONS'
-  ) {
-    return res
-      .status(204)
-      .end();
+export default async function handler(req, res) {
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
   }
 
-  /*
-   * IMPORTANT:
-   * Gemini is deliberately fixed here.
-   *
-   * The previous deployed backend reported:
-   * "Unsupported AI provider: gemini"
-   *
-   * That happened because the wrong OpenAI-only robo.mjs
-   * was deployed while AI_PROVIDER remained "gemini".
-   */
-  const providerName =
-    'gemini';
+  const providerName = String(
+    process.env.AI_PROVIDER || 'gemini',
+  ).toLowerCase();
 
   /*
    * GET = diagnostics
    */
-  if (
-    req.method ===
-    'GET'
-  ) {
+  if (req.method === 'GET') {
     const configured =
-      Boolean(
-        process.env.GEMINI_API_KEY,
-      );
+      providerName === 'gemini'
+        ? Boolean(process.env.GEMINI_API_KEY)
+        : false;
 
-    return json(
-      res,
-      200,
-      {
-        ok: true,
+    return json(res, 200, {
+      ok: true,
 
-        provider:
-          'gemini',
+      provider: providerName,
 
-        configured,
+      configured,
+
+      model:
+        providerName === 'gemini'
+          ? process.env.GEMINI_MODEL ||
+            'gemini-3.1-flash-lite'
+          : null,
+
+      vision:
+        providerName === 'gemini',
+
+      structuredVision:
+        providerName === 'gemini',
+
+      elevenLabs: {
+        configured:
+          Boolean(process.env.ELEVENLABS_API_KEY),
+
+        voiceConfigured:
+          Boolean(process.env.ELEVENLABS_VOICE_ID),
 
         model:
-          process.env.GEMINI_MODEL ||
-          'gemini-3.1-flash-lite',
+          process.env.ELEVENLABS_MODEL ||
+          'eleven_flash_v2_5',
 
-        vision:
-          true,
+        endpoint:
+          '/v1/text-to-speech/:voice_id',
 
-        structuredVision:
-          true,
-
-        elevenLabs: {
-          configured:
-            Boolean(
-              process.env
-                .ELEVENLABS_API_KEY,
-            ),
-
-          voiceConfigured:
-            Boolean(
-              process.env
-                .ELEVENLABS_VOICE_ID,
-            ),
-
-          model:
-            process.env
-              .ELEVENLABS_MODEL ||
-            'eleven_flash_v2_5',
-
-          endpoint:
-            '/v1/text-to-speech/:voice_id',
-
-          authentication:
-            'xi-api-key',
-        },
+        authentication:
+          'xi-api-key',
       },
-    );
+    });
   }
 
-  if (
-    req.method !==
-    'POST'
-  ) {
-    return json(
-      res,
-      405,
-      {
-        error:
-          'Method not allowed',
-
-        code:
-          'METHOD_NOT_ALLOWED',
-      },
-    );
+  if (req.method !== 'POST') {
+    return json(res, 405, {
+      error: 'Method not allowed',
+      code: 'METHOD_NOT_ALLOWED',
+    });
   }
 
   try {
     const body =
-      typeof req.body ===
-      'string'
-        ? JSON.parse(
-            req.body,
-          )
+      typeof req.body === 'string'
+        ? JSON.parse(req.body)
         : req.body || {};
 
     /*
@@ -848,44 +641,25 @@ export default async function handler(
      * ---------------------------------------------------
      */
 
-    if (
-      body.tts === true
-    ) {
+    if (body.tts === true) {
       const text =
-        String(
-          body.text || '',
-        ).trim();
+        String(body.text || '').trim();
 
       if (!text) {
-        return json(
-          res,
-          400,
-          {
-            error:
-              'No TTS text supplied',
-
-            code:
-              'EMPTY_TTS_INPUT',
-          },
-        );
+        return json(res, 400, {
+          error: 'No TTS text supplied',
+          code: 'EMPTY_TTS_INPUT',
+        });
       }
 
       try {
         const languageHint =
-          body.languageHint ===
-            'hi' ||
-          body.languageHint ===
-            'bn'
+          body.languageHint === 'hi' || body.languageHint === 'bn'
             ? body.languageHint
-            : detectTTSLanguage(
-                text,
-              );
+            : detectTTSLanguage(text);
 
         const result =
-          await elevenLabsTTS(
-            text,
-            languageHint,
-          );
+          await elevenLabsTTS(text, languageHint);
 
         res.setHeader(
           'Content-Type',
@@ -894,9 +668,7 @@ export default async function handler(
 
         res.setHeader(
           'Content-Length',
-          String(
-            result.bytes,
-          ),
+          String(result.bytes),
         );
 
         res.setHeader(
@@ -921,9 +693,7 @@ export default async function handler(
 
         res.setHeader(
           'X-Robo-TTS-Bytes',
-          String(
-            result.bytes,
-          ),
+          String(result.bytes),
         );
 
         res.setHeader(
@@ -931,30 +701,16 @@ export default async function handler(
           `${result.latency}ms`,
         );
 
-        if (
-          result.requestId
-        ) {
+        if (result.requestId) {
           res.setHeader(
             'X-Robo-TTS-Request-ID',
             result.requestId,
           );
         }
 
-        /*
-         * HTTP headers must contain ASCII-safe data.
-         * Do NOT use the Unicode ellipsis character here.
-         */
         const maskedVoice =
-          result.voiceId.length >
-          8
-            ? result.voiceId.slice(
-                0,
-                4,
-              ) +
-              '-' +
-              result.voiceId.slice(
-                -4,
-              )
+          result.voiceId.length > 8
+            ? result.voiceId.slice(0, 4) + '…' + result.voiceId.slice(-4)
             : result.voiceId;
 
         res.setHeader(
@@ -964,15 +720,12 @@ export default async function handler(
 
         return res
           .status(200)
-          .send(
-            result.audioBuffer,
-          );
+          .send(result.audioBuffer);
+
       } catch (error) {
         return json(
           res,
-          Number.isInteger(
-            error?.status,
-          )
+          Number.isInteger(error?.status)
             ? error.status
             : 502,
           {
@@ -987,19 +740,16 @@ export default async function handler(
             elevenLabs: {
               configured:
                 Boolean(
-                  process.env
-                    .ELEVENLABS_API_KEY,
+                  process.env.ELEVENLABS_API_KEY,
                 ),
 
               voiceConfigured:
                 Boolean(
-                  process.env
-                    .ELEVENLABS_VOICE_ID,
+                  process.env.ELEVENLABS_VOICE_ID,
                 ),
 
               model:
-                process.env
-                  .ELEVENLABS_MODEL ||
+                process.env.ELEVENLABS_MODEL ||
                 'eleven_flash_v2_5',
             },
           },
@@ -1009,33 +759,25 @@ export default async function handler(
 
     /*
      * ---------------------------------------------------
-     * GEMINI VISION / CHAT REQUEST
+     * GEMINI REQUEST
      * ---------------------------------------------------
      */
 
     const provider =
-      PROVIDERS[
-        providerName
-      ];
+      PROVIDERS[providerName];
 
     if (!provider) {
-      return json(
-        res,
-        500,
-        {
-          error:
-            'Gemini provider is missing from server adapter',
+      return json(res, 400, {
+        error:
+          `Unsupported AI provider: ${providerName}`,
 
-          code:
-            'GEMINI_PROVIDER_MISSING',
-        },
-      );
+        code:
+          'UNSUPPORTED_PROVIDER',
+      });
     }
 
     const messages =
-      Array.isArray(
-        body.messages,
-      )
+      Array.isArray(body.messages)
         ? body.messages
         : [];
 
@@ -1045,58 +787,41 @@ export default async function handler(
           (m) =>
             m &&
             (
-              m.role ===
-                'user' ||
-              m.role ===
-                'assistant'
+              m.role === 'user' ||
+              m.role === 'assistant'
             ),
         )
         .slice(-12)
         .map((m) => ({
-          role:
-            m.role,
+          role: m.role,
 
           content:
             String(
-              m.content ||
-                '',
-            ).slice(
-              0,
-              12000,
-            ),
+              m.content || '',
+            ).slice(0, 12000),
         }))
         .filter(
           (m) =>
             m.content.trim(),
         );
 
-    if (
-      !cleanMessages.length
-    ) {
-      return json(
-        res,
-        400,
-        {
-          error:
-            'No conversation messages supplied',
+    if (!cleanMessages.length) {
+      return json(res, 400, {
+        error:
+          'No conversation messages supplied',
 
-          code:
-            'EMPTY_INPUT',
-        },
-      );
+        code:
+          'EMPTY_INPUT',
+      });
     }
 
     const languageHint =
-      body.languageHint ===
-        'hi' ||
-      body.languageHint ===
-        'bn'
+      body.languageHint === 'hi' || body.languageHint === 'bn'
         ? body.languageHint
         : 'en';
 
     const cameraEnabled =
-      body.cameraEnabled ===
-      true;
+      body.cameraEnabled === true;
 
     const cameraSession =
       Number.isInteger(
@@ -1106,52 +831,40 @@ export default async function handler(
         : null;
 
     const image =
-      cameraEnabled &&
-      body.image
+      cameraEnabled && body.image
         ? body.image
         : null;
 
     const result =
-      await provider.generate(
-        {
-          messages:
-            cleanMessages,
+      await provider.generate({
+        messages:
+          cleanMessages,
 
-          image,
+        image,
 
-          cameraEnabled,
+        cameraEnabled,
 
-          cameraSession,
+        cameraSession,
 
-          languageHint,
-        },
-      );
+        languageHint,
+      });
 
-    return json(
-      res,
-      200,
-      result,
-    );
+    return json(res, 200, result);
+
   } catch (error) {
     const status =
-      Number.isInteger(
-        error?.status,
-      )
+      Number.isInteger(error?.status)
         ? error.status
         : 500;
 
-    return json(
-      res,
-      status,
-      {
-        error:
-          error?.message ||
-          'AI provider error',
+    return json(res, status, {
+      error:
+        error?.message ||
+        'AI provider error',
 
-        code:
-          error?.code ||
-          'AI_PROVIDER_ERROR',
-      },
-    );
+      code:
+        error?.code ||
+        'AI_PROVIDER_ERROR',
+    });
   }
 }
