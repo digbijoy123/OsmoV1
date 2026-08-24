@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.63 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.64 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -222,11 +222,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.63 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.64 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.63</small></div>
+          <div class="brand">ROBO <small>v2.64</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -295,7 +295,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.63 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.64 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -874,7 +874,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   function renderLiveTargetPanel(){
-    // v2.63: the camera panel is intentionally clean.
+    // v2.64: the camera panel is intentionally clean.
     // Live identity is shown on the face tracking box itself.
     const summary=$('#visionSummary');
     if(!summary) return;
@@ -3013,11 +3013,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     micVoiceLevel=0;
   }
 
-  function getUserMediaSingleFlight(constraints, sessionToken, timeoutMs=12000){
+  function getUserMediaSingleFlight(constraints, sessionToken){
     if(cameraPermissionPromise){
       return cameraPermissionPromise;
     }
-    const promise=getUserMediaWithTimeout(constraints, timeoutMs).then(stream=>{
+    const promise=navigator.mediaDevices.getUserMedia(constraints);
+    cameraPermissionPromise=promise.then(stream=>{
       if(sessionToken!==cameraSession){
         stream.getTracks().forEach(t=>{try{t.stop();}catch(_){} });
         throw new DOMException('Camera start was cancelled','AbortError');
@@ -3026,48 +3027,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }).finally(()=>{
       cameraPermissionPromise=null;
     });
-    cameraPermissionPromise=promise;
     return cameraPermissionPromise;
-  }
-
-  function invalidateCameraStart(reason='cancelled') {
-    cameraStartAbortToken++;
-    cameraSession++;
-    cameraStartState='idle';
-    cameraStartQueued=false;
-    window.__roboCameraStarting=false;
-    cameraStartPromise=null;
-    log('CAM · startup invalidated · '+reason);
-  }
-
-  function getUserMediaWithTimeout(constraints, timeoutMs=12000){
-    let settled=false;
-    let timer=null;
-    let requestPromise;
-    try{ requestPromise=navigator.mediaDevices.getUserMedia(constraints); }
-    catch(err){ return Promise.reject(err); }
-    return new Promise((resolve,reject)=>{
-      const finish=(fn,value)=>{
-        if(settled)return;
-        settled=true;
-        if(timer)clearTimeout(timer);
-        fn(value);
-      };
-      timer=setTimeout(()=>{
-        const err=new DOMException('Camera permission request timed out','TimeoutError');
-        requestPromise.then(stream=>{
-          stream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
-        }).catch(()=>{});
-        finish(reject,err);
-      },timeoutMs);
-      requestPromise.then(stream=>{
-        if(settled){
-          stream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
-          return;
-        }
-        finish(resolve,stream);
-      }).catch(err=>finish(reject,err));
-    });
   }
 
   async function startCamera(facingMode=cameraFacingMode){
@@ -3264,28 +3224,17 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   async function toggleCamera(){
-    // Stable finite-state camera controller. Never allow a second start request
-    // while the browser is resolving the first permission/stream request.
     if(cameraEnabled || cameraStream){
-      cameraStartAbortToken++;
       stopCamera('manual OFF');
-      cameraStartState='idle';
-      cameraStartQueued=false;
       setVoiceStatus('CAMERA OFF · lens released · voice only');
       hideCaption(1800);
       return;
     }
 
-    if(cameraStartState==='starting' || window.__roboCameraStarting || cameraStartPromise){
-      log('CAM · tap ignored · camera start already in progress');
-      setVoiceStatus('CAMERA STARTING · please wait…');
+    if(window.__roboCameraStarting){
       return;
     }
-
-    cameraStartState='starting';
-    cameraStartQueued=true;
     window.__roboCameraStarting=true;
-    log('CAM · controller accepted user gesture · starting single-flight request');
 
     const btn=$('#cameraBtn');
     if(btn){
@@ -3295,24 +3244,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       btn.setAttribute('aria-pressed','true');
     }
 
-    const box=$('#cameraBox');
-    if(box) box.classList.remove('empty');
+    $('#cameraBox')?.classList.remove('empty');
     $('#mediaText').textContent='CAMERA STARTING';
     $('#mediaDot').className='dot live';
-    renderLiveTargetPanel();
-    log('CAM · start requested · user gesture confirmed');
 
     try{
       setVoiceStatus('CAMERA STARTING · requesting permission…');
-      const token=++cameraStartAbortToken;
+      cameraStartAbortToken++;
+      const token=cameraStartAbortToken;
       cameraStartPromise=startCamera(cameraFacingMode);
       await cameraStartPromise;
-      if(token!==cameraStartAbortToken){
-        throw new DOMException('Camera start superseded','AbortError');
-      }
+      if(token!==cameraStartAbortToken) throw new DOMException('Camera start superseded','AbortError');
 
-      cameraStartState='live';
-      cameraStartQueued=false;
       log('CAM · ON · '+cameraFacingMode+' · independent camera control');
       setVoiceStatus(
         cameraFacingMode==='environment'
@@ -3321,17 +3264,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       );
       hideCaption(2200);
     }catch(err){
-      cameraStartState='idle';
-      cameraStartQueued=false;
       stopCamera('startup failed');
       $('#mediaDot').className='dot';
-      $('#mediaText').textContent=
-        err?.name==='TimeoutError' ? 'CAMERA TIMEOUT' : 'CAMERA ERROR';
-      log('CAM · start failed · '+(err?.name||'unknown')+' · '+(err?.message||''));
+      $('#mediaText').textContent='CAMERA ERROR';
+      log(
+        'CAM · start failed · '+
+        (err?.name||'unknown')+
+        ' · '+
+        (err?.message||'')
+      );
       setVoiceStatus(
-        err?.name==='TimeoutError'
-          ? 'CAMERA TIMEOUT · tap CAMERA OFF then ON'
-          : 'CAMERA ERROR · '+(err?.message||err?.name||'camera unavailable')
+        'CAMERA ERROR · '+
+        (err?.message||err?.name||'camera unavailable')
       );
       hideCaption(5000);
     }finally{
@@ -3354,7 +3298,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   async function switchCamera(){
-    if(cameraStartState==='starting' || window.__roboCameraStarting || cameraStartPromise) return;
+    if(window.__roboCameraStarting) return;
     if(!cameraEnabled || !cameraStream){
       setVoiceStatus('CAMERA OFF · turn the camera on first');
       hideCaption(1800);
@@ -3377,37 +3321,21 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }finally{ window.__roboCameraStarting=false; }
   }
 
-  const cameraButton=$('#cameraBtn');
-  const cameraSwitchButton=$('#cameraSwitchBtn');
-  if(cameraButton){
-    const triggerCameraFromGesture=()=>{
-      const now=performance.now();
-      if(cameraButton.__roboLastGesture && now-cameraButton.__roboLastGesture<450) return;
-      cameraButton.__roboLastGesture=now;
-      void toggleCamera();
-    };
-    cameraButton.onclick=null;
-    cameraButton.addEventListener('click',triggerCameraFromGesture,{capture:true});
-    cameraButton.addEventListener('pointerdown',(event)=>{
-      if(event.isPrimary===false) return;
-      triggerCameraFromGesture();
-    },{capture:true,passive:true});
-    cameraButton.addEventListener('touchend',(event)=>{
-      if(event.cancelable) event.preventDefault();
-      triggerCameraFromGesture();
-    },{capture:true,passive:false});
-  }
-  if(cameraSwitchButton){
-    cameraSwitchButton.onclick=null;
-    cameraSwitchButton.addEventListener('click',switchCamera,{passive:true});
-  }
+  $('#cameraBtn').addEventListener('click',toggleCamera);
+  $('#cameraSwitchBtn').addEventListener('click',switchCamera);
   window.addEventListener('pageshow',()=>{
+    window.__roboCameraStarting=false;
     const btn=$('#cameraBtn');
-    if(btn && cameraStartState==='idle' && !cameraEnabled && !cameraStream){
+    if(btn && !cameraEnabled && !cameraStream){
       btn.disabled=false;
       btn.textContent='CAMERA OFF';
       btn.classList.remove('active');
       btn.setAttribute('aria-pressed','false');
+    }
+  });
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible'){
+      window.__roboCameraStarting=false;
     }
   });
 
@@ -4780,7 +4708,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.63 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.64 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4912,7 +4840,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.63 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.64 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
