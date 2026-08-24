@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.28 MODULE 8.2 LIVE FACE TRACKING HARDENED</title>
+<title>ROBO AIOS v2.29 MODULE 8.2 LIVE FACE TRACKING HARDENED</title>
 <style>
 :root{
   --void:#090d15;
@@ -215,7 +215,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.20.0/dist/tf-core.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.20.0/dist/tf-converter.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.20.0/dist/tf-backend-webgl.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js" defer></script>
 </head>
 <body>
@@ -225,11 +224,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.28 · MODULE 8.2 LIVE FACE TRACKING</div>
+      <div id="roboBuildMarker">ROBO v2.29 · MODULE 8.2 LIVE FACE TRACKING</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.28 · 8.2 LIVE FACE TRACKING + MEM + IDENTITY</small></div>
+          <div class="brand">ROBO <small>v2.29 · 8.2 LIVE FACE TRACKING + MEM + IDENTITY</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -298,7 +297,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.28 MODULE 8.2 · LIVE FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.29 MODULE 8.2 · LIVE FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -665,6 +664,65 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     })[0] || null;
   }
 
+  const BLAZEFACE_CDNS = [
+    'https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.js',
+    'https://unpkg.com/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.js'
+  ];
+  let blazeFaceLoadPromise = null;
+
+  function getBlazeFaceGlobal(){
+    return window.blazeface || window.blazeFace || null;
+  }
+
+  function loadExternalScript(src){
+    return new Promise((resolve,reject)=>{
+      const existing = Array.from(document.scripts).find(s=>s.src===src);
+      if(existing){
+        if(getBlazeFaceGlobal()) return resolve(getBlazeFaceGlobal());
+        existing.addEventListener('load',()=>resolve(getBlazeFaceGlobal()));
+        existing.addEventListener('error',()=>reject(new Error('script failed: '+src)),{once:true});
+        return;
+      }
+      const script=document.createElement('script');
+      script.src=src;
+      script.async=true;
+      script.crossOrigin='anonymous';
+      script.onload=()=>{
+        const lib=getBlazeFaceGlobal();
+        if(lib) resolve(lib);
+        else reject(new Error('script loaded but BlazeFace global was not created'));
+      };
+      script.onerror=()=>reject(new Error('script failed: '+src));
+      document.head.appendChild(script);
+    });
+  }
+
+  async function ensureBlazeFaceLibrary(){
+    const ready=getBlazeFaceGlobal();
+    if(ready) return ready;
+    if(blazeFaceLoadPromise) return blazeFaceLoadPromise;
+
+    blazeFaceLoadPromise=(async()=>{
+      let lastError=null;
+      for(const src of BLAZEFACE_CDNS){
+        try{
+          const lib=await loadExternalScript(src);
+          if(lib) return lib;
+        }catch(err){
+          lastError=err;
+          devLog('FACE ERROR','BlazeFace CDN load failed',{src,message:err?.message||String(err)});
+        }
+      }
+      throw lastError || new Error('BlazeFace library unavailable from all configured CDNs');
+    })();
+
+    try{
+      return await blazeFaceLoadPromise;
+    }finally{
+      if(!getBlazeFaceGlobal()) blazeFaceLoadPromise=null;
+    }
+  }
+
   async function ensureFaceEngine(){
     if(faceEngineReady) return true;
 
@@ -699,12 +757,14 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         throw new Error('TensorFlow backend failed to initialize');
       }
 
-      if(!window.blazeface){
-        throw new Error('BlazeFace library unavailable');
+      const blazeLib=await ensureBlazeFaceLibrary();
+
+      if(!blazeLib || typeof blazeLib.load!=='function'){
+        throw new Error('BlazeFace library loaded but load() is unavailable');
       }
 
       if(!blazeFaceModel){
-        blazeFaceModel=await blazeface.load({
+        blazeFaceModel=await blazeLib.load({
           maxFaces:10,
           scoreThreshold:0.45
         });
@@ -724,6 +784,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       // optional face-api recognition model downloads.
       faceEngineReady=true;
       faceRecognitionAvailable=false;
+      devLog('FACE','BlazeFace tracker ready',{backend:tf.getBackend(),video:`${camera.videoWidth}x${camera.videoHeight}`,cdn:getBlazeFaceGlobal()?'loaded':'missing'});
       faceRecognitionStatus='loading';
       faceBadge('LIVE FACE TRACKER ONLINE');
       faceDiag();
@@ -1028,7 +1089,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       !cameraEnabled ||
       !cameraStream ||
       !faceEngineReady ||
-      !window.faceapi ||
+      !blazeFaceReady ||
+      !blazeFaceModel ||
       !camera.videoWidth ||
       !camera.videoHeight ||
       camera.readyState < 2
