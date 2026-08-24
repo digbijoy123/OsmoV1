@@ -566,8 +566,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       const rawBox=d.box;
       if(!rawBox) return;
 
-      const isTarget=faceTarget===d;
-      const box=isTarget && faceSmoothedBox ? faceSmoothedBox : rawBox;
+      const isTarget=faceTarget===d && isValidFaceBox(faceTarget?.box);
+      const box=isTarget && isValidFaceBox(faceSmoothedBox) ? faceSmoothedBox : rawBox;
       const identity=(isTarget && faceRecognitionIdentity)
         ? faceRecognitionIdentity
         : (idx===0 ? 'FACE' : 'FACE '+(idx+1));
@@ -599,23 +599,36 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }
   }
 
+  function isValidFaceBox(box){
+    return !!box &&
+      Number.isFinite(Number(box.x)) &&
+      Number.isFinite(Number(box.y)) &&
+      Number.isFinite(Number(box.width)) &&
+      Number.isFinite(Number(box.height)) &&
+      Number(box.width)>1 &&
+      Number(box.height)>1;
+  }
+
   function boxCenter(box){
+    if(!isValidFaceBox(box)) return null;
     return {x:box.x+box.width/2,y:box.y+box.height/2};
   }
 
   function boxDistance(a,b){
     const ac=boxCenter(a), bc=boxCenter(b);
+    if(!ac || !bc) return Infinity;
     const dx=ac.x-bc.x, dy=ac.y-bc.y;
     return Math.hypot(dx,dy);
   }
 
   function choosePrimaryFace(detections){
-    if(!detections.length) return null;
+    const valid=detections.filter(d=>isValidFaceBox(d?.box));
+    if(!valid.length) return null;
 
-    if(faceTarget){
+    if(faceTarget && isValidFaceBox(faceTarget.box)){
       let best=null,bestDist=Infinity;
 
-      for(const d of detections){
+      for(const d of valid){
         const dist=boxDistance(faceTarget.box,d.box);
         if(dist<bestDist){
           bestDist=dist;
@@ -625,7 +638,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       if(
         best &&
-        bestDist < Math.max(camera.videoWidth,camera.videoHeight)*0.22
+        bestDist < Math.max(camera.videoWidth,camera.videoHeight)*0.28
       ){
         return best;
       }
@@ -634,13 +647,15 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const cx=camera.videoWidth/2;
     const cy=camera.videoHeight/2;
 
-    return detections.slice().sort((a,b)=>{
+    return valid.slice().sort((a,b)=>{
       const aa=a.box.width*a.box.height;
       const ab=b.box.width*b.box.height;
-      const da=Math.hypot(boxCenter(a.box).x-cx,boxCenter(a.box).y-cy);
-      const db=Math.hypot(boxCenter(b.box).x-cx,boxCenter(b.box).y-cy);
+      const ac=boxCenter(a.box);
+      const bc=boxCenter(b.box);
+      const da=ac?Math.hypot(ac.x-cx,ac.y-cy):Infinity;
+      const db=bc?Math.hypot(bc.x-cx,bc.y-cy):Infinity;
       return (ab-aa)*0.01 + da-db;
-    })[0];
+    })[0] || null;
   }
 
   async function ensureFaceEngine(){
@@ -670,8 +685,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       await faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URI);
 
       faceDetectionModel={
-        inputSize:224,
-        scoreThreshold:.52
+        inputSize:320,
+        scoreThreshold:.40
       };
 
       faceRecognitionAvailable=true;
@@ -749,7 +764,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(
       !detection ||
       !faceRecognitionAvailable ||
-      !camera.videoWidth
+      !camera.videoWidth ||
+      !camera.videoHeight ||
+      camera.readyState < 2
     ){
       return null;
     }
@@ -887,7 +904,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       !cameraStream ||
       !faceEngineReady ||
       !window.faceapi ||
-      !camera.videoWidth
+      !camera.videoWidth ||
+      !camera.videoHeight ||
+      camera.readyState < 2
     ){
       faceDetections=[];
       faceTarget=null;
@@ -905,12 +924,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           new faceapi.TinyFaceDetectorOptions(faceDetectionModel)
         );
 
-      const mapped=detections.map(d=>({
-        box:d.box,
-        score:d.score
-      }));
+      const mapped=detections
+        .map(d=>({box:d?.box||null,score:Number(d?.score||0)}))
+        .filter(d=>isValidFaceBox(d.box));
 
       faceDetections=mapped;
+
+      if(faceTarget && !isValidFaceBox(faceTarget.box)){
+        faceTarget=null;
+        faceTargetLostAt=0;
+        faceSmoothedBox=null;
+        faceTrackingInitialized=false;
+      }
 
       const primary=choosePrimaryFace(mapped);
 
@@ -980,7 +1005,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     }catch(err){
       devLog('FACE ERROR','tracking pass failed',{
-        message:err?.message||String(err)
+        name:err?.name||'Error',
+        message:err?.message||String(err),
+        stack:String(err?.stack||'').slice(0,300)
       });
     }
   }
@@ -999,10 +1026,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         return;
       }
 
-      faceLoopTimer=setTimeout(loop,110);
+      faceLoopTimer=setTimeout(loop,120);
 
       if(faceTickInFlight) return;
-      if(performance.now()-faceLastRun<90) return;
+      if(performance.now()-faceLastRun<105) return;
 
       faceLastRun=performance.now();
       faceTickInFlight=true;
@@ -1019,6 +1046,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function stopFaceLoop(){
     faceLoopToken++;
     faceTickInFlight=false;
+    faceLastRun=0;
     if(faceLoopTimer){
       clearTimeout(faceLoopTimer);
       faceLoopTimer=null;
