@@ -79,7 +79,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 .memoryIdentity[data-state="known"]{border-color:rgba(85,197,140,.55)}
 .memoryIdentity[data-state="unknown"]{border-color:rgba(240,180,91,.45)}
 .perceptionFusion{position:absolute;left:50%;bottom:10px;transform:translateX(-50%) translateY(5px);z-index:8;padding:5px 9px;border:1px solid rgba(95,212,208,.35);border-radius:999px;background:rgba(9,13,21,.76);backdrop-filter:blur(8px);font-size:8px;letter-spacing:.07em;color:#e8ffff;opacity:0;transition:.2s;white-space:nowrap;max-width:82%;overflow:hidden;text-overflow:ellipsis}.perceptionFusion.show{opacity:1;transform:translateX(-50%)}.perceptionFusion[data-state="known"]{border-color:rgba(85,197,140,.62)}.perceptionFusion[data-state="tracking"]{border-color:rgba(105,216,207,.58)}.perceptionFusion[data-state="unknown"]{border-color:rgba(240,180,91,.45)}
-.visionSummary{display:none!important;position:absolute;left:7px;right:7px;top:7px;max-height:23%;padding:7px 9px;border-radius:8px;background:rgba(9,13,21,.84);color:#fff;font-size:8px;line-height:1.35;letter-spacing:.03em;opacity:0;transform:translateY(-3px);transition:.2s;overflow:auto;overflow-wrap:anywhere;word-break:break-word;box-sizing:border-box;z-index:7;pointer-events:none}.camera .visionSummary::-webkit-scrollbar{width:3px}.camera .visionSummary::-webkit-scrollbar-thumb{background:rgba(255,255,255,.28);border-radius:3px}
+.visionSummary{position:absolute;left:7px;right:7px;top:7px;max-height:23%;padding:7px 9px;border-radius:8px;background:rgba(9,13,21,.84);color:#fff;font-size:8px;line-height:1.35;letter-spacing:.03em;opacity:0;transform:translateY(-3px);transition:.2s;overflow:auto;overflow-wrap:anywhere;word-break:break-word;box-sizing:border-box;z-index:7;pointer-events:none}.camera .visionSummary::-webkit-scrollbar{width:3px}.camera .visionSummary::-webkit-scrollbar-thumb{background:rgba(255,255,255,.28);border-radius:3px}
 .camera .visionSummary.show{opacity:1;transform:none}.visionTargetLine{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:8px;font-weight:800;letter-spacing:.04em}.visionTargetDot{width:6px;height:6px;border-radius:50%;background:#69d8cf;box-shadow:0 0 8px rgba(105,216,207,.65);flex:none}.visionTargetLine.unknown .visionTargetDot{background:#e6b85c;box-shadow:0 0 8px rgba(230,184,92,.55)}.visionTargetName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.visionSceneLine{display:block;white-space:normal;overflow-wrap:anywhere}.visionSceneLine.empty{opacity:.7}
 
 /* Avatar zone */
@@ -1128,8 +1128,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         active:getActivePerson()?.displayName||'UNKNOWN',
         bestDistance,
         threshold:0.62,
+        margin:matchedPeople[0]?.match?.secondDistance!=null && matchedPeople[0]?.match?.distance!=null
+          ? safeFixedNumber(matchedPeople[0].match.secondDistance-matchedPeople[0].match.distance,4,null)
+          : null,
+        liveDescriptorLength:(detections[0]?.descriptor?.length||0),
         profiles:profiles.length,
-        profileDescriptors:profiles.filter(p=>Array.isArray(p.descriptor)&&p.descriptor.length).length
+        profileDescriptors:profiles.filter(p=>Array.isArray(p.descriptor)&&p.descriptor.length===128).length
       });
     }catch(err){
       devLog('FACE ERROR','live identity refresh failed',{message:err?.message||String(err)});
@@ -1158,26 +1162,29 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
   function findFaceMatch(descriptor){
     const profiles=getStoredFaceProfiles();
-    if(!profiles.length){
+    const live=Array.from(descriptor||[],Number).filter(Number.isFinite);
+    if(live.length===0){
       faceRecognitionDistance=null;
       return null;
     }
 
     const ranked=[];
     for(const profile of profiles){
-      const arr=Array.isArray(profile?.descriptor)?profile.descriptor:[];
-      if(arr.length!==descriptor.length || descriptor.length===0) continue;
+      const arr=Array.from(profile?.descriptor||[],Number);
+      if(arr.length!==live.length || live.length!==128) continue;
+
       let sum=0;
       let valid=true;
-      for(let i=0;i<descriptor.length;i++){
-        const av=Number(descriptor[i]);
-        const bv=Number(arr[i]);
+      for(let i=0;i<live.length;i++){
+        const av=live[i];
+        const bv=arr[i];
         if(!Number.isFinite(av) || !Number.isFinite(bv)){ valid=false; break; }
         const diff=av-bv;
         sum+=diff*diff;
       }
-      if(!valid) continue;
-      ranked.push({profile,distance:Math.sqrt(sum)});
+      if(!valid || !Number.isFinite(sum)) continue;
+      const distance=Math.sqrt(sum);
+      if(Number.isFinite(distance)) ranked.push({profile,distance});
     }
 
     ranked.sort((a,b)=>a.distance-b.distance);
@@ -1187,14 +1194,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     if(!best) return null;
 
-    // Mobile-camera face-api matching should tolerate normal changes in
-    // lighting, pose, distance, and compression. Keep a standard-ish
-    // threshold while requiring a separation from the next-best person.
     const threshold=0.62;
     const marginRequired=best.distance<0.50 ? 0.025 : 0.015;
-    const marginOk=!second || (second.distance-best.distance)>=marginRequired;
+    const separation=!second || (second.distance-best.distance)>=marginRequired;
 
-    if(best.distance<=threshold && marginOk){
+    if(best.distance<=threshold && separation){
       return {
         ...best.profile,
         distance:best.distance,
