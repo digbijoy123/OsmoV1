@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.70 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.71 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -223,11 +223,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.70 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.71 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.70</small></div>
+          <div class="brand">ROBO <small>v2.71</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -296,7 +296,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.70 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.71 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -462,6 +462,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let stableTargetHoldUntil = 0;
   let stableTargetLastBox = null;
   let stableTargetLastSeenAt = 0;
+  // v2.71: Module 8.2 owns the physical target. Module 7.5 only establishes
+  // or changes identity; recognition refreshes never clear a visible target.
+  let activeFaceTarget = {
+    trackId:null, personId:null, name:null, confidence:0,
+    establishedAt:0, lastSeenAt:0, box:null
+  };
 
   const FACE_MODEL_URI = 'https://justadudewhohacks.github.io/face-api.js/models';
   const FACE_TARGET_HOLD_MS = 850;
@@ -873,7 +879,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   function renderLiveTargetPanel(){
-    // v2.70: the camera panel is intentionally clean.
+    // v2.71: the camera panel is intentionally clean.
     // Live identity is shown on the face tracking box itself.
     const summary=$('#visionSummary');
     if(!summary) return;
@@ -903,6 +909,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       const targetIdentity=(
         isTarget
           ? (
+              (activeFaceTarget.trackId===faceTarget?.trackId ? activeFaceTarget.name : null)||
               faceTarget?.identity||
               faceTarget?.lastKnownIdentity||
               faceRecognitionIdentity||
@@ -977,6 +984,73 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function safeFixedNumber(value, digits=4, fallback=null){
     const n=Number(value);
     return Number.isFinite(n) ? Number(n.toFixed(digits)) : fallback;
+  }
+
+  function commitActiveFaceIdentity(person, confidence=0, reason='identity-confirmed'){
+    if(!person?.personId) return false;
+    const now=performance.now();
+    const trackId=faceTarget?.trackId || activeFaceTarget.trackId || `track-${stableTargetGeneration || 1}`;
+    const samePerson=activeFaceTarget.personId===person.personId;
+    activeFaceTarget={
+      trackId,
+      personId:person.personId,
+      name:person.displayName||'UNKNOWN',
+      confidence:Math.max(0,Math.min(100,Number(confidence)||0)),
+      establishedAt:samePerson && activeFaceTarget.establishedAt ? activeFaceTarget.establishedAt : now,
+      lastSeenAt:now,
+      box:cloneBox(faceSmoothBox||faceTarget?.box)
+    };
+    stableTargetPersonId=person.personId;
+    stableTargetIdentity=activeFaceTarget.name;
+    stableTargetSince=activeFaceTarget.establishedAt;
+    stableTargetLastSeenAt=now;
+    stableTargetLastBox=cloneBox(activeFaceTarget.box);
+    faceRecognitionIdentity=activeFaceTarget.name;
+    faceRecognitionStatus='recognized';
+    lastKnownPersonId=person.personId;
+    lastKnownPersonAt=Date.now();
+    setActivePerson(person.personId,reason);
+    if(faceTarget){
+      faceTarget.trackId=trackId;
+      faceTarget.personId=person.personId;
+      faceTarget.identity=activeFaceTarget.name;
+      faceTarget.lastKnownPersonId=person.personId;
+      faceTarget.lastKnownIdentity=activeFaceTarget.name;
+      faceTarget.lastKnownAt=Date.now();
+      faceTarget.identityConfidence=activeFaceTarget.confidence;
+    }
+    return true;
+  }
+
+  function refreshActiveFaceTargetFromTracker(reason='tracker-update'){
+    if(!activeFaceTarget.personId || !activeFaceTarget.name || !faceTarget) return false;
+    const now=performance.now();
+    activeFaceTarget.lastSeenAt=now;
+    activeFaceTarget.box=cloneBox(faceSmoothBox||faceTarget.box);
+    stableTargetLastSeenAt=now;
+    stableTargetLastBox=cloneBox(activeFaceTarget.box);
+    faceRecognitionIdentity=activeFaceTarget.name;
+    faceRecognitionStatus='recognized';
+    const person=roboMemory?.persons?.find(p=>p.personId===activeFaceTarget.personId);
+    if(person) setActivePerson(person.personId,reason);
+    faceTarget.personId=activeFaceTarget.personId;
+    faceTarget.identity=activeFaceTarget.name;
+    faceTarget.lastKnownPersonId=activeFaceTarget.personId;
+    faceTarget.lastKnownIdentity=activeFaceTarget.name;
+    faceTarget.lastKnownAt=Date.now();
+    faceTarget.identityConfidence=Math.max(60,activeFaceTarget.confidence||0);
+    return true;
+  }
+
+  function releaseActiveFaceTarget(reason='target-disappeared'){
+    activeFaceTarget={trackId:null,personId:null,name:null,confidence:0,establishedAt:0,lastSeenAt:0,box:null};
+    stableTargetPersonId=null; stableTargetIdentity=null; stableTargetSince=0;
+    stableTargetHoldUntil=0; stableTargetLastSeenAt=0; stableTargetLastBox=null;
+    faceRecognitionIdentity=null;
+    faceRecognitionDistance=null;
+    faceRecognitionStatus=getStoredFaceProfiles().length?'ready':'not-enrolled';
+    lastKnownPersonId=null;
+    setActivePerson(null,reason);
   }
 
   async function recognizeAllVisibleFaces(){
@@ -1115,35 +1189,14 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         );
 
         if(person){
-          setActivePerson(person.personId,'live-face-identity');
-          lastKnownPersonId=person.personId;
-          lastKnownPersonAt=Date.now();
-
-          faceRecognitionIdentity=person.displayName||'UNKNOWN';
-          faceRecognitionStatus='recognized';
-
-          const matched=matchedPeople.find(
-            x=>x.live===primary
-          );
-
+          const matched=matchedPeople.find(x=>x.live===primary);
           faceRecognitionDistance=
             Number.isFinite(Number(matched?.match?.distance))
               ? Number(matched.match.distance)
               : faceRecognitionDistance;
-
+          commitActiveFaceIdentity(person,matched?.confidence||primary.identityConfidence||0,'live-face-identity');
           primary.identity=person.displayName||'UNKNOWN';
           primary.personId=person.personId;
-          primary.identityConfidence=matched?.confidence||primary.identityConfidence||0;
-          primary.lastKnownIdentity=primary.identity;
-          primary.lastKnownPersonId=primary.personId;
-          primary.lastKnownAt=Date.now();
-          primary.lastKnownIdentityConfidence=primary.identityConfidence;
-          stableTargetPersonId=person.personId;
-          stableTargetIdentity=person.displayName||'UNKNOWN';
-          stableTargetSince=stableTargetSince||Date.now();
-          stableTargetHoldUntil=performance.now()+5000;
-          stableTargetLastSeenAt=performance.now();
-          stableTargetLastBox=cloneBox(primary.box||live.box);
 
           // Add only confident samples to the person's adaptive template bank.
           if(
@@ -1163,115 +1216,19 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           }
         }
       }else if(primary){
-        const identity=primary.identity||primary.lastKnownIdentity||'UNKNOWN';
-        faceRecognitionIdentity=
-          identity!=='UNKNOWN'
-            ? identity
-            : null;
-
-        faceRecognitionStatus=
-          faceRecognitionIdentity
-            ? 'recognized'
-            : (profiles.length?'ready':'not-enrolled');
-
-        if(!faceRecognitionIdentity){
-          /*
-           * v2.70: the tracked face is the authority during a recognition
-           * refresh. If the same live target is still present, NEVER clear its
-           * name because one descriptor pass failed. Recognition gets another
-           * chance on the next cycle.
-           */
-          const trackedPersonId =
-            primary.lastKnownPersonId ||
-            stableTargetPersonId ||
-            lastKnownPersonId ||
-            null;
-
-          const holdAge =
-            performance.now() - (stableTargetLastSeenAt || 0);
-
-          const sameTrackedTarget =
-            !!trackedPersonId &&
-            (
-              stableTargetPersonId===trackedPersonId ||
-              lastKnownPersonId===trackedPersonId ||
-              primary.personId===trackedPersonId
-            );
-
-          const keepStable=Boolean(
-            sameTrackedTarget &&
-            stableTargetIdentity &&
-            holdAge < 8000
-          );
-
-          if(keepStable){
-            faceRecognitionIdentity=
-              primary.lastKnownIdentity ||
-              stableTargetIdentity ||
-              null;
-            faceRecognitionStatus='recognized-hold';
-            primary.identity=faceRecognitionIdentity||'UNKNOWN';
-            primary.personId=trackedPersonId;
-            primary.lastKnownIdentity=faceRecognitionIdentity||primary.lastKnownIdentity||null;
-            primary.lastKnownPersonId=trackedPersonId;
-            primary.lastKnownAt=Date.now();
-            primary.identityConfidence=
-              Math.max(
-                primary.lastKnownIdentityConfidence||0,
-                60
-              );
-            stableTargetLastSeenAt=performance.now();
-
-            const heldPerson=roboMemory?.persons?.find(
-              p=>p.personId===trackedPersonId
-            );
-            if(heldPerson){
-              setActivePerson(heldPerson.personId,'face-identity-hold');
-            }
-          }else{
-            setActivePerson(null,'face-identity-unknown');
-            primary.identity='UNKNOWN';
-            primary.personId=null;
-            primary.identityConfidence=0;
-          }
-        }
-      }else{
-        /*
-         * Identity flicker fix: a temporary detector/recognizer miss is not
-         * evidence that the visible target changed. Keep the last confirmed
-         * identity for the same live session for the existing hold window.
-         * A true disappearance lasts beyond the hold window before identity
-         * is cleared.
-         */
-        const holdActive=Boolean(
-          stableTargetPersonId &&
-          stableTargetIdentity &&
-          (performance.now()-stableTargetLastSeenAt)<5000 &&
-          stableTargetLastBox
-        );
-
-        if(holdActive){
-          faceRecognitionIdentity=stableTargetIdentity;
-          faceRecognitionStatus='recognized-hold';
-          faceRecognitionDistance=faceRecognitionDistance;
-          const heldPerson=roboMemory?.persons?.find(
-            p=>p.personId===stableTargetPersonId
-          );
-          if(heldPerson){
-            setActivePerson(heldPerson.personId,'face-identity-hold');
-          }
+        // A weak/failed recognition result never invalidates a currently tracked target.
+        if(activeFaceTarget.personId && activeFaceTarget.trackId===primary.trackId){
+          refreshActiveFaceTargetFromTracker('recognition-miss-keep-target');
+        }else if(primary.lastKnownPersonId && primary.lastKnownIdentity){
+          const held=roboMemory?.persons?.find(p=>p.personId===primary.lastKnownPersonId);
+          if(held) commitActiveFaceIdentity(held,primary.lastKnownIdentityConfidence||60,'recognition-miss-held');
         }else{
           faceRecognitionIdentity=null;
           faceRecognitionStatus=profiles.length?'ready':'not-enrolled';
-          setActivePerson(null,'no-live-face-match');
-          faceRecognitionDistance=null;
-          stableTargetPersonId=null;
-          stableTargetIdentity=null;
-          stableTargetLastBox=null;
-          stableTargetLastSeenAt=0;
         }
+      }else{
+        // No tracked primary: release is owned by faceTrackingTick, not recognition.
       }
-
       faceLastRecognitionAt=performance.now();
 
       faceDiag();
@@ -1434,7 +1391,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const threshold=faceRecognitionThreshold;
 
     /*
-     * LIVE IDENTITY HYSTERESIS (v2.70)
+     * LIVE IDENTITY HYSTERESIS (v2.71)
      *
      * Once Robo has a confirmed person attached to the current tracked face,
      * recognition is a verifier. A single descriptor wobble must not turn a
@@ -1650,40 +1607,30 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
   function syncLiveIdentityAndSocial(reason='live-sync'){
     const faces=Array.isArray(faceDetections)?faceDetections:[];
-    if(!faces.length){
-      if(faceRecognitionIdentity || getActivePerson()){
-        faceRecognitionIdentity=null;
-        faceRecognitionDistance=null;
-        faceRecognitionStatus=getStoredFaceProfiles().length?'ready':'not-enrolled';
-        setActivePerson(null,reason+'-no-face');
+
+    // Module 8.2 is the physical-target authority. While the face remains
+    // tracked, Module 7.5 may verify identity but may not clear it.
+    if(faces.length && faceTarget){
+      const primary=faceTarget;
+      if(activeFaceTarget.personId && activeFaceTarget.trackId===primary.trackId){
+        refreshActiveFaceTargetFromTracker(reason+'-target-authority');
+      }else if(primary.identity && primary.identity!=='UNKNOWN' && primary.personId){
+        const person=roboMemory?.persons?.find(p=>p.personId===primary.personId);
+        if(person) commitActiveFaceIdentity(person,primary.identityConfidence||0,reason+'-known');
       }
+      deriveLiveSocialFromFaces(faces);
       renderFaceTarget();
       renderMemoryIdentity();
       renderMemoryDiagnostics();
-      updatePerceptionFusion(reason+'-empty');
-      deriveLiveSocialFromFaces(faces);
+      updatePerceptionFusion(reason+'-tracked');
       return;
     }
-    const primary=faceTarget||choosePrimaryFace(faces);
-    if(primary && primary.identity && primary.identity!=='UNKNOWN'){
-      const person=roboMemory?.persons?.find(p=>p.personId===primary.personId);
-      if(person){
-        setActivePerson(person.personId,reason+'-known');
-        faceRecognitionIdentity=person.displayName||'UNKNOWN';
-        faceRecognitionStatus='recognized';
-      }
-    }else{
-      setActivePerson(null,reason+'-unknown');
-      if(primary){
-        faceRecognitionIdentity=primary.lastKnownIdentity||'UNKNOWN';
-        if(faceRecognitionIdentity==='UNKNOWN') faceRecognitionStatus=getStoredFaceProfiles().length?'ready':'not-enrolled';
-      }
-    }
+
     deriveLiveSocialFromFaces(faces);
     renderFaceTarget();
     renderMemoryIdentity();
     renderMemoryDiagnostics();
-    updatePerceptionFusion(reason);
+    updatePerceptionFusion(reason+'-empty');
   }
 
   function deriveLiveSocialFromFaces(faces){
@@ -1777,12 +1724,22 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
         faceTarget=primary;
         faceTargetLostAt=0;
+        // A new track ID is created only after a genuine target acquisition.
+        // Ordinary detector movement must never create a new identity session.
+        if(!faceTarget.trackId) faceTarget.trackId=`track-${++stableTargetGeneration}`;
+        if(reacquired) faceTarget.trackId=`track-${++stableTargetGeneration}`;
+        if(activeFaceTarget.personId && activeFaceTarget.trackId===faceTarget.trackId && !targetChanged){
+          refreshActiveFaceTargetFromTracker('target-tracking');
+        }
 
         if(targetChanged){
           /* A detector box moving is NOT a new person. Keep the confirmed
              identity attached to the continuous track. Only clear identity
              when the previous target was genuinely lost/replaced. */
           const wasReacquired=Boolean(reacquired || !previousTarget);
+          if(wasReacquired && activeFaceTarget.trackId && activeFaceTarget.trackId!==primary.trackId){
+            releaseActiveFaceTarget('new-target-acquired');
+          }
           if(wasReacquired){
             stableTargetGeneration++;
             stableTargetSince=Date.now();
@@ -1792,7 +1749,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             lastLiveIdentitySyncAt=0;
           }
 
-          if(primary.lastKnownIdentity){
+          if(activeFaceTarget.personId && activeFaceTarget.trackId===primary.trackId){
+            primary.identity=activeFaceTarget.name;
+            primary.personId=activeFaceTarget.personId;
+            primary.identityConfidence=activeFaceTarget.confidence;
+            refreshActiveFaceTargetFromTracker('target-continuity');
+          }else if(primary.lastKnownIdentity){
             primary.identity=primary.lastKnownIdentity;
             primary.personId=primary.lastKnownPersonId||null;
             primary.identityConfidence=primary.lastKnownIdentityConfidence||0;
@@ -1863,16 +1825,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         ){
           faceTarget=null;
           faceSmoothBox=null;
-          faceRecognitionIdentity=null;
-          stableTargetPersonId=null;
-          stableTargetIdentity=null;
-          stableTargetSince=0;
+          releaseActiveFaceTarget('face-target-lost');
           stableTargetGeneration++;
-          faceRecognitionStatus=
-            getStoredFaceProfiles().length
-              ? 'ready'
-              : 'not-enrolled';
-          if(roboMemory){ setActivePerson(null,'face-target-lost'); renderMemoryIdentity(); renderMemoryDiagnostics(); }
+          if(roboMemory){ renderMemoryIdentity(); renderMemoryDiagnostics(); }
         }
       }
 
@@ -2051,7 +2006,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const social = socialAwareness || {};
     const center = getTrackedFaceCenter();
     const hasTrackedFace = Boolean(faceTarget && center);
-    const knownName = String(faceRecognitionIdentity || '').trim();
+    const currentTargetName = activeFaceTarget.trackId===faceTarget?.trackId ? activeFaceTarget.name : null;
+    const knownName = String(currentTargetName || faceRecognitionIdentity || '').trim();
     const known = ['recognized','recognized-hold'].includes(faceRecognitionStatus) && Boolean(knownName);
     const identityConfidence = known
       ? Math.max(0, Math.min(100, Math.round(faceRecognitionDistance != null
@@ -4840,7 +4796,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.70 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.71 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4972,7 +4928,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.70 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.71 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
