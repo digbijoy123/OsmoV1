@@ -2,7 +2,7 @@
  * ROBO AIOS — Gemini AI + vision adapter
  * Vercel serverless function: /api/robo
  *
- * v2.39 backend (clean baseline companion)
+ * v2.40 backend (clean baseline companion)
  *
  * FIXES:
  * - Explicitly accepts cameraEnabled from client.
@@ -96,12 +96,21 @@ const VISION_SCHEMA = {
           },
         },
 
-        required: ['name', 'count', 'confidence', 'box'],
+        required: [
+          'name',
+          'count',
+          'confidence',
+          'box',
+        ],
       },
     },
   },
 
-  required: ['answer', 'scene', 'objects'],
+  required: [
+    'answer',
+    'scene',
+    'objects',
+  ],
 };
 
 function makeError(message, code, status) {
@@ -207,7 +216,10 @@ function normalizeVisionResult(value) {
             Number.isFinite(confidenceRaw)
               ? Math.max(
                   0,
-                  Math.min(100, confidenceRaw),
+                  Math.min(
+                    100,
+                    confidenceRaw,
+                  ),
                 )
               : 0;
 
@@ -338,6 +350,7 @@ const PROVIDERS = {
                 inline_data: {
                   mime_type:
                     normalizedImage.mimeType,
+
                   data:
                     normalizedImage.data,
                 },
@@ -349,6 +362,7 @@ const PROVIDERS = {
                 message.role === 'assistant'
                   ? 'model'
                   : 'user',
+
               parts,
             };
           },
@@ -370,6 +384,7 @@ const PROVIDERS = {
             headers: {
               'Content-Type':
                 'application/json',
+
               'x-goog-api-key':
                 key,
             },
@@ -390,9 +405,12 @@ const PROVIDERS = {
 
               generationConfig: {
                 temperature: 0.3,
+
                 maxOutputTokens: 500,
+
                 responseMimeType:
                   'application/json',
+
                 responseSchema:
                   VISION_SCHEMA,
               },
@@ -414,9 +432,11 @@ const PROVIDERS = {
 
         throw makeError(
           message,
+
           data?.error?.status ||
             data?.error?.code ||
             'GEMINI_API_ERROR',
+
           response.status,
         );
       }
@@ -436,7 +456,9 @@ const PROVIDERS = {
 
       try {
         parsed =
-          JSON.parse(rawText);
+          JSON.parse(
+            rawText,
+          );
       } catch {
         throw makeError(
           'Gemini returned invalid structured JSON',
@@ -591,8 +613,11 @@ async function elevenLabsTTS(
 
             voice_settings: {
               stability: 0.48,
+
               similarity_boost: 0.82,
+
               style: 0.22,
+
               use_speaker_boost: true,
             },
           }),
