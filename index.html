@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.74 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.75 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -223,11 +223,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.74 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.75 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.74</small></div>
+          <div class="brand">ROBO <small>v2.75</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -296,7 +296,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.74 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.75 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -469,7 +469,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let stableTargetLastBox = null;
   let stableTargetLastSeenAt = 0;
   let faceVisualGuardFrame = 0;
-  // v2.74: Module 8.2 owns the physical target. Module 7.5 only establishes
+  // v2.75: Module 8.2 owns the physical target. Module 7.5 only establishes
   // or changes identity; recognition refreshes never clear a visible target.
   let activeFaceTarget = {
     trackId:null, personId:null, name:null, confidence:0,
@@ -888,7 +888,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   function renderLiveTargetPanel(){
-    // v2.74: the camera panel is intentionally clean.
+    // v2.75: the camera panel is intentionally clean.
     // Live identity is shown on the face tracking box itself.
     const summary=$('#visionSummary');
     if(!summary) return;
@@ -1078,6 +1078,29 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     setActivePerson(null,reason);
   }
 
+  function preserveActiveTargetIdentity(primary, reason='identity-authority') {
+    if(!primary || !activeFaceTarget?.personId || !activeFaceTarget?.name) return false;
+    const person = roboMemory?.persons?.find(p => p.personId === activeFaceTarget.personId) || null;
+    primary.personId = activeFaceTarget.personId;
+    primary.identity = activeFaceTarget.name;
+    primary.lastKnownPersonId = activeFaceTarget.personId;
+    primary.lastKnownIdentity = activeFaceTarget.name;
+    primary.identityConfidence = Math.max(60, Number(activeFaceTarget.confidence) || 60);
+    primary.lastKnownAt = Date.now();
+    faceRecognitionIdentity = activeFaceTarget.name;
+    faceRecognitionStatus = 'recognized';
+    if(person) setActivePerson(person.personId, reason);
+    if(faceTarget){
+      faceTarget.personId = activeFaceTarget.personId;
+      faceTarget.identity = activeFaceTarget.name;
+      faceTarget.lastKnownPersonId = activeFaceTarget.personId;
+      faceTarget.lastKnownIdentity = activeFaceTarget.name;
+      faceTarget.lastKnownAt = Date.now();
+      faceTarget.identityConfidence = Math.max(60, Number(activeFaceTarget.confidence) || 60);
+    }
+    return true;
+  }
+
   async function recognizeAllVisibleFaces(){
     if(
       faceRecognitionInFlight ||
@@ -1209,43 +1232,37 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           ))
         : choosePrimaryFace(liveFaces);
 
-      if(primary && primary.personId){
-        const person=roboMemory?.persons?.find(
-          p=>p.personId===primary.personId
-        );
-
-        if(person){
+      if(primary){
+        /*
+         * TARGET AUTHORITY RULE (v2.75):
+         * Once Module 8.2 has an active physical target with an attached
+         * identity, Module 7.5 may verify it, but recognition is NOT allowed
+         * to clear or replace that identity. Only target lifecycle code may
+         * release the identity after the physical target is gone.
+         */
+        if(activeFaceTarget.personId && activeFaceTarget.name){
           const matched=matchedPeople.find(x=>x.live===primary);
-          faceRecognitionDistance=
-            Number.isFinite(Number(matched?.match?.distance))
-              ? Number(matched.match.distance)
-              : faceRecognitionDistance;
-          commitActiveFaceIdentity(person,matched?.confidence||primary.identityConfidence||0,'live-face-identity');
-          primary.identity=person.displayName||'UNKNOWN';
-          primary.personId=person.personId;
-
-          // Do not mutate the memory template bank while an active target is
-          // being tracked. Recognition must remain deterministic; background
-          // learning can happen later under a separate, explicit gate.
-        }
-      }else if(primary){
-        // A weak/failed recognition result never invalidates a currently tracked target.
-        if(activeFaceTarget.personId && (!activeFaceTarget.trackId || activeFaceTarget.trackId===primary.trackId)){
-          primary.personId=activeFaceTarget.personId;
-          primary.identity=activeFaceTarget.name;
-          primary.lastKnownPersonId=activeFaceTarget.personId;
-          primary.lastKnownIdentity=activeFaceTarget.name;
-          primary.identityConfidence=activeFaceTarget.confidence;
-          refreshActiveFaceTargetFromTracker('recognition-miss-keep-target');
+          if(matched?.match?.distance!=null){
+            faceRecognitionDistance=Number(matched.match.distance);
+          }
+          preserveActiveTargetIdentity(primary, matched ? 'identity-verified' : 'identity-authority-hold');
+        }else if(primary.personId){
+          const person=roboMemory?.persons?.find(p=>p.personId===primary.personId);
+          if(person){
+            const matched=matchedPeople.find(x=>x.live===primary);
+            faceRecognitionDistance=
+              Number.isFinite(Number(matched?.match?.distance))
+                ? Number(matched.match.distance)
+                : faceRecognitionDistance;
+            commitActiveFaceIdentity(person,matched?.confidence||primary.identityConfidence||0,'live-face-identity');
+            primary.identity=person.displayName||'UNKNOWN';
+            primary.personId=person.personId;
+          }
         }else if(primary.lastKnownPersonId && primary.lastKnownIdentity){
           const held=roboMemory?.persons?.find(p=>p.personId===primary.lastKnownPersonId);
           if(held) commitActiveFaceIdentity(held,primary.lastKnownIdentityConfidence||60,'recognition-miss-held');
-        }else{
-          faceRecognitionIdentity=null;
-          faceRecognitionStatus=profiles.length?'ready':'not-enrolled';
         }
-      }else{
-        // No tracked primary: release is owned by faceTrackingTick, not recognition.
+        // No primary: target lifecycle owns release. Never clear identity here.
       }
       faceLastRecognitionAt=performance.now();
 
@@ -1409,7 +1426,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const threshold=faceRecognitionThreshold;
 
     /*
-     * LIVE IDENTITY HYSTERESIS (v2.74)
+     * LIVE IDENTITY HYSTERESIS (v2.75)
      *
      * Once Robo has a confirmed person attached to the current tracked face,
      * recognition is a verifier. A single descriptor wobble must not turn a
@@ -1864,14 +1881,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             lastLiveIdentitySyncAt=0;
           }
 
-          if(activeFaceTarget.personId && activeFaceTarget.trackId===primary.trackId){
-            primary.identity=activeFaceTarget.name;
-            primary.personId=activeFaceTarget.personId;
-            primary.identityConfidence=activeFaceTarget.confidence;
-            refreshActiveFaceTargetFromTracker('target-continuity');
-          }else if(primary.lastKnownIdentity){
+          if(activeFaceTarget.personId && activeFaceTarget.name){
+            /* Existing target identity survives detector/reacquisition churn.
+             * A new name can only be established after releaseActiveFaceTarget(). */
+            preserveActiveTargetIdentity(primary, wasReacquired ? 'target-reacquired-same-identity' : 'target-continuity');
+          }else if(primary.lastKnownIdentity && primary.lastKnownPersonId){
             primary.identity=primary.lastKnownIdentity;
-            primary.personId=primary.lastKnownPersonId||null;
+            primary.personId=primary.lastKnownPersonId;
             primary.identityConfidence=primary.lastKnownIdentityConfidence||0;
             faceRecognitionIdentity=primary.lastKnownIdentity;
             faceRecognitionStatus='recognized';
@@ -4926,7 +4942,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.74 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.75 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -5058,7 +5074,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.74 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.75 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
