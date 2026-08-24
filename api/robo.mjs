@@ -2,7 +2,7 @@
  * ROBO AIOS — Gemini AI + vision adapter
  * Vercel serverless function: /api/robo
  *
- * v2.40 backend (clean baseline companion)
+ * v2.41 backend (clean baseline companion)
  *
  * FIXES:
  * - Explicitly accepts cameraEnabled from client.
@@ -22,6 +22,7 @@ const SYSTEM_PROMPT =
   'For questions about what the user sees, answer from the attached camera image, not from assumptions. ' +
   'Never claim that no image exists when an image is attached. ' +
   'Never invent objects or details that are not reasonably visible. ' +
+  'When the client supplies a multi-person memory or perception context, use it only as contextual state; do not override a current camera image with stale identity claims. ' +
   'For object detection, report prominent visible objects only. ' +
   'Bounding boxes must be [ymin, xmin, ymax, xmax] normalized to 0-1000. ' +
   'For counting questions such as fingers, people, objects, or items, inspect the image and give the best visible count. ' +
@@ -96,21 +97,12 @@ const VISION_SCHEMA = {
           },
         },
 
-        required: [
-          'name',
-          'count',
-          'confidence',
-          'box',
-        ],
+        required: ['name', 'count', 'confidence', 'box'],
       },
     },
   },
 
-  required: [
-    'answer',
-    'scene',
-    'objects',
-  ],
+  required: ['answer', 'scene', 'objects'],
 };
 
 function makeError(message, code, status) {
@@ -216,10 +208,7 @@ function normalizeVisionResult(value) {
             Number.isFinite(confidenceRaw)
               ? Math.max(
                   0,
-                  Math.min(
-                    100,
-                    confidenceRaw,
-                  ),
+                  Math.min(100, confidenceRaw),
                 )
               : 0;
 
@@ -350,7 +339,6 @@ const PROVIDERS = {
                 inline_data: {
                   mime_type:
                     normalizedImage.mimeType,
-
                   data:
                     normalizedImage.data,
                 },
@@ -362,7 +350,6 @@ const PROVIDERS = {
                 message.role === 'assistant'
                   ? 'model'
                   : 'user',
-
               parts,
             };
           },
@@ -384,7 +371,6 @@ const PROVIDERS = {
             headers: {
               'Content-Type':
                 'application/json',
-
               'x-goog-api-key':
                 key,
             },
@@ -405,12 +391,9 @@ const PROVIDERS = {
 
               generationConfig: {
                 temperature: 0.3,
-
                 maxOutputTokens: 500,
-
                 responseMimeType:
                   'application/json',
-
                 responseSchema:
                   VISION_SCHEMA,
               },
@@ -432,11 +415,9 @@ const PROVIDERS = {
 
         throw makeError(
           message,
-
           data?.error?.status ||
             data?.error?.code ||
             'GEMINI_API_ERROR',
-
           response.status,
         );
       }
@@ -456,9 +437,7 @@ const PROVIDERS = {
 
       try {
         parsed =
-          JSON.parse(
-            rawText,
-          );
+          JSON.parse(rawText);
       } catch {
         throw makeError(
           'Gemini returned invalid structured JSON',
@@ -613,11 +592,8 @@ async function elevenLabsTTS(
 
             voice_settings: {
               stability: 0.48,
-
               similarity_boost: 0.82,
-
               style: 0.22,
-
               use_speaker_boost: true,
             },
           }),
@@ -913,7 +889,6 @@ export default async function handler(
               result.voiceId.slice(-4)
             : result.voiceId;
 
-        // HTTP header values must remain ASCII-safe.
         res.setHeader(
           'X-Robo-TTS-Voice',
           maskedVoice,
