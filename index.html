@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.32 MODULE 8.2 LIVE FACE TRACKING SSD PRIMARY</title>
+<title>ROBO AIOS v2.33 MODULE 8.2 LIVE FACE TRACKING SSD PRIMARY</title>
 <style>
 :root{
   --void:#090d15;
@@ -221,11 +221,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.32 · MODULE 8.2 LIVE FACE TRACKING</div>
+      <div id="roboBuildMarker">ROBO v2.33 · MODULE 8.2 LIVE FACE TRACKING</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.32 · 8.2 LIVE FACE TRACKING + MEM + IDENTITY</small></div>
+          <div class="brand">ROBO <small>v2.33 · 8.2 LIVE FACE TRACKING + MEM + IDENTITY</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -294,7 +294,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.32 MODULE 8.2 · LIVE FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.33 MODULE 8.2 · LIVE FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -608,6 +608,178 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       Number(box.height)>1;
   }
 
+  async function faceTrackingTick(){
+    if(
+      !cameraEnabled ||
+      !cameraStream ||
+      !faceEngineReady ||
+      !window.faceapi ||
+      !camera.videoWidth ||
+      !camera.videoHeight ||
+      camera.readyState < 2
+    ){
+      faceDetections=[];
+      faceTarget=null;
+      faceSmoothedBox=null;
+      faceTrackingInitialized=false;
+      renderFaceTarget();
+      faceDiag();
+      return;
+    }
+
+    try{
+      const mapped=await detectLocalFaceBoxes();
+      faceDetections=mapped;
+
+      if(faceTarget && !isValidFaceBox(faceTarget.box)){
+        faceTarget=null;
+        faceTargetLostAt=0;
+        faceSmoothedBox=null;
+        faceTrackingInitialized=false;
+      }
+
+      const primary=choosePrimaryFace(mapped);
+
+      if(primary){
+        const reacquired=
+          !faceTarget ||
+          (
+            faceTargetLostAt &&
+            performance.now()-faceTargetLostAt>FACE_TARGET_HOLD_MS
+          );
+
+        faceTarget=primary;
+        faceTargetLostAt=0;
+
+        if(reacquired){
+          faceSmoothedBox={...primary.box};
+          faceTrackingInitialized=true;
+        }else{
+          updateSmoothedTargetBox(primary.box);
+        }
+
+        if(
+          faceRecognitionAvailable &&
+          getStoredFaceProfiles().length &&
+          performance.now()-faceLastRecognitionAt>1200
+        ){
+          faceLastRecognitionAt=performance.now();
+          recognizeTargetFace(primary).catch(()=>{});
+        }
+
+      }else if(faceTarget){
+
+        if(!faceTargetLostAt){
+          faceTargetLostAt=performance.now();
+        }
+
+        if(
+          performance.now()-faceTargetLostAt>FACE_TARGET_HOLD_MS
+        ){
+          faceTarget=null;
+          faceSmoothedBox=null;
+          faceTrackingInitialized=false;
+          faceRecognitionIdentity=null;
+          faceRecognitionDistance=null;
+          faceRecognitionStatus=
+            getStoredFaceProfiles().length ? 'ready' : 'not-enrolled';
+        }
+      }
+
+      faceFpsFrames++;
+
+      const now=performance.now();
+
+      if(now-faceLastFpsAt>=1000){
+        faceFps=faceFpsFrames;
+        faceFpsFrames=0;
+        faceLastFpsAt=now;
+      }
+
+      renderFaceTarget();
+      faceDiag();
+
+    }catch(err){
+      devLog(
+        'FACE ERROR',
+        'tracking pass failed',
+        {
+          name:err?.name||'Error',
+          message:err?.message||String(err),
+          stack:String(err?.stack||'').slice(0,400)
+        }
+      );
+    }
+  }
+
+  async function startFaceLoop(){
+    if(faceLoopTimer || faceTickInFlight) return;
+
+    const token=++faceLoopToken;
+
+    if(!(await ensureFaceEngine())){
+      return;
+    }
+
+    if(
+      token!==faceLoopToken ||
+      !cameraEnabled ||
+      !cameraStream
+    ){
+      return;
+    }
+
+    const loop=async()=>{
+      if(
+        token!==faceLoopToken ||
+        !cameraEnabled ||
+        !cameraStream
+      ){
+        faceLoopTimer=null;
+        return;
+      }
+
+      /* One detector inference at a time; keep the phone UI responsive. */
+      faceLoopTimer=setTimeout(loop,220);
+
+      if(faceTickInFlight) return;
+      if(performance.now()-faceLastRun<180) return;
+
+      faceLastRun=performance.now();
+      faceTickInFlight=true;
+
+      try{
+        await faceTrackingTick();
+      }finally{
+        faceTickInFlight=false;
+      }
+    };
+
+    loop();
+  }
+
+  function stopFaceLoop(){
+    faceLoopToken++;
+    faceTickInFlight=false;
+    faceLastRun=0;
+
+    if(faceLoopTimer){
+      clearTimeout(faceLoopTimer);
+      faceLoopTimer=null;
+    }
+
+    faceDetections=[];
+    faceTarget=null;
+    faceTargetLostAt=0;
+    faceSmoothedBox=null;
+    faceTrackingInitialized=false;
+    faceRecognitionIdentity=null;
+    faceRecognitionDistance=null;
+
+    renderFaceTarget();
+    faceDiag();
+  }
+
   function boxCenter(box){
     if(!isValidFaceBox(box)) return null;
     return {x:box.x+box.width/2,y:box.y+box.height/2};
@@ -733,8 +905,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       await api.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URI);
 
       faceDetectionModel={
-        inputSize:320,
-        scoreThreshold:0.10
+        inputSize:224,
+        scoreThreshold:0.05
       };
 
       faceEngineReady=true;
@@ -743,8 +915,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       devLog('FACE','Face tracker ready',{
         detector:'face-api TinyFaceDetector',
-        inputSize:320,
-        scoreThreshold:0.10,
+        inputSize:224,
+        scoreThreshold:0.05,
         video:`${camera.videoWidth}x${camera.videoHeight}`
       });
 
@@ -842,6 +1014,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }
   }
 
+  let faceLastSsdAt=0;
+
   async function detectLocalFaceBoxes(){
     if(
       !camera ||
@@ -855,37 +1029,37 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }
 
     try{
-      /*
-       * Module 8.2 reliability change:
-       * TinyFaceDetector is kept as a fast first pass, but SSD MobileNet
-       * is now the primary recovery detector because this phone consistently
-       * produced a valid camera frame yet TinyFaceDetector returned zero faces.
-       * We deliberately use a low SSD confidence threshold and cap results.
-       */
-      let detections=[];
+      let detections=await faceapi.detectAllFaces(
+        camera,
+        new faceapi.TinyFaceDetectorOptions({
+          inputSize:faceDetectionModel?.inputSize || 224,
+          scoreThreshold:faceDetectionModel?.scoreThreshold ?? 0.05
+        })
+      );
 
-      if(faceSsdReady){
+      /*
+       * SSD is recovery-only. Running SSD continuously on mobile can monopolize
+       * the main thread and freeze the rest of Robo's UI.
+       */
+      const now=performance.now();
+
+      if(
+        !detections.length &&
+        faceSsdReady &&
+        now-faceLastSsdAt>=1800
+      ){
+        faceLastSsdAt=now;
+
         detections=await faceapi.detectAllFaces(
           camera,
           new faceapi.SsdMobilenetv1Options({
             minConfidence:0.08,
-            maxResults:5
+            maxResults:3
           })
         );
       }
 
-      /* Fast fallback when SSD is unavailable or returns nothing. */
-      if(!detections.length){
-        detections=await faceapi.detectAllFaces(
-          camera,
-          new faceapi.TinyFaceDetectorOptions({
-            inputSize:faceDetectionModel?.inputSize || 320,
-            scoreThreshold:faceDetectionModel?.scoreThreshold ?? 0.05
-          })
-        );
-      }
-
-      const normalized=detections
+      return detections
         .map(d=>{
           const b=d?.box;
           if(!b) return null;
@@ -908,8 +1082,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         })
         .filter(Boolean);
 
-      return normalized;
-
     }catch(err){
       devLog(
         'FACE ERROR',
@@ -918,11 +1090,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           name:err?.name||'Error',
           message:err?.message||String(err),
           stack:String(err?.stack||'').slice(0,500),
-          detector:faceSsdReady?'ssd-mobilenet':'tiny-face',
           video:`${camera.videoWidth}x${camera.videoHeight}`
         }
       );
-
       return [];
     }
   }
@@ -1724,7 +1894,164 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   });
 
 
-/* ---------- Developer diagnostics runtime ---------- */
+  /* ---------- Camera controls + active face tracking ---------- */
+  async function startCamera(){
+    if(cameraEnabled && cameraStream){
+      startFaceLoop();
+      return;
+    }
+
+    try{
+      if(cameraStream){
+        cameraStream.getTracks().forEach(t=>{try{t.stop();}catch(_){ }});
+        cameraStream=null;
+      }
+
+      const stream=await navigator.mediaDevices.getUserMedia({
+        audio:false,
+        video:{
+          facingMode:{ideal:cameraFacingMode},
+          width:{ideal:720,max:1280},
+          height:{ideal:1280,max:1280}
+        }
+      });
+
+      cameraStream=stream;
+      cameraSession++;
+
+      const video=$('#camera');
+      video.srcObject=stream;
+
+      await new Promise(resolve=>{
+        if(video.readyState>=2){
+          resolve();
+          return;
+        }
+        const onReady=()=>{cleanup();resolve();};
+        const cleanup=()=>{
+          video.removeEventListener('loadedmetadata',onReady);
+          clearTimeout(timer);
+        };
+        const timer=setTimeout(()=>{cleanup();resolve();},1600);
+        video.addEventListener('loadedmetadata',onReady,{once:true});
+      });
+
+      try{ await video.play(); }catch(_){}
+
+      cameraEnabled=true;
+
+      $('#cameraBox').classList.remove('empty');
+      $('#cameraBox').classList.toggle('rear',cameraFacingMode==='environment');
+      $('#cameraBtn').textContent='CAMERA ON';
+      $('#cameraBtn').classList.add('active');
+      $('#cameraBtn').setAttribute('aria-pressed','true');
+      $('#cameraSwitchBtn').disabled=false;
+      $('#cameraSwitchBtn').textContent=
+        cameraFacingMode==='user' ? 'REAR CAM' : 'FRONT CAM';
+
+      $('#mediaDot').className='dot live';
+      $('#mediaText').textContent='CAMERA LIVE';
+
+      devLog('CAMERA','camera started',{
+        facingMode:cameraFacingMode,
+        video:`${video.videoWidth}x${video.videoHeight}`,
+        session:cameraSession
+      });
+
+      faceBadge('STARTING FACE TRACKER');
+      faceDiag();
+
+      await startFaceLoop();
+
+    }catch(err){
+      cameraEnabled=false;
+
+      if(cameraStream){
+        cameraStream.getTracks().forEach(t=>{try{t.stop();}catch(_){ }});
+      }
+
+      cameraStream=null;
+
+      devLog('CAMERA ERROR','camera start failed',{
+        name:err?.name||'Error',
+        message:err?.message||String(err)
+      });
+
+      $('#cameraBtn').textContent='CAMERA OFF';
+      $('#cameraBtn').classList.remove('active');
+      $('#cameraBtn').setAttribute('aria-pressed','false');
+      $('#cameraSwitchBtn').disabled=true;
+      $('#mediaDot').className='dot';
+      $('#mediaText').textContent='MEDIA OFF';
+
+      showCaption('Camera could not be started.',true);
+      hideCaption(3500);
+    }
+  }
+
+  function stopCamera(){
+    cameraSession++;
+
+    if(visionRequestController){
+      try{visionRequestController.abort();}catch(_){}
+      visionRequestController=null;
+    }
+
+    stopFaceLoop();
+
+    if(cameraStream){
+      cameraStream.getTracks().forEach(track=>{
+        try{track.stop();}catch(_){}
+      });
+    }
+
+    cameraStream=null;
+    cameraEnabled=false;
+
+    const video=$('#camera');
+
+    try{
+      video.pause();
+      video.srcObject=null;
+    }catch(_){}
+
+    $('#cameraBox').classList.add('empty');
+    $('#cameraBox').classList.remove('rear');
+
+    $('#cameraBtn').textContent='CAMERA OFF';
+    $('#cameraBtn').classList.remove('active');
+    $('#cameraBtn').setAttribute('aria-pressed','false');
+    $('#cameraSwitchBtn').disabled=true;
+
+    $('#mediaDot').className='dot';
+    $('#mediaText').textContent='MEDIA OFF';
+
+    faceBadge('',false);
+    devLog('CAMERA','camera stopped');
+  }
+
+  $('#cameraBtn').addEventListener('click',async()=>{
+    if(cameraEnabled){
+      stopCamera();
+    }else{
+      await startCamera();
+    }
+  });
+
+  $('#cameraSwitchBtn').addEventListener('click',async()=>{
+    if(!cameraEnabled) return;
+
+    stopCamera();
+
+    cameraFacingMode=
+      cameraFacingMode==='user'
+        ? 'environment'
+        : 'user';
+
+    await startCamera();
+  });
+
+  /* ---------- Developer diagnostics runtime ---------- */
 const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript"), devMemoryStatus=$("#devMemoryStatus"), devMemoryIdentity=$("#devMemoryIdentity"), devMemoryCount=$("#devMemoryCount"), devMemoryFacts=$("#devMemoryFacts"), devMemoryChange=$("#devMemoryChange");
   loadRoboMemory();
 const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
@@ -1854,7 +2181,7 @@ $("#clearLogs").addEventListener("click",()=>{
 $("#copyLogs").addEventListener("click",async()=>{
   const text=id=>$(id)?.textContent||'—';
   const payload=[
-    "ROBO AIOS v2.25 MODULE 8.2 SMOOTH FACE TRACKING DIAGNOSTICS",
+    "ROBO AIOS v2.33 MODULE 8.2 SMOOTH FACE TRACKING DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
