@@ -2,7 +2,7 @@
  * ROBO AIOS — Gemini AI + vision adapter
  * Vercel serverless function: /api/robo
  *
- * v2.28 backend
+ * v2.30 backend
  *
  * FIXES:
  * - Explicitly accepts cameraEnabled from client.
