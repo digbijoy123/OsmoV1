@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.40 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.41 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -222,11 +222,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.40 · MODULES 6+7+8 PERCEPTION FUSION</div>
+      <div id="roboBuildMarker">ROBO v2.41 · MODULES 6+7+8 PERCEPTION FUSION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.40 PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
+          <div class="brand">ROBO <small>v2.41 PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -295,7 +295,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.40 MODULE 6+7+8 · PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.41 MODULE 6+7+8 · PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -319,6 +319,16 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       <div class="devTitle">EVENT / ERROR LOG</div>
       <div class="devActions"><button class="devAction" id="copyLogs">COPY LOGS</button><button class="devAction" id="clearLogs">CLEAR</button></div>
       <pre class="devPre" id="devLogs">[BOOT] Developer diagnostics ready.</pre>
+    </section>
+    <section class="devCard">
+      <div class="devTitle">MEMORY & IDENTITY · MODULE 7.5</div>
+      <div class="devRow"><span>Memory status</span><b id="devMemoryStatus">OFFLINE</b></div>
+      <div class="devRow"><span>Active identity</span><b id="devMemoryIdentity">UNKNOWN</b></div>
+      <div class="devRow"><span>Active memories</span><b id="devMemoryCount">0</b></div>
+      <div class="devRow"><span>Active facts</span><b id="devMemoryFacts">0</b></div>
+      <div class="devRow"><span>Memory profiles</span><b id="devMemoryProfiles">0</b></div>
+      <div class="devRow"><span>Active profile ID</span><b id="devMemoryActive">UNKNOWN</b></div>
+      <div class="devRow"><span>Last memory change</span><b id="devMemoryChange">none</b></div>
     </section>
     <section class="devCard">
       <div class="devTitle">SOCIAL AWARENESS · MODULE 6</div>
@@ -960,68 +970,165 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
   function getStoredFaceProfiles(){
     if(!roboMemory) return [];
-
-    if(!Array.isArray(roboMemory.faceProfiles)){
-      roboMemory.faceProfiles=[];
+    ensureMemoryRegistry();
+    const profiles=[];
+    for(const person of roboMemory.persons){
+      for(const profile of Array.isArray(person.faceProfiles)?person.faceProfiles:[]){
+        if(Array.isArray(profile?.descriptor) && profile.descriptor.length){
+          profiles.push({
+            ...profile,
+            personId:person.personId,
+            displayName:person.displayName || profile.displayName || 'UNKNOWN'
+          });
+        }
+      }
     }
-
-    return roboMemory.faceProfiles;
+    return profiles;
   }
 
   function findFaceMatch(descriptor){
     const profiles=getStoredFaceProfiles();
-
     if(!profiles.length){
       faceRecognitionDistance=null;
       return null;
     }
-
     let best=null;
     let bestDist=Infinity;
-
     for(const profile of profiles){
-      const arr=
-        Array.isArray(profile?.descriptor)
-          ? profile.descriptor
-          : [];
-
+      const arr=Array.isArray(profile?.descriptor)?profile.descriptor:[];
       if(arr.length!==descriptor.length) continue;
-
       let sum=0;
-
-      for(
-        let i=0;
-        i<descriptor.length;
-        i++
-      ){
-        const diff=
-          descriptor[i]-
-          Number(arr[i]||0);
-
+      for(let i=0;i<descriptor.length;i++){
+        const diff=Number(descriptor[i])-Number(arr[i]||0);
         sum+=diff*diff;
       }
-
       const dist=Math.sqrt(sum);
-
-      if(dist<bestDist){
-        bestDist=dist;
-        best=profile;
-      }
+      if(dist<bestDist){bestDist=dist;best=profile;}
     }
-
-    faceRecognitionDistance=
-      Number.isFinite(bestDist)
-        ? bestDist
-        : null;
-
-    if(
-      best &&
-      bestDist<=faceRecognitionThreshold
-    ){
-      return best;
-    }
-
+    faceRecognitionDistance=Number.isFinite(bestDist)?bestDist:null;
+    if(best && bestDist<=faceRecognitionThreshold) return best;
     return null;
+  }
+
+  function getActivePerson(){
+    if(!roboMemory) return null;
+    ensureMemoryRegistry();
+    return roboMemory.persons.find(p=>p.personId===roboMemory.activePersonId) || null;
+  }
+
+  function findPersonByName(name){
+    if(!roboMemory) return null;
+    ensureMemoryRegistry();
+    const q=normalizeMemoryText(name).toLowerCase();
+    if(!q) return null;
+    return roboMemory.persons.find(p=>
+      String(p.displayName||'').toLowerCase()===q ||
+      (Array.isArray(p.aliases)&&p.aliases.some(a=>String(a).toLowerCase()===q))
+    ) || null;
+  }
+
+  function setActivePerson(personId, reason='identity-selected'){
+    if(!roboMemory) return false;
+    ensureMemoryRegistry();
+    const person=roboMemory.persons.find(p=>p.personId===personId);
+    if(!person) return false;
+    roboMemory.activePersonId=person.personId;
+    if(person.personId==='primary-user'){
+      roboMemory.identity.displayName=person.displayName||'';
+      roboMemory.identity.aliases=Array.isArray(person.aliases)?person.aliases.slice():[];
+    }
+    lastMemoryChange=reason;
+    renderMemoryIdentity();
+    renderMemoryDiagnostics();
+    return true;
+  }
+
+  function descriptorFaceProfile(person, descriptor){
+    return {
+      id:'face-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
+      descriptor:Array.from(descriptor),
+      createdAt:Date.now(),
+      updatedAt:Date.now()
+    };
+  }
+
+  async function captureCurrentFaceDescriptor(){
+    if(!cameraEnabled || !cameraStream || !camera.videoWidth) return null;
+    if(!(await ensureFaceRecognition())) return null;
+    const detections=await faceapi
+      .detectAllFaces(camera,new faceapi.TinyFaceDetectorOptions({inputSize:224,scoreThreshold:.06}))
+      .withFaceLandmarks(true)
+      .withFaceDescriptors();
+    if(!detections.length) return null;
+    const primary=detections.slice().sort((a,b)=>
+      (b.detection.box.width*b.detection.box.height)-
+      (a.detection.box.width*a.detection.box.height)
+    )[0];
+    return primary?.descriptor ? Array.from(primary.descriptor) : null;
+  }
+
+  function savePersonProfile(person, reason='person-updated'){
+    if(!person || !roboMemory) return false;
+    ensureMemoryRegistry();
+    person.updatedAt=Date.now();
+    const index=roboMemory.persons.findIndex(p=>p.personId===person.personId);
+    if(index<0) roboMemory.persons.push(person);
+    if(person.personId==='primary-user'){
+      roboMemory.identity.displayName=person.displayName||'';
+      roboMemory.identity.aliases=Array.isArray(person.aliases)?person.aliases.slice():[];
+      roboMemory.identity.personId='primary-user';
+      roboMemory.identity.recognitionReady=Boolean(person.faceProfiles?.length);
+      roboMemory.facts=person.facts;
+      roboMemory.preferences=person.preferences;
+      roboMemory.memories=person.memories;
+      roboMemory.faceProfiles=person.faceProfiles;
+    }
+    saveRoboMemory(reason);
+    return true;
+  }
+
+  async function identifyOrCreatePerson(name, relation=''){
+    const cleanName=normalizeMemoryText(name).replace(/[.?!]+$/,'').trim();
+    if(!cleanName || !roboMemory) return {ok:false,reason:'invalid-name'};
+    ensureMemoryRegistry();
+    const existing=findPersonByName(cleanName);
+    if(existing){
+      const descriptor=await captureCurrentFaceDescriptor().catch(()=>null);
+      if(descriptor){
+        const duplicate=existing.faceProfiles.some(fp=>Array.isArray(fp.descriptor) && fp.descriptor.length===descriptor.length &&
+          Math.sqrt(descriptor.reduce((s,v,i)=>{const d=Number(v)-Number(fp.descriptor[i]||0);return s+d*d;},0))<0.45);
+        if(!duplicate) existing.faceProfiles.push(descriptorFaceProfile(existing,descriptor));
+      }
+      if(relation && !existing.relationship) existing.relationship=normalizeMemoryText(relation);
+      setActivePerson(existing.personId,'identity-confirmed');
+      savePersonProfile(existing,'identity-confirmed');
+      return {ok:true,person:existing,created:false};
+    }
+
+    const descriptor=await captureCurrentFaceDescriptor().catch(()=>null);
+    if(!descriptor) return {ok:false,reason:'no-face'};
+    const person={
+      personId:'person-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),
+      displayName:cleanName,
+      aliases:[],
+      relationship:relation||'',
+      facts:[{key:'name',value:cleanName,source:'identity',personId:null,createdAt:Date.now(),updatedAt:Date.now()}],
+      preferences:{},
+      memories:[],
+      faceProfiles:[descriptorFaceProfile(null,descriptor)],
+      createdAt:Date.now(),
+      updatedAt:Date.now()
+    };
+    person.facts[0].personId=person.personId;
+    person.faceProfiles[0].personId=person.personId;
+    roboMemory.persons.push(person);
+    setActivePerson(person.personId,'new-person-created');
+    saveRoboMemory('new-person-created');
+    faceRecognitionIdentity=cleanName;
+    faceRecognitionStatus='recognized';
+    faceDiag();
+    updatePerceptionFusion('identity-created');
+    return {ok:true,person,created:true};
   }
 
   async function recognizeTargetFace(){
@@ -1064,10 +1171,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       if(match){
         faceRecognitionIdentity=
           match.displayName ||
-          roboMemory?.identity?.displayName ||
           'KNOWN USER';
-
+        if(match.personId) setActivePerson(match.personId,'face-recognized');
         faceRecognitionStatus='recognized';
+        updatePerceptionFusion('face-recognized');
         faceDiag();
         return match;
       }
@@ -1097,155 +1204,86 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }
   }
 
+  let pendingPersonName='';
+  let pendingPersonRelationship='';
+
   async function enrollCurrentFace(){
-    if(
-      !cameraEnabled ||
-      !cameraStream
-    ){
-      showCaption(
-        'Turn the camera on before enrolling your face.',
-        true
-      );
+    if(!cameraEnabled || !cameraStream){
+      showCaption('Turn the camera on before enrolling a face.',true);
       hideCaption(2600);
       return;
     }
 
-    if(
-      !roboMemory?.identity?.displayName
-    ){
-      showCaption(
-        'Tell Robo your name first, then enroll your face.',
-        true
-      );
-      hideCaption(2600);
-      return;
-    }
-
-    if(!(await ensureFaceEngine())){
-      showCaption(
-        'Face engine is not ready yet.',
-        true
-      );
-      hideCaption(2600);
-      return;
-    }
-
-    if(!(await ensureFaceRecognition())){
-      showCaption(
-        'Face recognition engine is not ready yet.',
-        true
-      );
+    if(!roboMemory?.identity?.displayName){
+      showCaption('Tell Robo your name first, then enroll your face.',true);
       hideCaption(2600);
       return;
     }
 
     try{
-      const detections=
-        await faceapi
-          .detectAllFaces(
-            camera,
-            new faceapi.TinyFaceDetectorOptions({
-              inputSize:224,
-              scoreThreshold:.08
-            })
-          )
-          .withFaceLandmarks(true)
-          .withFaceDescriptors();
-
-      if(!detections.length){
-        showCaption(
-          'No face detected. Look at the camera and try again.',
-          true
-        );
+      const descriptor=await captureCurrentFaceDescriptor();
+      if(!descriptor){
+        showCaption('No face detected. Look at the camera and try again.',true);
         hideCaption(2600);
         return;
       }
-
-      const primary=
-        detections
-          .slice()
-          .sort(
-            (a,b)=>
-              (
-                b.detection.box.width*
-                b.detection.box.height
-              )-
-              (
-                a.detection.box.width*
-                a.detection.box.height
-              )
-          )[0];
-
-      const profiles=
-        getStoredFaceProfiles();
-
-      const id=
-        roboMemory.identity.personId||
-        'primary-user';
-
-      const existing=
-        profiles.find(
-          p=>p.personId===id
-        );
-
-      const record={
-        personId:id,
-        displayName:
-          roboMemory.identity.displayName,
-        descriptor:
-          Array.from(
-            primary.descriptor
-          ),
-        createdAt:
-          existing?.createdAt||
-          Date.now(),
-        updatedAt:
-          Date.now()
-      };
-
-      if(existing){
-        Object.assign(
-          existing,
-          record
-        );
-      }else{
-        profiles.push(record);
-      }
-
-      roboMemory.faceProfiles=profiles;
-      roboMemory.identity.recognitionReady=true;
-      saveRoboMemory('face-enrolled');
-
-      faceRecognitionIdentity=
-        roboMemory.identity.displayName;
-
+      ensureMemoryRegistry();
+      const primary=roboMemory.persons.find(p=>p.personId==='primary-user');
+      if(!primary) return;
+      if(!Array.isArray(primary.faceProfiles)) primary.faceProfiles=[];
+      primary.faceProfiles=[descriptorFaceProfile(primary,descriptor)];
+      primary.displayName=roboMemory.identity.displayName;
+      primary.facts=roboMemory.facts;
+      primary.memories=roboMemory.memories;
+      primary.preferences=roboMemory.preferences;
+      setActivePerson('primary-user','primary-face-enrolled');
+      savePersonProfile(primary,'primary-face-enrolled');
+      faceRecognitionIdentity=primary.displayName;
       faceRecognitionStatus='recognized';
       faceDiag();
-
-      showCaption(
-        'Face enrolled successfully.',
-        true
-      );
+      updatePerceptionFusion('primary-face-enrolled');
+      showCaption('Face enrolled successfully.',true);
       hideCaption(2600);
-
     }catch(err){
-
-      devLog(
-        'FACE ERROR',
-        'face enrollment failed',
-        {
-          message:
-            err?.message||
-            String(err)
-        }
-      );
-
-      showCaption(
-        'Face enrollment failed. Try again.',
-        true
-      );
+      devLog('FACE ERROR','face enrollment failed',{message:err?.message||String(err)});
+      showCaption('Face enrollment failed. Try again.',true);
       hideCaption(2600);
     }
+  }
+
+  function deriveLiveSocialFromFaces(faces){
+    const list=Array.isArray(faces)?faces:[];
+    const previous=socialAwareness||{};
+    const personCount=list.length;
+    const presence=personCount>0?'present':'no-person';
+    let interaction='idle';
+    if(listening||talking) interaction=personCount>0?'active-conversation':'voice-active';
+    else if(personCount===1) interaction='single-person-present';
+    else if(personCount>1) interaction='multiple-people-present';
+    const confidence=personCount
+      ? Math.round(list.reduce((sum,f)=>sum+Number(f.score||0),0)/personCount*100)
+      : 0;
+    let lastChange='none';
+    if(previous && Number(previous.personCount||0)!==personCount){
+      lastChange=Number(previous.personCount||0)===0?'person-entered':(personCount===0?'person-left':'person-count-changed');
+    }
+    socialAwareness={
+      ...previous,
+      presence,
+      personCount,
+      primaryPerson:list[0]?{label:'face',confidence:Number(list[0].score||0)*100,box:null,relativeArea:0}:null,
+      people:list.map((f,i)=>({id:'face-person-'+i,label:'face',count:1,confidence:Number(f.score||0)*100,box:null,area:0})),
+      interaction,
+      confidence,
+      lastChange,
+      timestamp:Date.now(),
+      session:cameraSession,
+      source:'local-face-tracking'
+    };
+    previousSocialAwareness=socialAwareness;
+    renderSocialAwarenessBadge();
+    renderSocialDiagnostics();
+    updatePerceptionFusion('live-face-social');
   }
 
   async function faceTrackingTick(){
@@ -1269,6 +1307,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         await detectLocalFaceBoxes();
 
       faceDetections=mapped;
+      deriveLiveSocialFromFaces(mapped);
 
       const primary=
         choosePrimaryFace(mapped);
@@ -1335,6 +1374,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             getStoredFaceProfiles().length
               ? 'ready'
               : 'not-enrolled';
+          if(roboMemory){ roboMemory.activePersonId='primary-user'; renderMemoryIdentity(); renderMemoryDiagnostics(); }
         }
       }
 
@@ -1513,7 +1553,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const social = socialAwareness || {};
     const center = getTrackedFaceCenter();
     const hasTrackedFace = Boolean(faceTarget && center);
-    const knownName = String(faceRecognitionIdentity || roboMemory?.identity?.displayName || '').trim();
+    const knownName = String(faceRecognitionIdentity || '').trim();
     const known = faceRecognitionStatus === 'recognized' && Boolean(knownName);
     const identityConfidence = known
       ? Math.max(0, Math.min(100, Math.round(faceRecognitionDistance != null
@@ -1617,119 +1657,165 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
      Robo only stores explicit/high-confidence user facts and supports explicit
      remember/forget commands. No face identity is claimed here.
   */
-  const MEMORY_STORAGE_KEY = 'robo_aios_memory_v1';
-  const MEMORY_SCHEMA_VERSION = 1;
+  const MEMORY_STORAGE_KEY = 'robo_aios_memory_v2';
+  const MEMORY_SCHEMA_VERSION = 2;
+  const DEFAULT_PERSON = () => ({
+    personId:'primary-user',
+    displayName:'',
+    aliases:[],
+    relationship:'primary user',
+    facts:[],
+    preferences:{},
+    memories:[],
+    faceProfiles:[],
+    createdAt:Date.now(),
+    updatedAt:Date.now()
+  });
+
   const DEFAULT_MEMORY = {
-    schemaVersion: MEMORY_SCHEMA_VERSION,
-    primaryPersonId: 'primary-user',
-    identity: {
-      displayName: '',
-      aliases: [],
-      personId: 'primary-user',
-      recognitionReady: false
-    },
-    facts: [],
-    preferences: {},
-    memories: [],
-    faceProfiles: [],
-    createdAt: Date.now(),
-    updatedAt: Date.now()
+    schemaVersion:MEMORY_SCHEMA_VERSION,
+    primaryPersonId:'primary-user',
+    activePersonId:'primary-user',
+    persons:[DEFAULT_PERSON()],
+    identity:{displayName:'',aliases:[],personId:'primary-user',recognitionReady:false},
+    facts:[],
+    preferences:{},
+    memories:[],
+    faceProfiles:[],
+    createdAt:Date.now(),
+    updatedAt:Date.now()
   };
 
-  let roboMemory = null;
-  let memoryReady = false;
-  let lastMemoryChange = 'none';
+  let roboMemory=null;
+  let memoryReady=false;
+  let lastMemoryChange='none';
 
-  function cloneDefaultMemory(){
-    return JSON.parse(JSON.stringify(DEFAULT_MEMORY));
+  function cloneDefaultMemory(){ return JSON.parse(JSON.stringify(DEFAULT_MEMORY)); }
+
+  function ensureMemoryRegistry(){
+    if(!roboMemory) return null;
+    if(!Array.isArray(roboMemory.persons) || !roboMemory.persons.length){
+      const primary=DEFAULT_PERSON();
+      primary.displayName=String(roboMemory.identity?.displayName||'');
+      primary.aliases=Array.isArray(roboMemory.identity?.aliases)?roboMemory.identity.aliases.slice():[];
+      primary.facts=Array.isArray(roboMemory.facts)?roboMemory.facts.map(x=>({...x,personId:'primary-user'})):[];
+      primary.preferences={...(roboMemory.preferences||{})};
+      primary.memories=Array.isArray(roboMemory.memories)?roboMemory.memories.map(x=>({...x,personId:'primary-user'})):[];
+      primary.faceProfiles=Array.isArray(roboMemory.faceProfiles)?roboMemory.faceProfiles.map(x=>({...x,personId:'primary-user'})):[];
+      roboMemory.persons=[primary];
+    }
+    roboMemory.persons=roboMemory.persons.map(p=>({
+      ...DEFAULT_PERSON(),
+      ...p,
+      aliases:Array.isArray(p.aliases)?p.aliases:[],
+      facts:Array.isArray(p.facts)?p.facts:[],
+      preferences:{...(p.preferences||{})},
+      memories:Array.isArray(p.memories)?p.memories:[],
+      faceProfiles:Array.isArray(p.faceProfiles)?p.faceProfiles:[]
+    }));
+    if(!roboMemory.persons.some(p=>p.personId==='primary-user')){
+      roboMemory.persons.unshift(DEFAULT_PERSON());
+    }
+    roboMemory.primaryPersonId='primary-user';
+    roboMemory.activePersonId=roboMemory.persons.some(p=>p.personId===roboMemory.activePersonId)
+      ? roboMemory.activePersonId : 'primary-user';
+    const primary=roboMemory.persons.find(p=>p.personId==='primary-user');
+    roboMemory.identity={
+      displayName:primary.displayName||'',
+      aliases:Array.isArray(primary.aliases)?primary.aliases.slice():[],
+      personId:'primary-user',
+      recognitionReady:Boolean(primary.faceProfiles.length)
+    };
+    roboMemory.facts=primary.facts;
+    roboMemory.preferences=primary.preferences;
+    roboMemory.memories=primary.memories;
+    roboMemory.faceProfiles=primary.faceProfiles;
+    return roboMemory;
   }
 
   function loadRoboMemory(){
-    let next = cloneDefaultMemory();
+    let next=cloneDefaultMemory();
     try{
-      const raw = localStorage.getItem(MEMORY_STORAGE_KEY);
+      const raw=localStorage.getItem(MEMORY_STORAGE_KEY) || localStorage.getItem('robo_aios_memory_v1');
       if(raw){
-        const parsed = JSON.parse(raw);
-        if(parsed && typeof parsed === 'object'){
-          next = {
-            ...next,
-            ...parsed,
-            identity:{...next.identity,...(parsed.identity||{})},
-            preferences:{...(parsed.preferences||{})},
-            facts:Array.isArray(parsed.facts)?parsed.facts:[],
-            memories:Array.isArray(parsed.memories)?parsed.memories:[],
-             faceProfiles:Array.isArray(parsed.faceProfiles)?parsed.faceProfiles:[]
-          };
-          next.schemaVersion = MEMORY_SCHEMA_VERSION;
-          next.primaryPersonId = 'primary-user';
-          next.identity.personId = 'primary-user';
-          next.updatedAt = Number(parsed.updatedAt)||Date.now();
-        }
+        const parsed=JSON.parse(raw);
+        if(parsed && typeof parsed==='object') next={...next,...parsed};
       }
-    }catch(err){
-      console.warn('ROBO MEMORY load failed',err);
-      next = cloneDefaultMemory();
-    }
-    roboMemory = next;
-    memoryReady = true;
+    }catch(err){ console.warn('ROBO MEMORY load failed',err); next=cloneDefaultMemory(); }
+    roboMemory=next;
+    ensureMemoryRegistry();
+    memoryReady=true;
+    saveRoboMemory('memory-loaded');
     renderMemoryIdentity();
     renderMemoryDiagnostics();
-  faceDiag();
+    faceDiag();
     return roboMemory;
   }
 
   function saveRoboMemory(change='updated'){
     if(!roboMemory) return false;
-    roboMemory.schemaVersion = MEMORY_SCHEMA_VERSION;
-    roboMemory.primaryPersonId = 'primary-user';
-    roboMemory.identity.personId = 'primary-user';
-    roboMemory.updatedAt = Date.now();
+    ensureMemoryRegistry();
+    const primary=roboMemory.persons.find(p=>p.personId==='primary-user');
+    if(primary){
+      roboMemory.identity.displayName=primary.displayName||'';
+      roboMemory.identity.aliases=Array.isArray(primary.aliases)?primary.aliases.slice():[];
+      roboMemory.identity.recognitionReady=Boolean(primary.faceProfiles.length);
+      roboMemory.facts=primary.facts;
+      roboMemory.preferences=primary.preferences;
+      roboMemory.memories=primary.memories;
+      roboMemory.faceProfiles=primary.faceProfiles;
+    }
+    roboMemory.schemaVersion=MEMORY_SCHEMA_VERSION;
+    roboMemory.primaryPersonId='primary-user';
+    roboMemory.updatedAt=Date.now();
     try{
-      localStorage.setItem(MEMORY_STORAGE_KEY, JSON.stringify(roboMemory));
-      lastMemoryChange = change;
+      localStorage.setItem(MEMORY_STORAGE_KEY,JSON.stringify(roboMemory));
+      lastMemoryChange=change;
       renderMemoryIdentity();
       renderMemoryDiagnostics();
-      devLog('MEMORY',change);
+      devLog('MEMORY',change,{profiles:roboMemory.persons.length,active:roboMemory.activePersonId});
       return true;
     }catch(err){
-      lastMemoryChange = 'save-failed';
+      lastMemoryChange='save-failed';
       devLog('MEMORY ERROR','persistent storage failed',{name:err?.name,message:err?.message});
       renderMemoryDiagnostics();
       return false;
     }
   }
 
-  function normalizeMemoryText(text){
-    return String(text||'').replace(/\s+/g,' ').trim();
+  function normalizeMemoryText(text){ return String(text||'').replace(/\s+/g,' ').trim(); }
+
+  function targetMemoryPerson(){
+    ensureMemoryRegistry();
+    const active=getActivePerson();
+    return active || roboMemory.persons.find(p=>p.personId==='primary-user');
   }
 
-  function addMemoryRecord(text,type='memory'){
+  function addMemoryRecord(text,type='memory',personId=null){
     const value=normalizeMemoryText(text);
     if(!value || !roboMemory) return false;
+    const person=roboMemory.persons.find(p=>p.personId===(personId||targetMemoryPerson()?.personId));
+    if(!person) return false;
     const key=value.toLowerCase();
-    const duplicate=roboMemory.memories.some(m=>String(m.text||'').toLowerCase()===key);
-    if(duplicate){
-      lastMemoryChange='already-known';
-      renderMemoryDiagnostics();
-      return false;
+    if(person.memories.some(m=>String(m.text||'').toLowerCase()===key)){
+      lastMemoryChange='already-known'; renderMemoryDiagnostics(); return false;
     }
-    roboMemory.memories.unshift({id:'mem-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),text:value,type,personId:'primary-user',createdAt:Date.now(),updatedAt:Date.now()});
-    if(roboMemory.memories.length>100) roboMemory.memories.length=100;
+    person.memories.unshift({id:'mem-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),text:value,type,personId:person.personId,createdAt:Date.now(),updatedAt:Date.now()});
+    if(person.memories.length>100) person.memories.length=100;
     saveRoboMemory('memory-added');
     return true;
   }
 
-  function addFact(key,value,source='explicit'){
+  function addFact(key,value,source='explicit',personId=null){
     if(!roboMemory) return false;
+    const person=roboMemory.persons.find(p=>p.personId===(personId||targetMemoryPerson()?.personId));
+    if(!person) return false;
     const k=normalizeMemoryText(key).toLowerCase();
     const v=normalizeMemoryText(value);
     if(!k || !v) return false;
-    const existing=roboMemory.facts.find(f=>String(f.key).toLowerCase()===k && f.personId==='primary-user');
-    if(existing){
-      existing.value=v; existing.source=source; existing.updatedAt=Date.now();
-    }else{
-      roboMemory.facts.push({key:k,value:v,source,personId:'primary-user',createdAt:Date.now(),updatedAt:Date.now()});
-    }
+    const existing=person.facts.find(f=>String(f.key).toLowerCase()===k);
+    if(existing){ existing.value=v; existing.source=source; existing.updatedAt=Date.now(); }
+    else person.facts.push({key:k,value:v,source,personId:person.personId,createdAt:Date.now(),updatedAt:Date.now()});
     saveRoboMemory('fact-updated');
     return true;
   }
@@ -1737,78 +1823,71 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function setIdentityName(name){
     const value=normalizeMemoryText(name).replace(/[.?!]+$/,'').trim();
     if(!value || !roboMemory) return false;
-    const old=roboMemory.identity.displayName;
-    roboMemory.identity.displayName=value;
-    roboMemory.identity.recognitionReady=true;
-    addFact('name',value,'identity');
-    lastMemoryChange=old && old!==value ? 'identity-updated' : 'identity-saved';
-    saveRoboMemory(lastMemoryChange);
+    ensureMemoryRegistry();
+    const primary=roboMemory.persons.find(p=>p.personId==='primary-user');
+    primary.displayName=value;
+    addFact('name',value,'identity','primary-user');
+    setActivePerson('primary-user','primary-identity-updated');
+    saveRoboMemory('identity-saved');
     return true;
   }
 
   function addAlias(alias){
     const value=normalizeMemoryText(alias).replace(/[.?!]+$/,'').trim();
-    if(!value || !roboMemory) return false;
-    if(!roboMemory.identity.aliases.some(a=>a.toLowerCase()===value.toLowerCase())){
-      roboMemory.identity.aliases.push(value);
-      saveRoboMemory('alias-added');
-    }
-    return true;
+    const primary=roboMemory?.persons?.find(p=>p.personId==='primary-user');
+    if(!value || !primary) return false;
+    if(!primary.aliases.some(a=>a.toLowerCase()===value.toLowerCase())) primary.aliases.push(value);
+    saveRoboMemory('alias-added'); return true;
   }
 
   function forgetMemoryByText(query){
     const q=normalizeMemoryText(query).toLowerCase();
     if(!q || !roboMemory) return false;
+    const person=targetMemoryPerson();
+    if(!person) return false;
     let changed=false;
-    roboMemory.memories=roboMemory.memories.filter(m=>{
-      const hit=String(m.text||'').toLowerCase().includes(q);
-      if(hit) changed=true;
-      return !hit;
-    });
-    roboMemory.facts=roboMemory.facts.filter(f=>{
-      const hit=String(f.key||'').toLowerCase().includes(q) || String(f.value||'').toLowerCase().includes(q);
-      if(hit) changed=true;
-      return !hit;
-    });
+    person.memories=person.memories.filter(m=>{const hit=String(m.text||'').toLowerCase().includes(q);if(hit)changed=true;return !hit;});
+    person.facts=person.facts.filter(f=>{const hit=String(f.key||'').toLowerCase().includes(q)||String(f.value||'').toLowerCase().includes(q);if(hit)changed=true;return !hit;});
     if(changed) saveRoboMemory('memory-forgotten');
     return changed;
   }
 
   function clearAllRoboMemory(){
     roboMemory=cloneDefaultMemory();
-    try{localStorage.removeItem(MEMORY_STORAGE_KEY);}catch(_){}
     memoryReady=true;
+    try{localStorage.removeItem(MEMORY_STORAGE_KEY);localStorage.removeItem('robo_aios_memory_v1');}catch(_){ }
     lastMemoryChange='memory-cleared';
-    renderMemoryIdentity();
-    renderMemoryDiagnostics();
-    devLog('MEMORY','all persistent memory cleared');
+    renderMemoryIdentity();renderMemoryDiagnostics();devLog('MEMORY','all persistent memory cleared');
+  }
+
+  function personSummary(person){
+    if(!person) return 'I do not know that person yet.';
+    const parts=[`${person.displayName||'Unknown person'} is in my person registry.`];
+    if(person.relationship) parts.push(`Relationship: ${person.relationship}.`);
+    const facts=person.facts.filter(f=>String(f.key).toLowerCase()!=='name').slice(0,10);
+    if(facts.length) parts.push('Facts: '+facts.map(f=>`${f.key}: ${f.value}`).join('; ')+'.');
+    const memories=person.memories.slice(0,8);
+    if(memories.length) parts.push('Memories: '+memories.map(m=>m.text).join(' | ')+'.');
+    return parts.join(' ');
   }
 
   function getMemorySummary(){
-    if(!roboMemory) return 'I do not have persistent memory yet.';
-    const parts=[];
-    if(roboMemory.identity.displayName) parts.push(`Your name is ${roboMemory.identity.displayName}.`);
-    const facts=roboMemory.facts.filter(f=>f.key!=='name').slice(0,12);
-    if(facts.length) parts.push(facts.map(f=>`${f.key}: ${f.value}`).join('; ')+'.');
-    const memories=roboMemory.memories.slice(0,8);
-    if(memories.length) parts.push(memories.map(m=>m.text).join(' | '));
-    return parts.length ? parts.join(' ') : 'I do not have any persistent memories about you yet.';
+    const active=getActivePerson();
+    return active ? personSummary(active) : 'I do not have persistent memory yet.';
   }
 
   function buildMemoryContextMessage(){
     if(!roboMemory || !memoryReady) return null;
-    const name=roboMemory.identity.displayName;
-    const facts=roboMemory.facts.slice(0,15);
-    const memories=roboMemory.memories.slice(0,15);
+    ensureMemoryRegistry();
+    const active=getActivePerson();
+    const registry=roboMemory.persons.slice(0,20).map(p=>`${p.personId}: ${p.displayName||'unknown'}${p.personId===roboMemory.activePersonId?' [ACTIVE]':''}`);
     const lines=[
-      'MEMORY & IDENTITY CONTEXT — persistent browser-local memory for the primary user.',
-      'Person ID: primary-user.',
-      `Known name: ${name || 'unknown'}.`,
-      `Recognition-ready profile: ${roboMemory.identity.recognitionReady ? 'yes' : 'no face identity linked yet'}.`,
-      facts.length ? 'Facts: '+facts.map(f=>`${f.key}=${f.value}`).join(' | ') : 'Facts: none stored.',
-      memories.length ? 'Remembered notes: '+memories.map(m=>m.text).join(' | ') : 'Remembered notes: none stored.',
-      'Use memory only when relevant. Do not claim face recognition or visual identity unless a future identity module explicitly provides it.',
-      'Do not invent memories. Treat these stored items as user-provided facts, not model guesses.'
+      'MEMORY & IDENTITY CONTEXT — persistent browser-local multi-person registry.',
+      `Active person: ${active?.displayName||'unknown'} (${active?.personId||'none'}).`,
+      `Known people: ${registry.length ? registry.join(' | ') : 'none'}.`,
+      active ? personSummary(active) : 'No active person profile.',
+      'Only use the active identity when local face recognition explicitly identifies the current tracked face. Do not guess identity from appearance, social context, or name alone.',
+      'When the user asks about another known person by name, use that person registry entry even if they are not currently visible.'
     ];
     return lines.join('\n');
   }
@@ -1816,105 +1895,93 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function renderMemoryIdentity(){
     const badge=$('#memoryIdentity');
     if(!badge || !roboMemory) return;
-    const name=roboMemory.identity.displayName;
-    badge.textContent=(faceRecognitionIdentity||name) ? `MEMORY · ${(faceRecognitionIdentity||name)}` : 'MEMORY · NO PROFILE';
+    const active=getActivePerson();
+    const name=active?.displayName || '';
+    badge.textContent=name ? `MEMORY · ${name}` : 'MEMORY · UNKNOWN';
     badge.dataset.state=name ? 'known' : 'unknown';
     badge.classList.toggle('show',Boolean(memoryReady));
   }
 
   function renderMemoryDiagnostics(){
     if(typeof devMemoryStatus==='undefined' || !devMemoryStatus || !roboMemory) return;
+    ensureMemoryRegistry();
+    const active=getActivePerson();
     devMemoryStatus.textContent=memoryReady ? 'ONLINE' : 'OFFLINE';
-    devMemoryIdentity.textContent=roboMemory.identity.displayName || 'UNKNOWN';
-    devMemoryCount.textContent=String(roboMemory.memories.length);
-    devMemoryFacts.textContent=String(roboMemory.facts.length);
+    devMemoryIdentity.textContent=active?.displayName || 'UNKNOWN';
+    devMemoryCount.textContent=String(active?.memories?.length||0);
+    devMemoryFacts.textContent=String(active?.facts?.length||0);
+    if(typeof devMemoryProfiles!=='undefined' && devMemoryProfiles) devMemoryProfiles.textContent=String(roboMemory.persons.length);
+    if(typeof devMemoryActive!=='undefined' && devMemoryActive) devMemoryActive.textContent=active?.displayName || 'UNKNOWN';
     devMemoryChange.textContent=lastMemoryChange;
   }
 
-  function handleMemoryCommand(text){
-    const raw=normalizeMemoryText(text);
-    const l=raw.toLowerCase();
+  async function handleMemoryCommand(text){
+    const raw=normalizeMemoryText(text), l=raw.toLowerCase();
     if(!raw || !roboMemory) return null;
+    ensureMemoryRegistry();
 
-    if(/^(what do you remember|what do you know about me|what do you remember about me|show my memory|show me what you remember)/.test(l)){
+    if(/^(what do you remember|what do you know about me|what do you remember about me|show my memory|show me what you remember)$/.test(l)){
       return {handled:true,reply:getMemorySummary(),emotion:'happy'};
+    }
+
+    const who=l.match(/^(?:who is|who's|what do you remember about|do you remember)\s+(.+?)\??$/i);
+    if(who){
+      const person=findPersonByName(who[1].trim());
+      return {handled:true,reply:personSummary(person),emotion:person?'happy':'confused'};
     }
 
     if(/^(forget everything|forget all memories|clear all memory|erase all memory|delete all memories)$/.test(l)){
       clearAllRoboMemory();
-      return {handled:true,reply:'I cleared my persistent memory about you.',emotion:'neutral'};
+      return {handled:true,reply:'I cleared my persistent multi-person memory.',emotion:'neutral'};
+    }
+
+    const introduced=raw.match(/^(?:this is|this person is|his name is|her name is|their name is)\s+([A-Za-z][A-Za-z .\'-]{1,40})(?:\s+and\s+(?:he|she|they)\s+is\s+my\s+(.+))?[.!?]?$/i);
+    if(introduced){
+      const result=await identifyOrCreatePerson(introduced[1],introduced[2]||'');
+      if(!result.ok){
+        return {handled:true,reply:'I can add that person, but I need their face clearly visible in the camera first.',emotion:'confused'};
+      }
+      return {handled:true,reply:result.created?`Got it. This is ${result.person.displayName}. I created a separate memory and identity profile for them.`:`I remember ${result.person.displayName}. I updated their identity profile.` ,emotion:'happy'};
     }
 
     const forgetName=/^(?:forget my name|delete my name|remove my name from memory)$/i.test(raw);
     if(forgetName){
-      const had=Boolean(roboMemory.identity.displayName);
-      roboMemory.identity.displayName='';
-      roboMemory.identity.recognitionReady=false;
-      roboMemory.facts=roboMemory.facts.filter(f=>String(f.key).toLowerCase()!=='name');
-      if(had) saveRoboMemory('identity-forgotten');
-      else { lastMemoryChange='name-not-found'; renderMemoryDiagnostics(); }
-      return {handled:true,reply:had ? 'Okay. I forgot your name.' : 'I do not currently have your name stored.',emotion:'neutral'};
+      const primary=roboMemory.persons.find(p=>p.personId==='primary-user');
+      const had=Boolean(primary?.displayName);
+      if(primary){primary.displayName='';primary.facts=primary.facts.filter(f=>String(f.key).toLowerCase()!=='name');saveRoboMemory('identity-forgotten');}
+      return {handled:true,reply:had?'Okay. I forgot your name.':'I do not currently have your name stored.',emotion:'neutral'};
     }
 
     const rememberedName=raw.match(/^remember(?: that)?\s+(?:my name is|i am|i\'m)\s+([A-Za-z][A-Za-z .\'-]{1,40})[.!?]?$/i);
-    if(rememberedName){
-      const value=rememberedName[1].trim();
-      if(setIdentityName(value)) return {handled:true,reply:`I will remember your name as ${value}.`,emotion:'happy'};
-    }
+    if(rememberedName){ const value=rememberedName[1].trim(); if(setIdentityName(value)) return {handled:true,reply:`I will remember your name as ${value}.`,emotion:'happy'}; }
 
     const forget=l.match(/^(?:forget|remove from memory|delete from memory)\s+(.+)$/);
-    if(forget){
-      const ok=forgetMemoryByText(forget[1]);
-      return {handled:true,reply:ok ? 'Okay. I removed that from my persistent memory.' : 'I could not find that memory to remove.',emotion:ok?'neutral':'confused'};
-    }
+    if(forget){ const ok=forgetMemoryByText(forget[1]); return {handled:true,reply:ok?'Okay. I removed that from the active person memory.':'I could not find that memory to remove.',emotion:ok?'neutral':'confused'}; }
 
     const remember=raw.match(/^(?:remember that|remember)\s+(.+)$/i);
     if(remember){
       const note=normalizeMemoryText(remember[1]).replace(/[.?!]+$/,'');
       const ok=addMemoryRecord(note,'explicit');
-      return {handled:true,reply:ok ? 'Got it. I will remember that.' : 'I already have that in memory.',emotion:'happy'};
+      return {handled:true,reply:ok?'Got it. I will remember that for the active person.':'I already have that in memory.',emotion:'happy'};
     }
 
     const name=raw.match(/^(?:my name is|i am|i'm)\s+([A-Za-z][A-Za-z .\'-]{1,40})[.!?]?$/i);
-    if(name){
-      const value=name[1].trim();
-      if(setIdentityName(value)) return {handled:true,reply:`Nice to meet you, ${value}. I will remember your name.`,emotion:'happy'};
-    }
+    if(name){ const value=name[1].trim(); if(setIdentityName(value)) return {handled:true,reply:`Nice to meet you, ${value}. I will remember your name.`,emotion:'happy'}; }
 
     const callMe=raw.match(/^(?:call me|you can call me)\s+([A-Za-z][A-Za-z .\'-]{1,40})[.!?]?$/i);
-    if(callMe){
-      const value=callMe[1].trim();
-      if(setIdentityName(value)){ addAlias(value); return {handled:true,reply:`Understood. I will call you ${value}.`,emotion:'happy'}; }
-    }
+    if(callMe){ const value=callMe[1].trim(); if(setIdentityName(value)){addAlias(value);return {handled:true,reply:`Understood. I will call you ${value}.`,emotion:'happy'};} }
 
     const like=raw.match(/^(?:i like|i love|i enjoy)\s+(.+)$/i);
-    if(like){
-      const value=normalizeMemoryText(like[1]).replace(/[.?!]+$/,'');
-      addFact('likes',value);
-      return {handled:true,reply:'Got it. I will keep that preference in mind.',emotion:'happy'};
-    }
+    if(like){ const value=normalizeMemoryText(like[1]).replace(/[.?!]+$/,''); addFact('likes',value); return {handled:true,reply:'Got it. I will keep that preference in mind.',emotion:'happy'}; }
 
-    const dislike=raw.match(/^(?:i dislike|i hate|i don't like|i do not like)\s+(.+)$/i);
-    if(dislike){
-      const value=normalizeMemoryText(dislike[1]).replace(/[.?!]+$/,'');
-      addFact('dislikes',value);
-      return {handled:true,reply:'Understood. I will keep that preference in mind.',emotion:'neutral'};
-    }
+    const dislike=raw.match(/^(?:i dislike|i hate|i don\'t like|i do not like)\s+(.+)$/i);
+    if(dislike){ const value=normalizeMemoryText(dislike[1]).replace(/[.?!]+$/,''); addFact('dislikes',value); return {handled:true,reply:'Understood. I will keep that preference in mind.',emotion:'neutral'}; }
 
     const prefer=raw.match(/^(?:i prefer|my preference is)\s+(.+)$/i);
-    if(prefer){
-      const value=normalizeMemoryText(prefer[1]).replace(/[.?!]+$/,'');
-      addFact('preferences',value);
-      return {handled:true,reply:'Got it. I will remember that preference.',emotion:'happy'};
-    }
+    if(prefer){ const value=normalizeMemoryText(prefer[1]).replace(/[.?!]+$/,''); addFact('preferences',value); return {handled:true,reply:'Got it. I will remember that preference.',emotion:'happy'}; }
 
     const favorite=raw.match(/^my favorite\s+(.+?)\s+is\s+(.+)$/i);
-    if(favorite){
-      const category=normalizeMemoryText(favorite[1]).replace(/[.?!]+$/,'');
-      const value=normalizeMemoryText(favorite[2]).replace(/[.?!]+$/,'');
-      addFact(`favorite ${category}`,value);
-      return {handled:true,reply:`Got it. Your favorite ${category} is ${value}.`,emotion:'happy'};
-    }
+    if(favorite){ const category=normalizeMemoryText(favorite[1]).replace(/[.?!]+$/,''); const value=normalizeMemoryText(favorite[2]).replace(/[.?!]+$/,''); addFact(`favorite ${category}`,value); return {handled:true,reply:`Got it. Your favorite ${category} is ${value}.`,emotion:'happy'}; }
 
     return null;
   }
@@ -3212,6 +3279,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     };
 
     const social=deriveSocialAwareness({scene,objects:currentObjects});
+    if(cameraEnabled && Array.isArray(faceDetections)) deriveLiveSocialFromFaces(faceDetections);
     renderSocialAwarenessBadge();
     renderSocialDiagnostics();
     devLog('SOCIAL','social awareness update',{presence:social.presence,personCount:social.personCount,interaction:social.interaction,confidence:social.confidence,lastChange:social.lastChange});
@@ -3411,7 +3479,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return;
     }
 
-    const memoryCommand=handleMemoryCommand(clean);
+    const memoryCommand=await handleMemoryCommand(clean);
     if(memoryCommand?.handled){
       devLog('MEMORY','handled explicit memory command',{reply:memoryCommand.reply});
       setState(memoryCommand.emotion || 'happy','memory · '+(memoryCommand.emotion || 'updated'),{
@@ -3798,8 +3866,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 
 /* ---------- Developer diagnostics runtime ---------- */
-const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript"), devMemoryStatus=$("#devMemoryStatus"), devMemoryIdentity=$("#devMemoryIdentity"), devMemoryCount=$("#devMemoryCount"), devMemoryFacts=$("#devMemoryFacts"), devMemoryChange=$("#devMemoryChange");
-  loadRoboMemory();
+const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript"), devMemoryStatus=$("#devMemoryStatus"), devMemoryIdentity=$("#devMemoryIdentity"), devMemoryCount=$("#devMemoryCount"), devMemoryFacts=$("#devMemoryFacts"), devMemoryProfiles=$("#devMemoryProfiles"), devMemoryActive=$("#devMemoryActive"), devMemoryChange=$("#devMemoryChange");
 const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
 const devSocialPresence=$("#devSocialPresence"), devSocialCount=$("#devSocialCount"), devSocialInteraction=$("#devSocialInteraction"), devSocialConfidence=$("#devSocialConfidence"), devSocialChange=$("#devSocialChange");
 const devFusionState=$("#devFusionState"), devFusionTarget=$("#devFusionTarget"), devFusionIdentity=$("#devFusionIdentity"), devFusionIdentityConfidence=$("#devFusionIdentityConfidence"), devFusionPosition=$("#devFusionPosition"), devFusionMovement=$("#devFusionMovement"), devFusionConfidence=$("#devFusionConfidence");
@@ -3873,6 +3940,8 @@ async function refreshAIProviderDiagnostic(){
   }
 }
 
+loadRoboMemory();
+
 function runDevChecks(){
   const list=[
     ["HTTPS / localhost",location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"],
@@ -3892,6 +3961,9 @@ function runDevChecks(){
      ["Module 8 face overlay",!!$("#faceTrackingOverlay")],
     ["Social awareness UI",!!$("#socialAwareness")],
     ["Module 7 memory engine",typeof handleMemoryCommand==="function"],
+    ["Multi-person memory registry",!!(roboMemory&&Array.isArray(roboMemory.persons)&&roboMemory.persons.length>0)],
+    ["Active identity resolver",typeof findFaceMatch==="function"&&typeof setActivePerson==="function"],
+    ["Live face → social coupling",typeof deriveLiveSocialFromFaces==="function"],
     ["Persistent memory storage",typeof localStorage!=="undefined"],
     ["Memory identity UI",!!$("#memoryIdentity")],
     ["Perception fusion",typeof updatePerceptionFusion==="function"],
@@ -3929,7 +4001,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.40 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.41 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4061,7 +4133,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.40 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.41 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
   log("AI provider adapter online · Gemini structured vision enabled");
