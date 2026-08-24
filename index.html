@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.30 MODULE 8.2 LIVE FACE TRACKING FACE-API HARDENED</title>
+<title>ROBO AIOS v2.31 MODULE 8.2 LIVE FACE TRACKING FACE-API HARDENED</title>
 <style>
 :root{
   --void:#090d15;
@@ -221,11 +221,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.30 · MODULE 8.2 LIVE FACE TRACKING</div>
+      <div id="roboBuildMarker">ROBO v2.31 · MODULE 8.2 LIVE FACE TRACKING</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.30 · 8.2 LIVE FACE TRACKING + MEM + IDENTITY</small></div>
+          <div class="brand">ROBO <small>v2.31 · 8.2 LIVE FACE TRACKING + MEM + IDENTITY</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -294,7 +294,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.30 MODULE 8.2 · LIVE FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.31 MODULE 8.2 · LIVE FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -427,8 +427,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let faceSmoothedBox = null;
   let faceTrackingInitialized = false;
   let faceDetectionModel = null;
-  let blazeFaceModel = null;
-  let blazeFaceReady = false;
   let faceRecognitionAvailable = false;
   let faceRecognitionThreshold = 0.52;
   let faceRecognitionDistance = null;
@@ -437,8 +435,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let faceLastRecognitionAt = 0;
   let faceTickInFlight = false;
   let faceLoopToken = 0;
-  let faceBackendReady = false;
-
   const FACE_MODEL_URI = 'https://justadudewhohacks.github.io/face-api.js/models';
 
   /* Smoothing constants for Module 8.2.
@@ -460,7 +456,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             i=$('#devFaceIdentity'),
             f=$('#devFaceFps');
 
-      if(e) e.textContent=faceEngineReady?(faceEngineReady?'ONLINE · FACE-API':'OFFLINE'):(faceEngineLoading?'LOADING':'OFFLINE');
+      if(e) e.textContent=faceEngineReady?'ONLINE · FACE-API':(faceEngineLoading?'LOADING':'OFFLINE');
       if(c) c.textContent=String(faceDetections.length);
       if(t) t.textContent=faceTarget?'PRIMARY':'NONE';
       if(tr){
@@ -687,6 +683,32 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     return faceApiLoadPromise;
   }
 
+
+  function waitForFaceApi(timeoutMs=9000){
+    if(window.faceapi) return Promise.resolve(window.faceapi);
+    if(faceApiLoadPromise) return faceApiLoadPromise;
+
+    faceApiLoadPromise=new Promise((resolve,reject)=>{
+      const started=performance.now();
+      const poll=()=>{
+        if(window.faceapi){
+          resolve(window.faceapi);
+          return;
+        }
+        if(performance.now()-started>=timeoutMs){
+          reject(new Error('face-api.js library did not become available'));
+          return;
+        }
+        setTimeout(poll,60);
+      };
+      poll();
+    }).finally(()=>{
+      faceApiLoadPromise=null;
+    });
+
+    return faceApiLoadPromise;
+  }
+
   async function ensureFaceEngine(){
     if(faceEngineReady) return true;
 
@@ -708,14 +730,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         throw new Error('face-api.js library unavailable');
       }
 
-      // TinyFaceDetector is the fast live detector. It is the only model that
-      // must finish loading before 8.2 starts. Larger fallback/recognition
-      // models are loaded in the background and never block tracking.
       await api.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URI);
 
       faceDetectionModel={
         inputSize:320,
-        scoreThreshold:0.12
+        scoreThreshold:0.10
       };
 
       faceEngineReady=true;
@@ -724,34 +743,43 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       devLog('FACE','Face tracker ready',{
         detector:'face-api TinyFaceDetector',
-        ssdFallback:'loading',
+        inputSize:320,
+        scoreThreshold:0.10,
         video:`${camera.videoWidth}x${camera.videoHeight}`
       });
 
       faceBadge('FACE TRACKER ONLINE');
+
       faceDiag();
       setTimeout(()=>faceBadge('',false),1800);
 
-      // SSD fallback is optional and loads in the background.
+      /* Optional SSD fallback. Never blocks the live tracker. */
       (async()=>{
         try{
           await Promise.race([
             api.nets.ssdMobilenetv1.loadFromUri(FACE_MODEL_URI),
-            new Promise((_,reject)=>setTimeout(()=>reject(new Error('SSD fallback model timeout')),9000))
+            new Promise((_,reject)=>
+              setTimeout(
+                ()=>reject(new Error('SSD fallback model timeout')),
+                9000
+              )
+            )
           ]);
           faceSsdReady=true;
           devLog('FACE','SSD fallback model ready');
           faceDiag();
         }catch(err){
           faceSsdReady=false;
-          devLog('FACE','SSD fallback unavailable; TinyFaceDetector remains active',{
-            message:err?.message||String(err)
-          });
+          devLog(
+            'FACE',
+            'SSD fallback unavailable; TinyFaceDetector remains active',
+            {message:err?.message||String(err)}
+          );
           faceDiag();
         }
       })();
 
-      // Recognition is loaded separately and never blocks the live tracker.
+      /* Recognition remains background-only. */
       (async()=>{
         try{
           await Promise.race([
@@ -759,98 +787,131 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
               api.nets.faceLandmark68TinyNet.loadFromUri(FACE_MODEL_URI),
               api.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URI)
             ]),
-            new Promise((_,reject)=>setTimeout(()=>reject(new Error('recognition model timeout')),9000))
+            new Promise((_,reject)=>
+              setTimeout(
+                ()=>reject(new Error('recognition model timeout')),
+                9000
+              )
+            )
           ]);
+
           faceRecognitionAvailable=true;
           faceRecognitionStatus='ready';
-          faceDiag();
           devLog('FACE','Face recognition models ready');
+          faceDiag();
+
         }catch(err){
           faceRecognitionAvailable=false;
           faceRecognitionStatus='unavailable';
-          devLog('FACE','recognition models unavailable; live tracking remains active',{
-            message:err?.message||String(err)
-          });
+
+          devLog(
+            'FACE',
+            'recognition models unavailable; live tracking remains active',
+            {message:err?.message||String(err)}
+          );
+
           faceDiag();
         }
       })();
 
       return true;
+
     }catch(err){
       faceEngineReady=false;
-      blazeFaceReady=false;
-      faceBackendReady=false;
       faceRecognitionAvailable=false;
       faceRecognitionStatus='load-failed';
+      faceSsdReady=false;
 
-      devLog('FACE ERROR','face tracker load failed',{
-        message:err?.message||String(err),
-        detector:'face-api',
-        video:`${camera.videoWidth}x${camera.videoHeight}`
-      });
+      devLog(
+        'FACE ERROR',
+        'face tracker load failed',
+        {
+          name:err?.name||'Error',
+          message:err?.message||String(err),
+          video:`${camera.videoWidth}x${camera.videoHeight}`
+        }
+      );
 
       faceBadge('FACE TRACKER LOAD FAILED');
       faceDiag();
+
       return false;
+
     }finally{
       faceEngineLoading=false;
     }
   }
 
   async function detectLocalFaceBoxes(){
-    if(!camera || !camera.videoWidth || !camera.videoHeight || camera.readyState < 2){
-      return [];
-    }
-
-    if(!window.faceapi || !faceEngineReady){
+    if(
+      !camera ||
+      !camera.videoWidth ||
+      !camera.videoHeight ||
+      camera.readyState < 2 ||
+      !faceEngineReady ||
+      !window.faceapi
+    ){
       return [];
     }
 
     try{
       const options=new faceapi.TinyFaceDetectorOptions({
-        inputSize:320,
-        scoreThreshold:0.12
+        inputSize:faceDetectionModel?.inputSize || 320,
+        scoreThreshold:faceDetectionModel?.scoreThreshold ?? 0.10
       });
 
-      let detections=await faceapi.detectAllFaces(camera,options);
+      let detections=await faceapi.detectAllFaces(
+        camera,
+        options
+      );
 
-      // Difficult lighting / smaller faces: use SSD MobileNet as a fallback.
+      /* If TinyFaceDetector misses, use SSD MobileNet when available. */
       if(!detections.length && faceSsdReady){
         detections=await faceapi.detectAllFaces(
           camera,
           new faceapi.SsdMobilenetv1Options({
-            minConfidence:0.20,
+            minConfidence:0.15,
             maxResults:5
           })
         );
       }
 
-      return detections.map(d=>{
-        const b=d?.box;
-        if(!b) return null;
+      return detections
+        .map(d=>{
+          const b=d?.box;
+          if(!b) return null;
 
-        const box={
-          x:Number(b.x),
-          y:Number(b.y),
-          width:Number(b.width),
-          height:Number(b.height)
-        };
+          const box={
+            x:Number(b.x),
+            y:Number(b.y),
+            width:Number(b.width),
+            height:Number(b.height)
+          };
 
-        if(!isValidFaceBox(box)) return null;
+          if(!isValidFaceBox(box)) return null;
 
-        return {
-          box,
-          score:Number.isFinite(Number(d?.score)) ? Number(d.score) : 0
-        };
-      }).filter(Boolean);
+          return {
+            box,
+            score:Number.isFinite(Number(d?.score))
+              ? Number(d.score)
+              : 0
+          };
+        })
+        .filter(Boolean);
 
     }catch(err){
-      devLog('FACE ERROR','local face-api detector failed',{
-        name:err?.name||'Error',
-        message:err?.message||String(err),
-        stack:String(err?.stack||'').slice(0,300),
-        video:`${camera.videoWidth}x${camera.videoHeight}`
-      });
+      devLog(
+        'FACE ERROR',
+        'local face-api detector failed',
+        {
+          name:err?.name||'Error',
+          message:err?.message||String(err),
+          stack:String(err?.stack||'').slice(0,500),
+          video:`${camera.videoWidth}x${camera.videoHeight}`,
+          readyState:camera.readyState
+        }
+      );
+
       return [];
     }
   }
@@ -1042,8 +1103,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       !cameraEnabled ||
       !cameraStream ||
       !faceEngineReady ||
-      !blazeFaceReady ||
-      !blazeFaceModel ||
+      !window.faceapi ||
       !camera.videoWidth ||
       !camera.videoHeight ||
       camera.readyState < 2
