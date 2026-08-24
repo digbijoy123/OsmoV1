@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.24 MODULE 8.2 SMOOTH REAL-TIME FACE TRACKING</title>
+<title>ROBO AIOS v2.25 MODULE 8.2 SMOOTH REAL-TIME FACE TRACKING · DIAGNOSTICS FIX</title>
 <style>
 :root{
   --void:#090d15;
@@ -196,7 +196,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 /* ---------- Developer diagnostics page ---------- */
 .devPage{position:fixed;inset:0;z-index:9999;isolation:isolate;background:#10131d;color:#f5f7ff;padding:18px;overflow:auto;font-family:'JetBrains Mono',monospace;opacity:0;pointer-events:none;transform:translateY(10px);transition:.2s ease}
-.devPage.open{opacity:1;pointer-events:auto;transform:none}
+.devPage.open{opacity:1;pointer-events:auto;transform:none;z-index:99999}
 .devHeader{max-width:1100px;margin:0 auto 16px;display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
 .devHeader h2{margin:4px 0;font:600 21px 'Fredoka',sans-serif}.devHeader h2 span{font:600 9px 'JetBrains Mono';color:#69d8cf}
 .devSub{font-size:9px;color:#8f98aa}.devKicker{font-size:8px;letter-spacing:.16em;color:#ff9a78}
@@ -221,11 +221,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.24 · MODULE 8.2 SMOOTH FACE TRACKING</div>
+      <div id="roboBuildMarker">ROBO v2.25 · MODULE 8.2 SMOOTH FACE TRACKING</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.24 · 8.2 SMOOTH FACE TRACKING + MEM + IDENTITY</small></div>
+          <div class="brand">ROBO <small>v2.25 · 8.2 SMOOTH FACE TRACKING + MEM + IDENTITY</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -294,7 +294,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.24 MODULE 8.2 · SMOOTH FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.25 MODULE 8.2 · SMOOTH FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -326,6 +326,16 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       <div class="devRow"><span>Interaction state</span><b id="devSocialInteraction">IDLE</b></div>
       <div class="devRow"><span>Perception confidence</span><b id="devSocialConfidence">0%</b></div>
       <div class="devRow"><span>Last social change</span><b id="devSocialChange">none</b></div>
+    </section>
+    <section class="devCard">
+      <div class="devTitle">ACTIVE FACE ENGINE · MODULE 8.2</div>
+      <div class="devRow"><span>Engine</span><b id="devFaceEngine">OFFLINE</b></div>
+      <div class="devRow"><span>Faces detected</span><b id="devFaceCount">0</b></div>
+      <div class="devRow"><span>Target</span><b id="devFaceTarget">NONE</b></div>
+      <div class="devRow"><span>Tracking</span><b id="devFaceTracking">IDLE</b></div>
+      <div class="devRow"><span>Recognition</span><b id="devFaceRecognition">UNAVAILABLE</b></div>
+      <div class="devRow"><span>Identity</span><b id="devFaceIdentity">UNKNOWN</b></div>
+      <div class="devRow"><span>FPS</span><b id="devFaceFps">0</b></div>
     </section>
     <section class="devCard">
       <div class="devTitle">SYSTEM CHECK</div>
@@ -423,6 +433,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let faceRecognitionIdentity = null;
   let faceRecognitionStatus = 'unavailable';
   let faceLastRecognitionAt = 0;
+  let faceTickInFlight = false;
+  let faceLoopToken = 0;
 
   const FACE_MODEL_URI = 'https://justadudewhohacks.github.io/face-api.js/models';
 
@@ -974,24 +986,39 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   async function startFaceLoop(){
-    if(faceLoopTimer) return;
+    if(faceLoopTimer || faceTickInFlight) return;
 
+    const token=++faceLoopToken;
     if(!(await ensureFaceEngine())) return;
 
+    if(token!==faceLoopToken || !cameraEnabled || !cameraStream) return;
+
     const loop=async()=>{
+      if(token!==faceLoopToken || !cameraEnabled || !cameraStream){
+        faceLoopTimer=null;
+        return;
+      }
+
       faceLoopTimer=setTimeout(loop,110);
 
+      if(faceTickInFlight) return;
       if(performance.now()-faceLastRun<90) return;
 
       faceLastRun=performance.now();
-
-      await faceTrackingTick();
+      faceTickInFlight=true;
+      try{
+        await faceTrackingTick();
+      }finally{
+        faceTickInFlight=false;
+      }
     };
 
     loop();
   }
 
   function stopFaceLoop(){
+    faceLoopToken++;
+    faceTickInFlight=false;
     if(faceLoopTimer){
       clearTimeout(faceLoopTimer);
       faceLoopTimer=null;
@@ -3331,40 +3358,77 @@ $("#clearLogs").addEventListener("click",()=>{
   devLogs.textContent=devLogLines[0];
 });
 $("#copyLogs").addEventListener("click",async()=>{
+  const text=id=>$(id)?.textContent||'—';
   const payload=[
-    "ROBO AIOS v2.23 MODULE 8 ACTIVE FACE TRACKING + RECOGNITION DIAGNOSTICS",
+    "ROBO AIOS v2.25 MODULE 8.2 SMOOTH FACE TRACKING DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
-    "Stage: "+devStage.textContent,
-    "Camera: "+devCamera.textContent,
-    "Mic API: "+devMic.textContent,
-    "Mic permission: "+devMicPermission.textContent,
-    "STT: "+devStt.textContent,
-    "On-device STT: "+devLocalStt.textContent,
-    "AI brain: "+devAI.textContent,
-    "Social presence: "+devSocialPresence.textContent,
-    "People detected: "+devSocialCount.textContent,
-    "Social interaction: "+devSocialInteraction.textContent,
-    "Social confidence: "+devSocialConfidence.textContent,
-    "Social change: "+devSocialChange.textContent,
-    "Memory status: "+devMemoryStatus.textContent,
-    "Memory identity: "+devMemoryIdentity.textContent,
-    "Persistent memories: "+devMemoryCount.textContent,
-    "Profile facts: "+devMemoryFacts.textContent,
-    "Last memory change: "+devMemoryChange.textContent,
+    "Stage: "+text('#devStage'),
+    "Camera: "+text('#devCamera'),
+    "Mic API: "+text('#devMic'),
+    "Mic permission: "+text('#devMicPermission'),
+    "STT: "+text('#devStt'),
+    "On-device STT: "+text('#devLocalStt'),
+    "AI brain: "+text('#devAI'),
+    "Face engine: "+text('#devFaceEngine'),
+    "Faces detected: "+text('#devFaceCount'),
+    "Face target: "+text('#devFaceTarget'),
+    "Face tracking: "+text('#devFaceTracking'),
+    "Face recognition: "+text('#devFaceRecognition'),
+    "Face identity: "+text('#devFaceIdentity'),
+    "Face FPS: "+text('#devFaceFps'),
+    "Social presence: "+text('#devSocialPresence'),
+    "People detected: "+text('#devSocialCount'),
+    "Social interaction: "+text('#devSocialInteraction'),
+    "Social confidence: "+text('#devSocialConfidence'),
+    "Social change: "+text('#devSocialChange'),
+    "Memory status: "+text('#devMemoryStatus'),
+    "Memory identity: "+text('#devMemoryIdentity'),
+    "Persistent memories: "+text('#devMemoryCount'),
+    "Profile facts: "+text('#devMemoryFacts'),
+    "Last memory change: "+text('#devMemoryChange'),
     "",
     "TRANSCRIPT:",
-    devTranscript.textContent,
+    text('#devTranscript'),
     "",
     "LOG:",
     devLogLines.join("\n")
   ].join("\n");
+
   try{
-    await navigator.clipboard.writeText(payload);
-    devLog("UI","Diagnostics copied to clipboard");
+    if(navigator.clipboard && window.isSecureContext){
+      await navigator.clipboard.writeText(payload);
+      devLog("UI","Diagnostics copied to clipboard");
+      return;
+    }
+
+    const ta=document.createElement('textarea');
+    ta.value=payload;
+    ta.setAttribute('readonly','');
+    ta.style.position='fixed';
+    ta.style.left='-9999px';
+    ta.style.top='0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const copied=document.execCommand('copy');
+    ta.remove();
+    if(copied){
+      devLog("UI","Diagnostics copied to clipboard · legacy fallback");
+    }else{
+      throw new Error('Clipboard API unavailable');
+    }
   }catch(e){
     devLog("ERROR","Clipboard copy failed",{name:e?.name,message:e?.message});
+    try{
+      const win=window.open('', '_blank');
+      if(win){
+        win.document.write('<pre style="white-space:pre-wrap;word-break:break-word;font:14px monospace;padding:16px">'+payload.replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))+'</pre>');
+        win.document.close();
+        devLog("UI","Diagnostics opened in new window as copy fallback");
+      }
+    }catch(_){ }
   }
 });
 
