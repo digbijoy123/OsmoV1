@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.36 MODULE 8.2 LIVE FACE TRACKING SSD PRIMARY</title>
+<title>ROBO AIOS v2.37 MODULE 8.2 FINAL LIVE FACE TRACKING</title>
 <style>
 :root{
   --void:#090d15;
@@ -221,11 +221,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.36 · MODULE 8.2 LIVE FACE TRACKING</div>
+      <div id="roboBuildMarker">ROBO v2.37 · MODULE 8.2 FINAL LIVE FACE TRACKING</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.35 · 8.2 LIVE FACE TRACKING + MEM + IDENTITY</small></div>
+          <div class="brand">ROBO <small>v2.37 · 8.2 FINAL FACE TRACKING + MEM + IDENTITY</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -294,7 +294,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.35 MODULE 8.2 · LIVE FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.37 MODULE 8.2 · FINAL LIVE FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -407,6 +407,21 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let latestVision = null;
   let visualMemory = null;
 
+  // Module 6 social-awareness state must exist before the first diagnostics render.
+  let socialAwareness = {
+    presence: "unknown",
+    personCount: 0,
+    interaction: "idle",
+    confidence: 0,
+    lastChange: "none",
+    primaryPerson: null,
+    people: [],
+    timestamp: 0,
+    session: 0
+  };
+  let previousSocialAwareness = null;
+
+
   /* ---------- CORE UI / VOICE RUNTIME RESTORE ----------
      v2.35: the previous runtime lost a foundational helper block. When
      setState()/showCaption()/log()/buildRecognition() were missing, the
@@ -429,8 +444,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let micVoiceLevel = 0;
   let micPermissionStream = null;
   let sttStarting = false;
+  let sttStartWatchdog = null;
+  let sttRuntimeState = "idle";
 
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const SR = window.webkitSpeechRecognition || window.SpeechRecognition;
 
   let sttSession = 0;
   let sttHadResult = false;
@@ -611,17 +628,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     const data=stateData[state]||stateData.curious;
     const blend=Math.min(1,stateBlend);
-    stateBlend=Math.min(1,stateBlend+dt*3.5);
+    stateBlend=Math.min(1,stateBlend+dt*4.5);
 
     const cx=w/2;
-    const cy=h/2 + Math.sin(t*1.6)*3;
-    const radius=Math.min(w,h)*0.31*(lerp(1,data.scale,blend));
-    const glow=0.18+data.glow*0.22;
+    const cy=h/2 + Math.sin(t*1.45)*3.5;
+    const radius=Math.min(w,h)*0.33*(lerp(1,data.scale,blend));
 
-    const bg=ctx.createRadialGradient(cx,cy,radius*0.2,cx,cy,radius*1.7);
-    bg.addColorStop(0,`rgba(95,212,208,${glow})`);
-    bg.addColorStop(0.55,`rgba(119,168,255,${glow*0.45})`);
-    bg.addColorStop(1,'rgba(119,168,255,0)');
+    // Soft ambient glow behind the character.
+    const glow=0.12+data.glow*0.18;
+    const bg=ctx.createRadialGradient(cx,cy,radius*.25,cx,cy,radius*1.75);
+    bg.addColorStop(0,`rgba(255,190,45,${glow})`);
+    bg.addColorStop(.52,`rgba(255,139,55,${glow*.35})`);
+    bg.addColorStop(1,'rgba(255,139,55,0)');
     ctx.fillStyle=bg;
     ctx.beginPath();
     ctx.arc(cx,cy,radius*1.75,0,Math.PI*2);
@@ -631,93 +649,140 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     ctx.translate(cx,cy);
     ctx.rotate(data.tilt||0);
 
-    const faceGrad=ctx.createLinearGradient(-radius,-radius,radius,radius);
-    faceGrad.addColorStop(0,'#fff5e5');
-    faceGrad.addColorStop(0.58,'#ffe3c4');
-    faceGrad.addColorStop(1,'#ffc58f');
+    // Large golden 3D emoji head — visually close to the original Robo avatar.
+    const faceGrad=ctx.createRadialGradient(-radius*.28,-radius*.36,radius*.08,radius*.02,radius*.02,radius*1.15);
+    faceGrad.addColorStop(0,'#fff7ad');
+    faceGrad.addColorStop(.20,'#ffd95a');
+    faceGrad.addColorStop(.62,'#f5ad16');
+    faceGrad.addColorStop(.88,'#db8506');
+    faceGrad.addColorStop(1,'#a95f02');
     ctx.fillStyle=faceGrad;
-    ctx.shadowColor='rgba(44,36,64,.22)';
-    ctx.shadowBlur=22;
-    ctx.shadowOffsetY=10;
+    ctx.shadowColor='rgba(112,67,3,.30)';
+    ctx.shadowBlur=28;
+    ctx.shadowOffsetY=14;
     ctx.beginPath();
     ctx.arc(0,0,radius,0,Math.PI*2);
     ctx.fill();
     ctx.shadowColor='transparent';
 
-    const eyeY=-radius*0.08;
-    const eyeDX=radius*0.36;
-    const eyeH=Math.max(3,radius*0.11*Math.max(.2,data.eye));
-    const eyeW=radius*0.18;
-    const blinkNow=blink>0.88 ? Math.max(.05,1-(blink-0.88)/0.12) : 1;
+    // Specular highlight makes the face read as a glossy 3D object.
+    const shine=ctx.createRadialGradient(-radius*.42,-radius*.48,0,-radius*.42,-radius*.48,radius*.42);
+    shine.addColorStop(0,'rgba(255,255,255,.68)');
+    shine.addColorStop(.35,'rgba(255,255,255,.20)');
+    shine.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=shine;
+    ctx.beginPath();
+    ctx.arc(-radius*.38,-radius*.43,radius*.38,0,Math.PI*2);
+    ctx.fill();
 
-    ctx.strokeStyle='#29233c';
-    ctx.fillStyle='#29233c';
-    ctx.lineWidth=Math.max(2,radius*0.035);
-    ctx.lineCap='round';
+    const eyeY=-radius*.03;
+    const eyeDX=radius*.38;
+    const eyeW=radius*.19;
+    const baseEyeH=radius*.245;
+    const blinkNow=blink>0.88 ? Math.max(.05,1-(blink-.88)/.12) : 1;
+    const eyeScale=Math.max(.45,Math.min(1.55,data.eye));
+    const pupilJitterX=Math.sin(t*.75)*radius*.015;
+    const pupilJitterY=Math.cos(t*.62)*radius*.012;
 
-    if(blinkNow<0.25){
+    // Huge white eyes.
+    for(const ex of [-eyeDX,eyeDX]){
+      const ew=eyeW;
+      const eh=baseEyeH*blinkNow;
+      ctx.fillStyle='#fffdf8';
       ctx.beginPath();
-      ctx.moveTo(-eyeDX-eyeW*0.65,eyeY);
-      ctx.lineTo(-eyeDX+eyeW*0.65,eyeY);
-      ctx.moveTo(eyeDX-eyeW*0.65,eyeY);
-      ctx.lineTo(eyeDX+eyeW*0.65,eyeY);
-      ctx.stroke();
-    }else{
-      for(const ex of [-eyeDX,eyeDX]){
+      ctx.ellipse(ex,eyeY,ew,eh,0,0,Math.PI*2);
+      ctx.fill();
+
+      if(blinkNow>.18){
+        const irisR=radius*.105*eyeScale;
+        const irisGrad=ctx.createRadialGradient(ex-irisR*.25,eyeY-irisR*.25,irisR*.05,ex,eyeY,irisR);
+        irisGrad.addColorStop(0,'#f7dcff');
+        irisGrad.addColorStop(.35,'#b990ff');
+        irisGrad.addColorStop(.72,'#7351d9');
+        irisGrad.addColorStop(1,'#452a9c');
+        ctx.fillStyle=irisGrad;
         ctx.beginPath();
-        ctx.ellipse(ex,eyeY,eyeW,eyeH*blinkNow,0,0,Math.PI*2);
+        ctx.arc(ex+pupilJitterX,eyeY+pupilJitterY,irisR,0,Math.PI*2);
         ctx.fill();
+
+        ctx.fillStyle='#171222';
+        ctx.beginPath();
+        ctx.arc(ex+pupilJitterX,eyeY+pupilJitterY,irisR*.48,0,Math.PI*2);
+        ctx.fill();
+
         ctx.fillStyle='#ffffff';
         ctx.beginPath();
-        ctx.arc(ex-eyeW*0.28,eyeY-eyeH*0.25,eyeH*0.22,0,Math.PI*2);
+        ctx.arc(ex-irisR*.28,eyeY-irisR*.34,irisR*.20,0,Math.PI*2);
         ctx.fill();
-        ctx.fillStyle='#29233c';
       }
     }
 
-    const browY=eyeY-radius*0.30;
-    const browTilt=data.brow*radius*0.25;
+    // Expressive dark eyebrows.
+    ctx.strokeStyle='#56300a';
+    ctx.lineCap='round';
+    ctx.lineWidth=Math.max(5,radius*.045);
+    const browY=eyeY-radius*.31;
+    const browTilt=data.brow*radius*.42;
     ctx.beginPath();
-    ctx.moveTo(-eyeDX-eyeW,browY+browTilt);
-    ctx.quadraticCurveTo(-eyeDX,browY-eyeH*0.8,-eyeDX+eyeW,browY-browTilt);
-    ctx.moveTo(eyeDX-eyeW,browY-browTilt);
-    ctx.quadraticCurveTo(eyeDX,browY-eyeH*0.8,eyeDX+eyeW,browY+browTilt);
+    ctx.moveTo(-eyeDX-eyeW*.88,browY+browTilt);
+    ctx.quadraticCurveTo(-eyeDX,browY-radius*.055,-eyeDX+eyeW*.88,browY-browTilt);
+    ctx.moveTo(eyeDX-eyeW*.88,browY-browTilt);
+    ctx.quadraticCurveTo(eyeDX,browY-radius*.055,eyeDX+eyeW*.88,browY+browTilt);
     ctx.stroke();
 
-    ctx.strokeStyle='rgba(44,36,64,.58)';
-    ctx.lineWidth=Math.max(1.5,radius*0.018);
+    // Small nose/shadow.
+    ctx.fillStyle='rgba(132,77,5,.25)';
     ctx.beginPath();
-    ctx.moveTo(0,eyeY+radius*0.08);
-    ctx.quadraticCurveTo(-radius*0.03,0,radius*0.025,radius*0.13);
-    ctx.stroke();
+    ctx.ellipse(0,radius*.12,radius*.045,radius*.055,0,0,Math.PI*2);
+    ctx.fill();
 
-    const mouthY=radius*0.34;
-    const mouthOpen=Math.max(0,data.mouth)*radius*(talking?0.75:0.42);
-    ctx.strokeStyle='#29233c';
-    ctx.fillStyle='rgba(41,35,60,.12)';
-    ctx.lineWidth=Math.max(2,radius*0.022);
-    ctx.beginPath();
-    if(data.mouth>=0){
-      ctx.arc(0,mouthY,radius*0.22,0.08*Math.PI,0.92*Math.PI);
-    }else{
-      ctx.arc(0,mouthY+radius*0.06,radius*0.22,1.08*Math.PI,1.92*Math.PI);
+    // Rosy cheeks.
+    const cheekGlow=state==='embarrassed'||state==='love'||state==='happy'||state==='excited';
+    if(cheekGlow){
+      for(const ex of [-1,1]){
+        const cg=ctx.createRadialGradient(ex*radius*.57,radius*.29,0,ex*radius*.57,radius*.29,radius*.18);
+        cg.addColorStop(0,'rgba(255,104,116,.40)');
+        cg.addColorStop(1,'rgba(255,104,116,0)');
+        ctx.fillStyle=cg;
+        ctx.beginPath();
+        ctx.arc(ex*radius*.57,radius*.29,radius*.18,0,Math.PI*2);
+        ctx.fill();
+      }
     }
-    ctx.stroke();
-    if(mouthOpen>2){
+
+    // Mouth: open/rounded for talking and stronger expressions.
+    const mouthY=radius*.36;
+    const speaking=talking;
+    const mouthOpen=speaking
+      ? radius*(.075+.055*(Math.sin(t*16)*.5+.5))
+      : Math.max(0,data.mouth)*radius*.54;
+
+    if(data.mouth<0){
+      ctx.strokeStyle='#5b3110';
+      ctx.lineWidth=Math.max(4,radius*.025);
       ctx.beginPath();
-      ctx.ellipse(0,mouthY+mouthOpen*0.35,radius*0.12,mouthOpen,0,0,Math.PI*2);
+      ctx.arc(0,mouthY+radius*.035,radius*.18,1.10*Math.PI,1.90*Math.PI);
+      ctx.stroke();
+    }else{
+      ctx.fillStyle='#4a2514';
+      ctx.beginPath();
+      ctx.ellipse(0,mouthY,radius*.16,Math.max(radius*.055,mouthOpen),0,0,Math.PI*2);
       ctx.fill();
+      if(speaking || state==='surprised' || state==='excited'){
+        ctx.fillStyle='#ff7b87';
+        ctx.beginPath();
+        ctx.ellipse(0,mouthY+radius*.045,radius*.085,Math.max(radius*.018,mouthOpen*.55),0,0,Math.PI*2);
+        ctx.fill();
+      }
     }
 
     ctx.restore();
 
     if(time >= blinkTimer){
       blink=1;
-      blinkTimer=time + 120 + Math.random()*100;
+      blinkTimer=time + 120 + Math.random()*120;
     }
-    if(blink>0){
-      blink=Math.max(0,blink-dt*7.5);
-    }
+    if(blink>0) blink=Math.max(0,blink-dt*7.5);
 
     const fallback=$('#emojiFallback');
     if(fallback) fallback.classList.add('hidden');
@@ -728,6 +793,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function startAvatarRenderer(){
     if(avatarFrame) return;
     resizeAvatarCanvas();
+    avatarLastTime=performance.now();
     avatarFrame=requestAnimationFrame(drawAvatar);
   }
 
@@ -927,43 +993,19 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     r.interimResults=true;
     r.maxAlternatives=3;
 
-    const browserLang=
-      (navigator.language||"en-US").toLowerCase();
+    const browserLang = String(navigator.language || "en-US");
+    r.lang = /^en-/i.test(browserLang) ? browserLang : "en-US";
 
-    r.lang=
-      browserLang.startsWith("en-")
-        ? browserLang
-        : "en-US";
-
+    // Android Chrome is more reliable when standard cloud SpeechRecognition owns startup.
+    // We only report on-device capability; we do not toggle processLocally during the gesture.
     try{
-      if(
-        "processLocally" in r &&
-        typeof SR.available==="function"
-      ){
-        SR.available({
-          langs:["en-US"],
-          processLocally:true
-        }).then(result=>{
-          const ok=
-            result==="available" ||
-            (
-              Array.isArray(result) &&
-              result.includes("available")
-            );
-
-          if(ok){
-            try{r.processLocally=true;}catch(_){}
-            log("STT · on-device recognition available");
-          }else{
-            log(
-              "STT · on-device recognition unavailable · using Chrome service"
-            );
-          }
-        }).catch(()=>{
-          log(
-            "STT · on-device availability check failed · using Chrome service"
-          );
-        });
+      if("processLocally" in r && typeof SR.available === "function") {
+        SR.available({langs:["en-US"],processLocally:true})
+          .then(result=>{
+            const ok=result==="available" || (Array.isArray(result) && result.includes("available"));
+            log(ok ? "STT · on-device capability detected · standard STT selected" : "STT · on-device unavailable · standard STT selected");
+          })
+          .catch(()=>log("STT · on-device capability check failed · standard STT selected"));
       }
     }catch(_){}
 
@@ -1003,6 +1045,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     r.onstart=()=>{
       sttStarting=false;
+      sttRuntimeState="listening";
+      if(sttStartWatchdog){clearTimeout(sttStartWatchdog);sttStartWatchdog=null;}
       listening=true;
       micBtn.classList.add("listening");
 
@@ -1071,6 +1115,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     };
 
     r.onerror=(event)=>{
+      if(sttStartWatchdog){clearTimeout(sttStartWatchdog);sttStartWatchdog=null;}
       const code=
         event?.error ||
         "unknown";
@@ -1083,6 +1128,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       );
 
       sttStarting=false;
+      sttRuntimeState="error";
       listening=false;
       micBtn.classList.remove("listening");
 
@@ -1120,7 +1166,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     };
 
     r.onend=()=>{
+      if(sttStartWatchdog){clearTimeout(sttStartWatchdog);sttStartWatchdog=null;}
       sttStarting=false;
+      sttRuntimeState="idle";
 
       if(sttWatchdog){
         clearTimeout(sttWatchdog);
@@ -1502,7 +1550,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       }
 
       /* One detector inference at a time; keep the phone UI responsive. */
-      faceLoopTimer=setTimeout(loop,160);
+      faceLoopTimer=setTimeout(loop,125);
 
       if(faceTickInFlight) return;
       if(performance.now()-faceLastRun<130) return;
@@ -1667,7 +1715,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       await api.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URI);
 
       faceDetectionModel={
-        inputSize:224,
+        inputSize:160,
         scoreThreshold:0.05
       };
 
@@ -1794,7 +1842,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       let detections=await faceapi.detectAllFaces(
         camera,
         new faceapi.TinyFaceDetectorOptions({
-          inputSize:faceDetectionModel?.inputSize || 224,
+          inputSize:faceDetectionModel?.inputSize || 160,
           scoreThreshold:faceDetectionModel?.scoreThreshold ?? 0.05
         })
       );
@@ -2015,10 +2063,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(typeof devSocialPresence==='undefined' || !devSocialPresence) return;
     const s=socialAwareness;
     devSocialPresence.textContent=String(s?.presence||'unknown').toUpperCase();
-    devSocialCount.textContent=String(s.personCount);
+    devSocialCount.textContent=String(Number.isFinite(Number(s?.personCount)) ? Number(s.personCount) : 0);
     devSocialInteraction.textContent=String(s?.interaction||'idle').toUpperCase();
-    devSocialConfidence.textContent=s.confidence+'%';
-    devSocialChange.textContent=s.lastChange;
+    devSocialConfidence.textContent=(Number.isFinite(Number(s?.confidence)) ? Number(s.confidence) : 0)+'%';
+    devSocialChange.textContent=String(s?.lastChange||'none');
   }
 
   function renderVisionResult(visionData){
@@ -2191,7 +2239,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
   /* ---------- v2.35 restored STT + emotion/vision helpers ---------- */
 function startSTT(isRetry=false){
-    if(!recognition){setVoiceStatus('STT UNAVAILABLE · Chrome SpeechRecognition not exposed');return;}
+    if(!SR){setVoiceStatus('STT UNAVAILABLE · Chrome SpeechRecognition not exposed'); if(devStt)devStt.textContent='UNAVAILABLE'; return;}
     if(listening||sttStarting)return;
 
     try{
@@ -2202,6 +2250,7 @@ function startSTT(isRetry=false){
         throw new Error('SpeechRecognition runtime unavailable');
       }
       sttStarting=true;
+      sttRuntimeState="starting";
 
       // Stop TTS and every getUserMedia audio resource before asking Google
       // SpeechRecognition for the microphone. Android Chrome does not reliably
@@ -2221,9 +2270,23 @@ function startSTT(isRetry=false){
       // SpeechRecognition.start() can break the user-gesture/audio handoff.
       // The microphone getUserMedia tracks were already stopped above.
       sttEventForStart('calling SpeechRecognition.start()');
+      if(sttStartWatchdog) clearTimeout(sttStartWatchdog);
+      sttStartWatchdog=setTimeout(()=>{
+        if(sttStarting && !listening){
+          sttStarting=false;
+          sttRuntimeState="timeout";
+          const msg='SpeechRecognition did not fire onstart within 3s';
+          devLog('STT ERROR',msg,{constructor:SR?.name||'unknown',secureContext:Boolean(window.isSecureContext)});
+          setVoiceStatus('STT START TIMEOUT · tap mic again');
+          try{recognition?.abort();}catch(_){ }
+          releaseMicForSTT();
+        }
+        sttStartWatchdog=null;
+      },3000);
       recognition.start();
     }catch(e){
       sttStarting=false;
+      sttRuntimeState="error";
       console.warn(e);
       log('STT start exception · '+(e?.name||'unknown')+' · '+(e?.message||''));
 
@@ -2857,13 +2920,14 @@ function startSTT(isRetry=false){
 
   micBtn.addEventListener('click',async()=>{
     lastActivity=performance.now();
-    devLog('MIC','tap',{speechRecognitionAvailable:typeof SR==='function',secureContext:Boolean(window.isSecureContext)});
+    devLog('MIC','tap',{speechRecognitionAvailable:typeof SR==='function',constructor:SR?.name||'none',secureContext:Boolean(window.isSecureContext),permission:devMicPermission?.textContent||'unknown'});
     if(!SR){
       setVoiceStatus('MIC UNAVAILABLE · SpeechRecognition API is not exposed by this browser');
       if(devStt)devStt.textContent='UNAVAILABLE';
       return;
     }
     if(listening){try{recognition?.stop();}catch(_){ }return;}
+    recognition=null;
     if('speechSynthesis' in window) speechSynthesis.cancel();
     await startSTT(false);
   });
@@ -3159,6 +3223,7 @@ const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscr
   loadRoboMemory();
 const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
 const devSocialPresence=$("#devSocialPresence"), devSocialCount=$("#devSocialCount"), devSocialInteraction=$("#devSocialInteraction"), devSocialConfidence=$("#devSocialConfidence"), devSocialChange=$("#devSocialChange");
+devSocialPresence.textContent="UNKNOWN"; devSocialCount.textContent="0"; devSocialInteraction.textContent="IDLE"; devSocialConfidence.textContent="0%"; devSocialChange.textContent="none";
 window.__roboStructuredVisionReady=false;
 let devLogLines=["[BOOT] Developer diagnostics ready."];
 
@@ -3175,7 +3240,7 @@ if(devBrowser)devBrowser.textContent=navigator.userAgent.includes("Chrome")?"Chr
 if(devAI)devAI.textContent="CHECKING · PROVIDER ADAPTER";
 if(devStt){
   const srAvailable=typeof SR==='function';
-  devStt.textContent=srAvailable?'READY · USER GESTURE REQUIRED':'UNAVAILABLE';
+  devStt.textContent=srAvailable ? (sttRuntimeState==='listening'?'LISTENING':sttRuntimeState==='starting'?'STARTING':((sttRuntimeState==='error'||sttRuntimeState==='timeout')?'ERROR · '+(sttLastErrorCode||sttRuntimeState):'READY · TAP MIC')) : 'UNAVAILABLE';
   devStt.dataset.runtime=srAvailable?'ready':'unavailable';
 }
 if(devCamera)devCamera.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
@@ -3240,21 +3305,27 @@ function runDevChecks(){
   const list=[
     ["HTTPS / localhost",location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"],
     ["getUserMedia",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
-    ["SpeechRecognition",typeof SR==='function'],
+    ["SpeechRecognition API",typeof SR==='function'],
+    ["SpeechRecognition runtime",typeof SR==='function' && (sttRuntimeState!=="idle" || sttLastErrorCode!=="")],
     ["Speech synthesis","speechSynthesis" in window],
     ["Camera",!!$("#camera") && !!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
-    ["3D emoji canvas",!!$("#face")],
+    ["3D emoji avatar",!!$("#face") && !!avatarFrame],
     ["Media permission API",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
     ["On-device STT API",!!(SR&&SR.prototype&&"processLocally" in SR.prototype)],
-    ["AI adapter route",true],
+    ["Module 1 core AI brain",typeof callRoboBrain==='function'],
+    ["Module 2 voice I/O",typeof buildRecognition==='function' && typeof speakWithElevenLabs==='function'],
+    ["Module 3 vision intelligence",typeof isVisionQuestion==='function' && typeof renderVisionResult==='function'],
+    ["Module 4 object tracking",typeof compareVisualObjects==='function' && typeof renderVisionResult==='function'],
+    ["AI adapter route",typeof fetch==='function'],
     ["Camera vision capture",!!(cameraEnabled && cameraStream && $("#camera")?.videoWidth>1 && $("#camera")?.videoHeight>1)],
     ["Camera state",cameraEnabled && !!cameraStream],
     ["Structured vision state",!!window.__roboStructuredVisionReady],
-    ["Module 6 social awareness engine",typeof deriveSocialAwareness==="function"],
+    ["Module 5 emotion engine",typeof inferEmotion==='function' && typeof setState==='function'],
+     ["Module 6 social awareness engine",typeof deriveSocialAwareness==='function' && typeof buildSocialAwarenessMessage==='function'],
+     ["Module 7 memory engine",typeof handleMemoryCommand==='function' && typeof buildMemoryContextMessage==='function'],
      ["Module 8 face tracking engine",typeof ensureFaceEngine==="function"],
      ["Module 8 face overlay",!!$("#faceTrackingOverlay")],
     ["Social awareness UI",!!$("#socialAwareness")],
-    ["Module 7 memory engine",typeof handleMemoryCommand==="function"],
     ["Persistent memory storage",typeof localStorage!=="undefined"],
     ["Memory identity UI",!!$("#memoryIdentity")],
     ["AI API key",null]
@@ -3272,6 +3343,22 @@ function runDevChecks(){
   refreshAIProviderDiagnostic();
 }
 runDevChecks();
+
+function refreshRuntimeTruth(){
+  try{
+    if(devStt){
+      devStt.textContent = !SR
+        ? 'UNAVAILABLE'
+        : sttRuntimeState==='listening' ? 'LISTENING'
+        : sttRuntimeState==='starting' ? 'STARTING'
+        : (sttRuntimeState==='error'||sttRuntimeState==='timeout') ? 'ERROR · '+(sttLastErrorCode||sttRuntimeState)
+        : 'READY · TAP MIC';
+    }
+    faceDiag();
+    renderSocialDiagnostics();
+  }catch(_){ }
+}
+setInterval(refreshRuntimeTruth,1000);
 
 $("#devPageBtn").addEventListener("click",()=>{
   devPage.classList.add("open");
@@ -3291,7 +3378,7 @@ $("#clearLogs").addEventListener("click",()=>{
 $("#copyLogs").addEventListener("click",async()=>{
   const text=id=>$(id)?.textContent||'—';
   const payload=[
-    "ROBO AIOS v2.36 MODULE 8.2 SMOOTH FACE TRACKING DIAGNOSTICS",
+    "ROBO AIOS v2.37 MODULE 8.2 FINAL LIVE FACE TRACKING DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
