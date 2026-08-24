@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.41 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.42 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -65,7 +65,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 .camera .visionOverlay{position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden}
 .camera .visionBox{position:absolute;border:2px solid var(--cyan);border-radius:6px;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 12px rgba(95,212,208,.28);background:rgba(95,212,208,.06)}
 .camera .visionLabel{position:absolute;left:-2px;top:-19px;max-width:120px;padding:3px 5px;border-radius:5px;background:rgba(9,13,21,.82);color:#fff;font-size:6px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.faceTrackingOverlay{position:absolute;inset:0;pointer-events:none;z-index:6;overflow:hidden}.faceTrackBox{position:absolute;border:2px solid #7ee59a;border-radius:10px;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 15px rgba(126,229,154,.30);background:rgba(126,229,154,.05);transition:left .07s linear,top .07s linear,width .07s linear,height .07s linear}.faceTrackBox.target{border-color:#69d8cf;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 18px rgba(105,216,207,.4)}.faceTrackLabel{position:absolute;left:-2px;top:-20px;padding:3px 5px;border-radius:5px;background:rgba(9,13,21,.86);color:#fff;font-size:6px;white-space:nowrap}.faceTrackBox.lost{opacity:.4;border-style:dashed}.faceEngineStatus{position:absolute;left:50%;transform:translateX(-50%);top:7px;z-index:9;padding:4px 7px;border-radius:999px;background:rgba(9,13,21,.72);color:#fff;font-size:6px;letter-spacing:.06em;opacity:0;transition:.2s}.faceEngineStatus.show{opacity:1}
+.faceTrackingOverlay{position:absolute;inset:0;pointer-events:none;z-index:6;overflow:hidden}.faceTrackBox{position:absolute;box-sizing:border-box;aspect-ratio:1/1;border:2px solid #7ee59a;border-radius:8px;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 15px rgba(126,229,154,.30);background:rgba(126,229,154,.05);transition:left .07s linear,top .07s linear,width .07s linear,height .07s linear}.faceTrackBox.target{border-color:#69d8cf;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 18px rgba(105,216,207,.4)}.faceTrackLabel{position:absolute;left:-2px;top:-24px;max-width:180px;padding:4px 7px;border-radius:6px;background:rgba(9,13,21,.92);color:#fff;font-size:8px;font-weight:700;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.faceTrackBox.unknown .faceTrackLabel{opacity:.82}.faceTrackBox.lost{opacity:.4;border-style:dashed}.faceEngineStatus{position:absolute;left:50%;transform:translateX(-50%);top:7px;z-index:9;padding:4px 7px;border-radius:999px;background:rgba(9,13,21,.72);color:#fff;font-size:6px;letter-spacing:.06em;opacity:0;transition:.2s}.faceEngineStatus.show{opacity:1}
 .camera /* Module 6 social-awareness status badge */
 .socialAwareness{position:absolute;left:10px;bottom:10px;z-index:8;padding:5px 8px;border:1px solid rgba(95,212,208,.35);border-radius:999px;background:rgba(9,13,21,.72);backdrop-filter:blur(8px);font-size:9px;letter-spacing:.08em;color:#dffefa;opacity:0;transform:translateY(5px);transition:opacity .2s ease,transform .2s ease}
 .socialAwareness.show{opacity:1;transform:translateY(0)}
@@ -222,11 +222,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.41 · MODULES 6+7+8 PERCEPTION FUSION</div>
+      <div id="roboBuildMarker">ROBO v2.42 · MODULES 6+7+8 PERCEPTION FUSION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.41 PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
+          <div class="brand">ROBO <small>v2.42 PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -295,7 +295,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.41 MODULE 6+7+8 · PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.42 MODULE 6+7+8 · PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -853,119 +853,33 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function renderFaceTarget(){
     const overlay=$('#faceTrackingOverlay');
     if(!overlay) return;
-
     overlay.innerHTML='';
+    if(!camera.videoWidth || !camera.videoHeight) return;
 
-    if(
-      !camera.videoWidth ||
-      !camera.videoHeight
-    ){
-      return;
-    }
-
-    const appendBox=(box,index,isTarget=false,labelText='FACE')=>{
+    const appendBox=(box,index,isTarget=false,labelText='UNKNOWN')=>{
       if(!isValidFaceBox(box)) return;
-
-      let left=
-        box.x/
-        camera.videoWidth*100;
-
-      let top=
-        box.y/
-        camera.videoHeight*100;
-
-      let width=
-        box.width/
-        camera.videoWidth*100;
-
-      let height=
-        box.height/
-        camera.videoHeight*100;
-
-      if(cameraFacingMode==='user'){
-        left=100-(left+width);
-      }
-
-      left=Math.max(
-        0,
-        Math.min(99,left)
-      );
-
-      top=Math.max(
-        0,
-        Math.min(99,top)
-      );
-
-      width=Math.max(
-        1,
-        Math.min(100-left,width)
-      );
-
-      height=Math.max(
-        1,
-        Math.min(100-top,height)
-      );
-
-      const el=
-        document.createElement('div');
-
-      el.className=
-        'faceTrackBox '+
-        (isTarget?'target':'');
-
-      el.style.left=left+'%';
-      el.style.top=top+'%';
-      el.style.width=width+'%';
-      el.style.height=height+'%';
-
-      const label=
-        document.createElement('span');
-
+      const rawWidthPct=(box.width/camera.videoWidth)*100;
+      const rawHeightPct=(box.height/camera.videoHeight)*100;
+      const squarePct=Math.max(6,Math.min(45,Math.max(rawWidthPct,rawHeightPct)));
+      let centerX=((box.x+box.width/2)/camera.videoWidth)*100;
+      let centerY=((box.y+box.height/2)/camera.videoHeight)*100;
+      if(cameraFacingMode==='user') centerX=100-centerX;
+      const left=Math.max(0,Math.min(100-squarePct,centerX-squarePct/2));
+      const top=Math.max(0,Math.min(100-squarePct,centerY-squarePct/2));
+      const el=document.createElement('div');
+      el.className='faceTrackBox '+(isTarget?'target ':'')+(labelText==='UNKNOWN'?'unknown':'known');
+      el.style.left=left+'%'; el.style.top=top+'%'; el.style.width=squarePct+'%'; el.style.height=squarePct+'%';
+      const label=document.createElement('span');
       label.className='faceTrackLabel';
-
-      const identity=
-        isTarget && faceRecognitionIdentity
-          ? faceRecognitionIdentity
-          : labelText;
-
-      label.textContent=
-        identity+
-        (isTarget?' · TARGET':'');
-
-      el.appendChild(label);
-      overlay.appendChild(el);
+      label.textContent=String(labelText||'UNKNOWN')+(isTarget?' · TARGET':'');
+      el.appendChild(label); overlay.appendChild(el);
     };
 
-    /*
-     * Draw non-primary detections first.
-     */
     faceDetections.forEach((d,idx)=>{
-      if(
-        faceTarget &&
-        d===faceTarget
-      ) return;
-
-      appendBox(
-        d.box,
-        idx,
-        false,
-        idx===0?'FACE':'FACE '+(idx+1)
-      );
+      if(faceTarget && d===faceTarget) return;
+      appendBox(d.box,idx,false,d.identity||'UNKNOWN');
     });
-
-    /*
-     * Draw only the smoothed target last.
-     * This is what makes 8.2 visually smooth even though detector frames
-     * arrive much more slowly than the display refresh.
-     */
-    if(faceSmoothBox){
-      appendBox(
-        faceSmoothBox,
-        0,
-        true,
-        'FACE'
-      );
-    }
+    if(faceSmoothBox && faceTarget) appendBox(faceSmoothBox,0,true,faceTarget.identity||faceRecognitionIdentity||'UNKNOWN');
   }
 
   function getStoredFaceProfiles(){
@@ -1060,11 +974,22 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       .withFaceLandmarks(true)
       .withFaceDescriptors();
     if(!detections.length) return null;
-    const primary=detections.slice().sort((a,b)=>
-      (b.detection.box.width*b.detection.box.height)-
-      (a.detection.box.width*a.detection.box.height)
-    )[0];
-    return primary?.descriptor ? Array.from(primary.descriptor) : null;
+
+    let selected=null;
+    if(faceTarget && isValidFaceBox(faceTarget.box)){
+      let best=Infinity;
+      for(const d of detections){
+        const dist=boxDistance(faceTarget.box,d.detection.box);
+        if(dist<best){ best=dist; selected=d; }
+      }
+    }
+    if(!selected){
+      selected=detections.slice().sort((a,b)=>
+        (b.detection.box.width*b.detection.box.height)-
+        (a.detection.box.width*a.detection.box.height)
+      )[0];
+    }
+    return selected?.descriptor ? Array.from(selected.descriptor) : null;
   }
 
   function savePersonProfile(person, reason='person-updated'){
@@ -1091,164 +1016,23 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const cleanName=normalizeMemoryText(name).replace(/[.?!]+$/,'').trim();
     if(!cleanName || !roboMemory) return {ok:false,reason:'invalid-name'};
     ensureMemoryRegistry();
-    const existing=findPersonByName(cleanName);
-    if(existing){
-      const descriptor=await captureCurrentFaceDescriptor().catch(()=>null);
-      if(descriptor){
-        const duplicate=existing.faceProfiles.some(fp=>Array.isArray(fp.descriptor) && fp.descriptor.length===descriptor.length &&
-          Math.sqrt(descriptor.reduce((s,v,i)=>{const d=Number(v)-Number(fp.descriptor[i]||0);return s+d*d;},0))<0.45);
-        if(!duplicate) existing.faceProfiles.push(descriptorFaceProfile(existing,descriptor));
-      }
-      if(relation && !existing.relationship) existing.relationship=normalizeMemoryText(relation);
-      setActivePerson(existing.personId,'identity-confirmed');
-      savePersonProfile(existing,'identity-confirmed');
-      return {ok:true,person:existing,created:false};
-    }
-
     const descriptor=await captureCurrentFaceDescriptor().catch(()=>null);
     if(!descriptor) return {ok:false,reason:'no-face'};
-    const person={
-      personId:'person-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),
-      displayName:cleanName,
-      aliases:[],
-      relationship:relation||'',
-      facts:[{key:'name',value:cleanName,source:'identity',personId:null,createdAt:Date.now(),updatedAt:Date.now()}],
-      preferences:{},
-      memories:[],
-      faceProfiles:[descriptorFaceProfile(null,descriptor)],
-      createdAt:Date.now(),
-      updatedAt:Date.now()
-    };
-    person.facts[0].personId=person.personId;
+    const existing=findPersonByName(cleanName);
+    if(existing){
+      if(!Array.isArray(existing.faceProfiles)) existing.faceProfiles=[];
+      if(!existing.faceProfiles.some(fp=>faceDistance(descriptor,fp.descriptor)<0.46)) existing.faceProfiles.push(descriptorFaceProfile(existing,descriptor));
+      if(relation) existing.relationship=normalizeMemoryText(relation);
+      setActivePerson(existing.personId,'identity-confirmed'); savePersonProfile(existing,'identity-confirmed');
+      faceRecognitionIdentity=existing.displayName; faceRecognitionStatus='recognized'; faceDiag(); renderFaceTarget(); updatePerceptionFusion('identity-confirmed');
+      return {ok:true,person:existing,created:false};
+    }
+    const person={personId:'person-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),displayName:cleanName,aliases:[],relationship:relation||'',facts:[],preferences:{},memories:[],faceProfiles:[descriptorFaceProfile(null,descriptor)],createdAt:Date.now(),updatedAt:Date.now()};
+    person.facts.push({key:'name',value:cleanName,source:'identity',personId:person.personId,createdAt:Date.now(),updatedAt:Date.now()});
     person.faceProfiles[0].personId=person.personId;
-    roboMemory.persons.push(person);
-    setActivePerson(person.personId,'new-person-created');
-    saveRoboMemory('new-person-created');
-    faceRecognitionIdentity=cleanName;
-    faceRecognitionStatus='recognized';
-    faceDiag();
-    updatePerceptionFusion('identity-created');
+    roboMemory.persons.push(person); setActivePerson(person.personId,'new-person-created'); saveRoboMemory('new-person-created');
+    faceRecognitionIdentity=cleanName; faceRecognitionStatus='recognized'; faceDiag(); renderMemoryDiagnostics(); renderFaceTarget(); updatePerceptionFusion('identity-created');
     return {ok:true,person,created:true};
-  }
-
-  async function recognizeTargetFace(){
-    if(
-      !faceRecognitionAvailable ||
-      !cameraEnabled ||
-      !camera.videoWidth
-    ){
-      return null;
-    }
-
-    try{
-      const result=
-        await faceapi
-          .detectSingleFace(
-            camera,
-            new faceapi.TinyFaceDetectorOptions({
-              inputSize:224,
-              scoreThreshold:.08
-            })
-          )
-          .withFaceLandmarks(true)
-          .withFaceDescriptor();
-
-      if(!result){
-        faceRecognitionIdentity=null;
-        faceRecognitionStatus=
-          getStoredFaceProfiles().length
-            ? 'unknown-face'
-            : 'not-enrolled';
-        faceDiag();
-        return null;
-      }
-
-      const match=
-        findFaceMatch(
-          result.descriptor
-        );
-
-      if(match){
-        faceRecognitionIdentity=
-          match.displayName ||
-          'KNOWN USER';
-        if(match.personId) setActivePerson(match.personId,'face-recognized');
-        faceRecognitionStatus='recognized';
-        updatePerceptionFusion('face-recognized');
-        faceDiag();
-        return match;
-      }
-
-      faceRecognitionIdentity=null;
-      faceRecognitionStatus=
-        getStoredFaceProfiles().length
-          ? 'unknown-face'
-          : 'not-enrolled';
-
-      faceDiag();
-      return null;
-
-    }catch(err){
-
-      devLog(
-        'FACE ERROR',
-        'recognition pass failed',
-        {
-          message:
-            err?.message ||
-            String(err)
-        }
-      );
-
-      return null;
-    }
-  }
-
-  let pendingPersonName='';
-  let pendingPersonRelationship='';
-
-  async function enrollCurrentFace(){
-    if(!cameraEnabled || !cameraStream){
-      showCaption('Turn the camera on before enrolling a face.',true);
-      hideCaption(2600);
-      return;
-    }
-
-    if(!roboMemory?.identity?.displayName){
-      showCaption('Tell Robo your name first, then enroll your face.',true);
-      hideCaption(2600);
-      return;
-    }
-
-    try{
-      const descriptor=await captureCurrentFaceDescriptor();
-      if(!descriptor){
-        showCaption('No face detected. Look at the camera and try again.',true);
-        hideCaption(2600);
-        return;
-      }
-      ensureMemoryRegistry();
-      const primary=roboMemory.persons.find(p=>p.personId==='primary-user');
-      if(!primary) return;
-      if(!Array.isArray(primary.faceProfiles)) primary.faceProfiles=[];
-      primary.faceProfiles=[descriptorFaceProfile(primary,descriptor)];
-      primary.displayName=roboMemory.identity.displayName;
-      primary.facts=roboMemory.facts;
-      primary.memories=roboMemory.memories;
-      primary.preferences=roboMemory.preferences;
-      setActivePerson('primary-user','primary-face-enrolled');
-      savePersonProfile(primary,'primary-face-enrolled');
-      faceRecognitionIdentity=primary.displayName;
-      faceRecognitionStatus='recognized';
-      faceDiag();
-      updatePerceptionFusion('primary-face-enrolled');
-      showCaption('Face enrolled successfully.',true);
-      hideCaption(2600);
-    }catch(err){
-      devLog('FACE ERROR','face enrollment failed',{message:err?.message||String(err)});
-      showCaption('Face enrollment failed. Try again.',true);
-      hideCaption(2600);
-    }
   }
 
   function deriveLiveSocialFromFaces(faces){
@@ -1260,30 +1044,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(listening||talking) interaction=personCount>0?'active-conversation':'voice-active';
     else if(personCount===1) interaction='single-person-present';
     else if(personCount>1) interaction='multiple-people-present';
-    const confidence=personCount
-      ? Math.round(list.reduce((sum,f)=>sum+Number(f.score||0),0)/personCount*100)
-      : 0;
+    const confidence=personCount?Math.round(list.reduce((sum,f)=>sum+Math.max(0,Math.min(1,Number(f.score||0))),0)/personCount*100):0;
     let lastChange='none';
-    if(previous && Number(previous.personCount||0)!==personCount){
-      lastChange=Number(previous.personCount||0)===0?'person-entered':(personCount===0?'person-left':'person-count-changed');
-    }
-    socialAwareness={
-      ...previous,
-      presence,
-      personCount,
-      primaryPerson:list[0]?{label:'face',confidence:Number(list[0].score||0)*100,box:null,relativeArea:0}:null,
-      people:list.map((f,i)=>({id:'face-person-'+i,label:'face',count:1,confidence:Number(f.score||0)*100,box:null,area:0})),
-      interaction,
-      confidence,
-      lastChange,
-      timestamp:Date.now(),
-      session:cameraSession,
-      source:'local-face-tracking'
-    };
-    previousSocialAwareness=socialAwareness;
-    renderSocialAwarenessBadge();
-    renderSocialDiagnostics();
-    updatePerceptionFusion('live-face-social');
+    if(previous && Number(previous.personCount||0)!==personCount) lastChange=Number(previous.personCount||0)===0?'person-entered':(personCount===0?'person-left':'person-count-changed');
+    const primary=list[0]||null;
+    socialAwareness={...previous,presence,personCount,primaryPerson:primary?{label:primary.identity||'UNKNOWN',confidence:Number(primary.score||0)*100,box:primary.box,relativeArea:primary.box?Number(((primary.box.width*primary.box.height)/(camera.videoWidth*camera.videoHeight||1)).toFixed(4)):0}:null,people:list.map((f,i)=>({id:f.personId||('face-person-'+i),label:f.identity||'UNKNOWN',count:1,confidence:Number(f.score||0)*100,box:f.box,area:Number(f.box?.width||0)*Number(f.box?.height||0)})),interaction,confidence,lastChange,timestamp:Date.now(),session:cameraSession,source:'local-face-tracking'};
+    previousSocialAwareness=socialAwareness; renderSocialAwarenessBadge(); renderSocialDiagnostics(); updatePerceptionFusion('live-face-social');
   }
 
   async function faceTrackingTick(){
@@ -1303,8 +1069,21 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }
 
     try{
-      const mapped=
-        await detectLocalFaceBoxes();
+      const previousDetections=Array.isArray(faceDetections)?faceDetections.slice():[];
+      const mapped=await detectLocalFaceBoxes();
+
+      for(const next of mapped){
+        let best=null,bestDist=Infinity;
+        for(const prev of previousDetections){
+          const dist=boxDistance(next.box,prev.box);
+          if(dist<bestDist){ bestDist=dist; best=prev; }
+        }
+        if(best && bestDist < Math.max(80, Math.max(next.box.width,next.box.height)*1.25)){
+          if(best.identity) next.identity=best.identity;
+          if(best.personId) next.personId=best.personId;
+          if(best.identityConfidence) next.identityConfidence=best.identityConfidence;
+        }
+      }
 
       faceDetections=mapped;
       deriveLiveSocialFromFaces(mapped);
@@ -1340,16 +1119,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             );
         }
 
-        if(
-          faceRecognitionAvailable &&
-          getStoredFaceProfiles().length &&
-          performance.now()-faceLastRecognitionAt>1300
-        ){
-          faceLastRecognitionAt=
-            performance.now();
-
-          recognizeTargetFace()
-            .catch(()=>{});
+        if(faceRecognitionAvailable && getStoredFaceProfiles().length && performance.now()-faceLastRecognitionAt>1500){
+          faceLastRecognitionAt=performance.now();
+          recognizeAllVisibleFaces().catch(()=>{});
         }
 
       }else if(faceTarget){
@@ -1650,12 +1422,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     ].join('\n');
   }
 
-  /* ---------- Memory & Identity v1 (Module 7) ----------
-     Persistent browser-local memory for the primary Robo user. The schema is
-     deliberately identity-first and recognition-ready: a stable personId can
-     later be linked to face recognition without redesigning stored memories.
-     Robo only stores explicit/high-confidence user facts and supports explicit
-     remember/forget commands. No face identity is claimed here.
+  /* ---------- Memory & Identity v2 / Module 7.5 ----------
+     Persistent multi-person registry. Each person owns a stable personId, facts,
+     preferences, memories, aliases, and one or more face profiles. Voice commands
+     can create/update the currently visible person's identity without UI enrollment.
   */
   const MEMORY_STORAGE_KEY = 'robo_aios_memory_v2';
   const MEMORY_SCHEMA_VERSION = 2;
@@ -1935,7 +1705,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return {handled:true,reply:'I cleared my persistent multi-person memory.',emotion:'neutral'};
     }
 
-    const introduced=raw.match(/^(?:this is|this person is|his name is|her name is|their name is)\s+([A-Za-z][A-Za-z .\'-]{1,40})(?:\s+and\s+(?:he|she|they)\s+is\s+my\s+(.+))?[.!?]?$/i);
+    const introduced=raw.match(/^(?:this is|this person is|this face is|remember this person as|remember this face as|add this person as|save this person as|his name is|her name is|their name is)\s+([A-Za-z][A-Za-z .\'-]{1,40})(?:\s+and\s+(?:he|she|they)\s+is\s+my\s+(.+))?[.!?]?$/i);
     if(introduced){
       const result=await identifyOrCreatePerson(introduced[1],introduced[2]||'');
       if(!result.ok){
@@ -4001,7 +3771,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.41 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.42 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4133,7 +3903,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.41 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.42 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
   log("AI provider adapter online · Gemini structured vision enabled");
