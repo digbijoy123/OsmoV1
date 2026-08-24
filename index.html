@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.64 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.65 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -222,11 +222,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.64 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.65 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.64</small></div>
+          <div class="brand">ROBO <small>v2.65</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -295,7 +295,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.64 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.65 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -874,7 +874,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   function renderLiveTargetPanel(){
-    // v2.64: the camera panel is intentionally clean.
+    // v2.65: the camera panel is intentionally clean.
     // Live identity is shown on the face tracking box itself.
     const summary=$('#visionSummary');
     if(!summary) return;
@@ -1201,10 +1201,40 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           }
         }
       }else{
-        faceRecognitionIdentity=null;
-        faceRecognitionStatus=profiles.length?'ready':'not-enrolled';
-        setActivePerson(null,'no-live-face-match');
-        faceRecognitionDistance=null;
+        /*
+         * Identity flicker fix: a temporary detector/recognizer miss is not
+         * evidence that the visible target changed. Keep the last confirmed
+         * identity for the same live session for the existing hold window.
+         * A true disappearance lasts beyond the hold window before identity
+         * is cleared.
+         */
+        const holdActive=Boolean(
+          stableTargetPersonId &&
+          stableTargetIdentity &&
+          (performance.now()-stableTargetLastSeenAt)<5000 &&
+          stableTargetLastBox
+        );
+
+        if(holdActive){
+          faceRecognitionIdentity=stableTargetIdentity;
+          faceRecognitionStatus='recognized-hold';
+          faceRecognitionDistance=faceRecognitionDistance;
+          const heldPerson=roboMemory?.persons?.find(
+            p=>p.personId===stableTargetPersonId
+          );
+          if(heldPerson){
+            setActivePerson(heldPerson.personId,'face-identity-hold');
+          }
+        }else{
+          faceRecognitionIdentity=null;
+          faceRecognitionStatus=profiles.length?'ready':'not-enrolled';
+          setActivePerson(null,'no-live-face-match');
+          faceRecognitionDistance=null;
+          stableTargetPersonId=null;
+          stableTargetIdentity=null;
+          stableTargetLastBox=null;
+          stableTargetLastSeenAt=0;
+        }
       }
 
       faceLastRecognitionAt=performance.now();
@@ -3030,20 +3060,129 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     return cameraPermissionPromise;
   }
 
+
+  /*
+   * v2.65 CAMERA PREVIEW HARDENING
+   * Camera permission can succeed while Android Chrome has not yet committed
+   * the MediaStream to a visible video compositor frame. A later tab/page
+   * restore can make the exact same stream suddenly appear, which is the
+   * black-preview behaviour we were seeing. This helper explicitly rebinds,
+   * waits for metadata/playback, waits for a rendered frame when supported,
+   * and forces one layout repaint without changing the media stream itself.
+   */
+  async function ensureCameraPreview(video, stream, track){
+    if(!video || !stream || !track) throw new Error('Camera preview unavailable');
+
+    video.autoplay=true;
+    video.playsInline=true;
+    video.muted=true;
+    video.setAttribute('autoplay','');
+    video.setAttribute('playsinline','');
+    video.setAttribute('muted','');
+
+    if(video.srcObject!==stream){
+      try{ video.pause(); }catch(_){}
+      video.srcObject=null;
+      await new Promise(r=>requestAnimationFrame(r));
+      video.srcObject=stream;
+    }
+
+    video.style.display='block';
+    video.style.visibility='visible';
+    video.style.opacity='1';
+
+    const waitForReady=()=>new Promise((resolve,reject)=>{
+      const deadline=performance.now()+6500;
+      let done=false;
+      let timer=null;
+      const finish=(err)=>{
+        if(done)return;
+        done=true;
+        clearInterval(timer);
+        video.removeEventListener('loadedmetadata',check);
+        video.removeEventListener('canplay',check);
+        video.removeEventListener('playing',check);
+        track.removeEventListener('ended',onEnded);
+        if(err) reject(err); else resolve();
+      };
+      const check=()=>{
+        if(video.videoWidth>1 && video.videoHeight>1 && video.readyState>=2){
+          finish();
+        }else if(performance.now()>=deadline){
+          finish(new Error(
+            'Camera stream attached but browser did not expose a renderable video frame'
+          ));
+        }
+      };
+      const onEnded=()=>finish(new Error('Camera video track ended during preview startup'));
+      video.addEventListener('loadedmetadata',check);
+      video.addEventListener('canplay',check);
+      video.addEventListener('playing',check);
+      track.addEventListener('ended',onEnded,{once:true});
+      timer=setInterval(check,100);
+      check();
+    });
+
+    let played=false;
+    for(let attempt=0;attempt<4 && !played;attempt++){
+      try{
+        await video.play();
+        played=true;
+      }catch(err){
+        if((err?.name==='AbortError' || err?.name==='NotAllowedError') && attempt<3){
+          await new Promise(r=>setTimeout(r,120*(attempt+1)));
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    await waitForReady();
+
+    if(typeof video.requestVideoFrameCallback==='function'){
+      await new Promise(resolve=>{
+        let settled=false;
+        const done=()=>{
+          if(settled)return;
+          settled=true;
+          resolve();
+        };
+        try{
+          video.requestVideoFrameCallback(()=>done());
+          setTimeout(done,700);
+        }catch(_){
+          done();
+        }
+      });
+    }else{
+      await new Promise(r=>requestAnimationFrame(()=>{
+        requestAnimationFrame(r);
+      }));
+    }
+
+    // Force a compositor repaint. This does not touch srcObject or the track.
+    const priorVisibility=video.style.visibility;
+    video.style.visibility='hidden';
+    void video.offsetWidth;
+    video.style.visibility=priorVisibility || 'visible';
+    video.style.opacity='1';
+
+    return {
+      width:video.videoWidth,
+      height:video.videoHeight,
+      readyState:video.readyState,
+      currentTime:Number.isFinite(video.currentTime)?video.currentTime:0
+    };
+  }
+
   async function startCamera(facingMode=cameraFacingMode){
     if(!navigator.mediaDevices?.getUserMedia) throw new Error('Camera API unavailable');
 
-    // Every start gets a unique session. If the user turns the camera off
-    // while getUserMedia() or video.play() is still pending, that old start
-    // is no longer allowed to resurrect the camera.
     const startSession=++cameraSession;
-
     const video=$('#camera');
     const box=$('#cameraBox');
     if(!video || !box) throw new Error('Camera UI unavailable');
 
-    // A stopped MediaStream object must never be reused. Android Chrome can
-    // otherwise hand us a dead track and leave the preview black/empty.
     if(cameraStream){
       const liveTrack=cameraStream.getVideoTracks()[0];
       if(liveTrack?.readyState!=='live') stopCamera();
@@ -3052,29 +3191,35 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(cameraStream){
       const liveTrack=cameraStream.getVideoTracks()[0];
       if(liveTrack?.readyState==='live'){
-        video.autoplay=true;
-        video.playsInline=true;
-        video.muted=true;
-        video.srcObject=cameraStream;
-        box.classList.remove('empty');
-        try{ await video.play(); }catch(err){
-          if(err?.name!=='AbortError') throw err;
+        const preview=await ensureCameraPreview(video,cameraStream,liveTrack);
+
+        if(startSession!==cameraSession){
+          throw new DOMException('Camera start was cancelled','AbortError');
         }
-        if(video.videoWidth<2 || video.videoHeight<2){
-          throw new Error('Camera stream is live but video frame is not ready');
-        }
+
         cameraEnabled=true;
-      startFaceLoop();
+        box.classList.remove('empty');
         cameraFacingMode=facingMode;
+        startFaceLoop();
+
         const btn=$('#cameraBtn');
-        if(btn){btn.textContent='CAMERA ON';btn.classList.add('active');btn.setAttribute('aria-pressed','true');}
+        if(btn){
+          btn.textContent='CAMERA ON';
+          btn.classList.add('active');
+          btn.setAttribute('aria-pressed','true');
+        }
         const switchBtn=$('#cameraSwitchBtn');
-        if(switchBtn){switchBtn.disabled=false;switchBtn.textContent=facingMode==='environment'?'FRONT CAM':'REAR CAM';switchBtn.setAttribute('aria-pressed',String(facingMode==='environment'));}
+        if(switchBtn){
+          switchBtn.disabled=false;
+          switchBtn.textContent=facingMode==='environment'?'FRONT CAM':'REAR CAM';
+          switchBtn.setAttribute('aria-pressed',String(facingMode==='environment'));
+        }
         $('#cameraBox').classList.toggle('rear',facingMode==='environment');
         $('#mediaDot').className='dot ok';
         $('#mediaText').textContent=facingMode==='environment'?'REAR CAMERA ON':'CAMERA ON';
         renderLiveTargetPanel();
-        log('CAM · existing live stream reused · '+facingMode+' · '+video.videoWidth+'x'+video.videoHeight);
+
+        log('CAM · existing live preview restored',preview);
         return cameraStream;
       }
     }
@@ -3083,9 +3228,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     let stream;
     const requestSession=startSession;
+
     try{
-      /* Keep exactly one permission request in flight. Android Chrome can
-         otherwise leave overlapping camera requests in a pending state. */
       const preferred={
         video:{
           facingMode:{ideal:facingMode},
@@ -3098,7 +3242,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       stream=await getUserMediaSingleFlight(preferred,requestSession);
     }catch(firstErr){
       log('CAM · permission/device request failed · '+(firstErr?.code||firstErr?.name||'unknown'));
-      if(requestSession!==cameraSession) throw new DOMException('Camera start was cancelled','AbortError');
+      if(requestSession!==cameraSession){
+        throw new DOMException('Camera start was cancelled','AbortError');
+      }
       if(firstErr?.name==='OverconstrainedError' || firstErr?.name==='NotFoundError'){
         stream=await getUserMediaSingleFlight({video:true,audio:false},requestSession);
       }else{
@@ -3117,85 +3263,47 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       throw new Error('Camera permission granted but no video track returned');
     }
 
-    // Keep cameraEnabled false until we have a real rendered video frame.
     cameraStream=stream;
     cameraEnabled=false;
-    video.autoplay=true;
-    video.playsInline=true;
-    video.muted=true;
-    video.setAttribute('autoplay','');
-    video.setAttribute('playsinline','');
-    video.srcObject=stream;
     box.classList.remove('empty');
 
-    const waitForVideoFrame=()=>new Promise((resolve,reject)=>{
-      const deadline=performance.now()+4000;
-      let done=false;
-      let timer=null;
-      const finish=(err)=>{
-        if(done)return;
-        done=true;
-        clearTimeout(timer);
-        video.removeEventListener('loadedmetadata',check);
-        video.removeEventListener('canplay',check);
-        video.removeEventListener('playing',check);
-        track.removeEventListener('ended',onEnded);
-        if(err) reject(err); else resolve();
-      };
-      const check=()=>{
-        if(video.videoWidth>1 && video.videoHeight>1) finish();
-        else if(performance.now()>=deadline) finish(new Error('Camera opened but no video frame became available'));
-      };
-      const onEnded=()=>finish(new Error('Camera track ended while starting'));
-      video.addEventListener('loadedmetadata',check);
-      video.addEventListener('canplay',check);
-      video.addEventListener('playing',check);
-      track.addEventListener('ended',onEnded,{once:true});
-      timer=setInterval(check,100);
-      check();
-    });
-
     try{
-      // Start playback first, then wait for actual dimensions. This avoids
-      // declaring CAMERA ON while Android Chrome still has a blank video box.
-      let played=false;
-      for(let attempt=0;attempt<3 && !played;attempt++){
-        try{
-          await video.play();
-          played=true;
-        }catch(err){
-          if(err?.name==='AbortError' && attempt<2){
-            await new Promise(r=>setTimeout(r,250*(attempt+1)));
-            continue;
-          }
-          throw err;
-        }
-      }
+      const preview=await ensureCameraPreview(video,stream,track);
 
-      await waitForVideoFrame();
       if(startSession!==cameraSession){
         stream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
         throw new DOMException('Camera start was cancelled','AbortError');
       }
+
       cameraEnabled=true;
       startFaceLoop();
       cameraFacingMode=facingMode;
+
       const cameraBtn=$('#cameraBtn');
-      if(cameraBtn){cameraBtn.textContent='CAMERA ON';cameraBtn.classList.add('active');cameraBtn.setAttribute('aria-pressed','true');}
+      if(cameraBtn){
+        cameraBtn.textContent='CAMERA ON';
+        cameraBtn.classList.add('active');
+        cameraBtn.setAttribute('aria-pressed','true');
+      }
       const switchBtn=$('#cameraSwitchBtn');
-      if(switchBtn){switchBtn.disabled=false;switchBtn.textContent=facingMode==='environment'?'FRONT CAM':'REAR CAM';switchBtn.setAttribute('aria-pressed',String(facingMode==='environment'));}
+      if(switchBtn){
+        switchBtn.disabled=false;
+        switchBtn.textContent=facingMode==='environment'?'FRONT CAM':'REAR CAM';
+        switchBtn.setAttribute('aria-pressed',String(facingMode==='environment'));
+      }
       $('#cameraBox').classList.toggle('rear',facingMode==='environment');
       $('#mediaDot').className='dot ok';
       $('#mediaText').textContent=facingMode==='environment'?'REAR CAMERA ON':'CAMERA ON';
       renderLiveTargetPanel();
-      log('CAM · LIVE · '+facingMode+' · '+video.videoWidth+'x'+video.videoHeight);
+
+      log('CAM · LIVE · preview rendered',preview);
       return stream;
     }catch(err){
       log('CAM · startup failed after permission · '+(err?.name||'unknown')+' · '+(err?.message||''));
       stream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
       if(cameraStream===stream) cameraStream=null;
       cameraEnabled=false;
-      video.pause?.();
+      try{video.pause();}catch(_){}
       if(video.srcObject===stream) video.srcObject=null;
       box.classList.add('empty');
       throw err;
@@ -3336,6 +3444,27 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='visible'){
       window.__roboCameraStarting=false;
+
+      // Repaint an already-live camera after Android Chrome resumes a tab.
+      // This is camera-only; it does not alter Module 6/7/8 state.
+      if(cameraEnabled && cameraStream){
+        const video=$('#camera');
+        const track=cameraStream.getVideoTracks()[0];
+        if(video && track?.readyState==='live'){
+          ensureCameraPreview(video,cameraStream,track)
+            .then(meta=>{
+              $('#cameraBox')?.classList.remove('empty');
+              log('CAM · preview resumed after visibility restore',meta);
+              renderFaceTarget();
+            })
+            .catch(err=>{
+              devLog('CAMERA','resume preview failed',{
+                name:err?.name||'unknown',
+                message:err?.message||String(err)
+              });
+            });
+        }
+      }
     }
   });
 
@@ -4708,7 +4837,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.64 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.65 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4840,7 +4969,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.64 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.65 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
