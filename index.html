@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.73 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.74 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -223,11 +223,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.73 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.74 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.73</small></div>
+          <div class="brand">ROBO <small>v2.74</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -296,7 +296,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.73 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.74 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -442,6 +442,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let faceTarget = null;
   let faceTargetLostAt = 0;
   let faceSmoothBox = null;
+  let faceRenderFrame = 0;
+  let faceVisualLastAt = 0;
+  let faceVisualLastDetectionBox = null;
+  let faceVisualVelocity = {x:0,y:0,width:0,height:0};
+  let faceTargetVisualElement = null;
+  let faceTargetVisualLabel = null;
   let faceRecognitionAvailable = false;
   let faceRecognitionLoading = false;
   let faceRecognitionThreshold = 0.68;
@@ -463,7 +469,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let stableTargetLastBox = null;
   let stableTargetLastSeenAt = 0;
   let faceVisualGuardFrame = 0;
-  // v2.73: Module 8.2 owns the physical target. Module 7.5 only establishes
+  // v2.74: Module 8.2 owns the physical target. Module 7.5 only establishes
   // or changes identity; recognition refreshes never clear a visible target.
   let activeFaceTarget = {
     trackId:null, personId:null, name:null, confidence:0,
@@ -882,7 +888,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   function renderLiveTargetPanel(){
-    // v2.73: the camera panel is intentionally clean.
+    // v2.74: the camera panel is intentionally clean.
     // Live identity is shown on the face tracking box itself.
     const summary=$('#visionSummary');
     if(!summary) return;
@@ -891,10 +897,29 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     summary.setAttribute('aria-hidden','true');
 }
 
+  function updateFaceVisualElement(el, box, labelEl){
+    if(!el || !isValidFaceBox(box) || !camera.videoWidth || !camera.videoHeight) return;
+    const rawWidthPct=(box.width/camera.videoWidth)*100;
+    const rawHeightPct=(box.height/camera.videoHeight)*100;
+    const squarePct=Math.max(6,Math.min(45,Math.max(rawWidthPct,rawHeightPct)));
+    let centerX=((box.x+box.width/2)/camera.videoWidth)*100;
+    let centerY=((box.y+box.height/2)/camera.videoHeight)*100;
+    if(cameraFacingMode==='user') centerX=100-centerX;
+    const left=Math.max(0,Math.min(100-squarePct,centerX-squarePct/2));
+    const top=Math.max(0,Math.min(100-squarePct,centerY-squarePct/2));
+    el.style.left=left+'%';
+    el.style.top=top+'%';
+    el.style.width=squarePct+'%';
+    el.style.height=squarePct+'%';
+    if(labelEl) labelEl.style.top=top<18?'calc(100% + 4px)':'-24px';
+  }
+
   function renderFaceTarget(){
     const overlay=$('#faceTrackingOverlay');
     if(!overlay) return;
     overlay.innerHTML='';
+    faceTargetVisualElement=null;
+    faceTargetVisualLabel=null;
     if(!camera.videoWidth || !camera.videoHeight) return;
     if(faceTarget && stableTargetLastSeenAt && performance.now()-stableTargetLastSeenAt>FACE_VISUAL_LOSS_MS){
       return;
@@ -902,16 +927,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     const appendBox=(box,index,isTarget=false,labelText='UNKNOWN')=>{
       if(!isValidFaceBox(box)) return;
-      const rawWidthPct=(box.width/camera.videoWidth)*100;
-      const rawHeightPct=(box.height/camera.videoHeight)*100;
-      const squarePct=Math.max(6,Math.min(45,Math.max(rawWidthPct,rawHeightPct)));
-      let centerX=((box.x+box.width/2)/camera.videoWidth)*100;
-      let centerY=((box.y+box.height/2)/camera.videoHeight)*100;
-      if(cameraFacingMode==='user') centerX=100-centerX;
-      const left=Math.max(0,Math.min(100-squarePct,centerX-squarePct/2));
-      const top=Math.max(0,Math.min(100-squarePct,centerY-squarePct/2));
       const el=document.createElement('div');
-      const activePerson=getActivePerson();
       const targetIdentity=(
         isTarget
           ? (
@@ -924,24 +940,27 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             )
           : (labelText&&labelText!=='FACE'?labelText:null)
       );
-      const resolvedLabel=targetIdentity && targetIdentity!=='UNKNOWN'
-        ? targetIdentity
-        : 'UNKNOWN';
+      const resolvedLabel=targetIdentity && targetIdentity!=='UNKNOWN' ? targetIdentity : 'UNKNOWN';
       el.className='faceTrackBox '+(isTarget?'target ':'')+(resolvedLabel==='UNKNOWN'?'unknown':'known');
-      el.style.left=left+'%'; el.style.top=top+'%'; el.style.width=squarePct+'%'; el.style.height=squarePct+'%';
       const label=document.createElement('span');
       label.className='faceTrackLabel';
       label.textContent=String(resolvedLabel||'UNKNOWN')+(isTarget?' · TARGET':'');
-      // Keep the name tag inside the camera card when the box is near the top edge.
-      label.style.top = top < 18 ? 'calc(100% + 4px)' : '-24px';
-      el.appendChild(label); overlay.appendChild(el);
+      el.appendChild(label);
+      overlay.appendChild(el);
+      updateFaceVisualElement(el,box,label);
+      if(isTarget){
+        faceTargetVisualElement=el;
+        faceTargetVisualLabel=label;
+      }
     };
 
     faceDetections.forEach((d,idx)=>{
       if(faceTarget && d===faceTarget) return;
       appendBox(d.box,idx,false,d.identity||d.lastKnownIdentity||'UNKNOWN');
     });
-    if(faceSmoothBox && faceTarget) appendBox(faceSmoothBox,0,true,faceTarget.identity||faceTarget.lastKnownIdentity||faceRecognitionIdentity||'UNKNOWN');
+    if(faceSmoothBox && faceTarget){
+      appendBox(faceSmoothBox,0,true,faceTarget.identity||faceTarget.lastKnownIdentity||faceRecognitionIdentity||'UNKNOWN');
+    }
     renderLiveTargetPanel();
   }
 
@@ -1390,7 +1409,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const threshold=faceRecognitionThreshold;
 
     /*
-     * LIVE IDENTITY HYSTERESIS (v2.73)
+     * LIVE IDENTITY HYSTERESIS (v2.74)
      *
      * Once Robo has a confirmed person attached to the current tracked face,
      * recognition is a verifier. A single descriptor wobble must not turn a
@@ -1668,17 +1687,41 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
   function startFaceVisualGuard(){
     if(faceVisualGuardFrame) return;
-    const guard=()=>{
+    const guard=(ts)=>{
       faceVisualGuardFrame=requestAnimationFrame(guard);
       if(!cameraEnabled || !cameraStream) return;
+
       const now=performance.now();
+      const dt=Math.max(0.008,Math.min(0.05,(now-(faceVisualLastAt||now))/1000));
+      faceVisualLastAt=now;
+
+      // High-frequency visual tracking: detector updates are relatively slow,
+      // but the box is rendered every animation frame so motion stays fluid.
+      if(faceTarget && isValidFaceBox(faceTarget.box)){
+        const targetBox=cloneBox(faceTarget.box);
+        if(isValidFaceBox(faceSmoothBox)){
+          // Gentle prediction from the last detector movement, capped tightly
+          // so the box follows the real face without drifting.
+          const predicted={
+            x:targetBox.x + faceVisualVelocity.x * dt * 0.9,
+            y:targetBox.y + faceVisualVelocity.y * dt * 0.9,
+            width:targetBox.width + faceVisualVelocity.width * dt * 0.45,
+            height:targetBox.height + faceVisualVelocity.height * dt * 0.45
+          };
+          const frameAlpha=0.34;
+          faceSmoothBox=lerpBox(faceSmoothBox,predicted,frameAlpha);
+        }else{
+          faceSmoothBox=targetBox;
+        }
+        updateFaceVisualElement(faceTargetVisualElement,faceSmoothBox,faceTargetVisualLabel);
+      }
+
       if(!faceTarget || !stableTargetLastSeenAt) return;
       const age=now-stableTargetLastSeenAt;
       if(age<=FACE_VISUAL_LOSS_MS) return;
 
-      // The detector may be busy for several hundred milliseconds. Do not
-      // keep painting the last box while it is still deciding whether the
-      // person is present. The visible target must disappear quickly.
+      // The visible target belongs to the tracker. If no detector update has
+      // confirmed the face for the visual-loss window, clear the box promptly.
       faceTarget=null;
       faceSmoothBox=null;
       faceDetections=[];
@@ -1742,9 +1785,27 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         choosePrimaryFace(mapped);
 
       if(primary){
-        stableTargetLastSeenAt=performance.now();
+        const detectionNow=performance.now();
+        stableTargetLastSeenAt=detectionNow;
 
         const previousTarget=faceTarget;
+        if(previousTarget && isValidFaceBox(previousTarget.box) && isValidFaceBox(primary.box)){
+          const elapsedMs=Math.max(16,detectionNow-(previousTarget._detectedAt||detectionNow-105));
+          const dt=elapsedMs/1000;
+          faceVisualVelocity={
+            x:(primary.box.x-previousTarget.box.x)/dt,
+            y:(primary.box.y-previousTarget.box.y)/dt,
+            width:(primary.box.width-previousTarget.box.width)/dt,
+            height:(primary.box.height-previousTarget.box.height)/dt
+          };
+          // Hard cap prevents a bad detector jump from creating visual drift.
+          const cap=1800;
+          for(const k of ['x','y','width','height']){
+            faceVisualVelocity[k]=Math.max(-cap,Math.min(cap,faceVisualVelocity[k]));
+          }
+        }
+        primary._detectedAt=detectionNow;
+
         const targetDistance=previousTarget&&isValidFaceBox(previousTarget.box)
           ? boxDistance(previousTarget.box,primary.box)
           : Infinity;
@@ -1993,6 +2054,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function stopFaceLoop(){
     ++faceLoopToken;
     stopFaceVisualGuard();
+    faceVisualLastAt=0;
+    faceVisualVelocity={x:0,y:0,width:0,height:0};
+    faceVisualLastDetectionBox=null;
 
     if(faceLoopTimer){
       clearTimeout(faceLoopTimer);
@@ -2004,6 +2068,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     faceTarget=null;
     faceTargetLostAt=0;
     faceSmoothBox=null;
+    faceVisualVelocity={x:0,y:0,width:0,height:0};
     faceRecognitionIdentity=null;
     faceRecognitionDistance=null;
     faceMisses=0;
@@ -4861,7 +4926,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.73 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.74 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4993,7 +5058,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.73 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.74 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
