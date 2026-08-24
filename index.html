@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.79 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.80 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -223,11 +223,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.79 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.80 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.79</small></div>
+          <div class="brand">ROBO <small>v2.80</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -296,7 +296,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.79 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.80 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -469,14 +469,14 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let stableTargetLastBox = null;
   let stableTargetLastSeenAt = 0;
   let faceVisualGuardFrame = 0;
-  // v2.79: Module 8.2 owns the physical target. Module 7.5 only establishes
+  // v2.80: Module 8.2 owns the physical target. Module 7.5 only establishes
   // or changes identity; recognition refreshes never clear a visible target.
   let activeFaceTarget = {
     trackId:null, personId:null, name:null, confidence:0,
     establishedAt:0, lastSeenAt:0, box:null
   };
 
-  // v2.79: Fresh identities require short multi-pass consensus. One
+  // v2.80: Fresh identities require short multi-pass consensus. One
   // ambiguous recognition result cannot attach a name to a new target.
   let pendingIdentityPersonId=null;
   let pendingIdentityName=null;
@@ -485,7 +485,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let pendingIdentityLastAt=0;
   let pendingIdentityBestDistance=Infinity;
 
-  // v2.79: identity can hand off between saved people while the physical
+  // v2.80: identity can hand off between saved people while the physical
   // tracking target remains the same. Target lifecycle and identity lifecycle
   // are deliberately separate authorities.
   let identityChallengerPersonId=null;
@@ -505,6 +505,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   const FACE_SMOOTH_ALPHA = 0.42;
   const FACE_RECOGNITION_INTERVAL_MS = 1800;
   const LIVE_IDENTITY_REFRESH_MS = 1600;
+  // Module 7.5 active-target identity refresh cadence.
+  // Keep this faster than new-target recognition without running on every render frame.
+  const ACTIVE_IDENTITY_REFRESH_MS = 850;
   let lastLiveIdentitySyncAt = 0;
   let liveIdentityGeneration = 0;
   const FACE_RECOGNITION_INPUT_SIZE = 224;
@@ -909,7 +912,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   function renderLiveTargetPanel(){
-    // v2.79: the camera panel is intentionally clean.
+    // v2.80: the camera panel is intentionally clean.
     // Live identity is shown on the face tracking box itself.
     const summary=$('#visionSummary');
     if(!summary) return;
@@ -1144,7 +1147,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       pendingIdentityLastAt>0 &&
       (now-pendingIdentityLastAt)<=6000;
 
-    // v2.79: resolve ambiguous new targets using temporal consensus instead
+    // v2.80: resolve ambiguous new targets using temporal consensus instead
     // of rejecting them solely because two stored identities are close in a
     // single frame. This is critical for the second saved face on mobile.
     const credibleDistance=Number.isFinite(distance) && distance<=0.62;
@@ -1352,7 +1355,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
         let resolvedMatch=match;
 
-        // v2.79: continuously verify the current target. If another stored
+        // v2.80: continuously verify the current target. If another stored
         // person clearly wins twice in succession, hand the identity to that
         // person without destroying/recreating the physical face track.
         if(activeFaceTarget.personId){
@@ -1364,7 +1367,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           }
         }
 
-        // v2.79: new targets require two consecutive credible passes before
+        // v2.80: new targets require two consecutive credible passes before
         // the identity is attached to the target. Existing locked targets
         // continue using the normal verifier path.
         if(!activeFaceTarget.personId && (match.recognitionMode==='new-target-confirmed' || match.recognitionMode==='new-target-candidate')){
@@ -1460,7 +1463,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       if(primary){
         /*
-         * TARGET AUTHORITY RULE (v2.79):
+         * TARGET AUTHORITY RULE (v2.80):
          * Once Module 8.2 has an active physical target with an attached
          * identity, Module 7.5 may verify it, but recognition is NOT allowed
          * to clear or replace that identity. Only target lifecycle code may
@@ -1658,7 +1661,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const threshold=faceRecognitionThreshold;
 
     /*
-     * LIVE IDENTITY HYSTERESIS (v2.79)
+     * LIVE IDENTITY HYSTERESIS (v2.80)
      *
      * Once Robo has a confirmed person attached to the current tracked face,
      * recognition is a verifier. A single descriptor wobble must not turn a
@@ -5213,7 +5216,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.79 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.80 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -5345,7 +5348,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.79 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.80 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
