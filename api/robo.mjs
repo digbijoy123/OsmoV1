@@ -535,11 +535,6 @@ const PROVIDERS = {
   },
 };
 
-
-/* =====================================================
- * ElevenLabs TTS
- * =================================================== */
-
 function detectTTSLanguage(text) {
   const value =
     String(text || '');
@@ -984,11 +979,6 @@ export default async function handler(
             result.requestId,
           );
         }
-
-        /*
-         * HTTP headers must be ASCII-safe.
-         * Do not use the Unicode ellipsis character.
-         */
 
         const maskedVoice =
           result.voiceId
