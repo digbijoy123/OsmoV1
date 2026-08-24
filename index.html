@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.37 MODULE 8.2 FINAL LIVE FACE TRACKING</title>
+<title>ROBO AIOS v2.38 MODULE 8.2 SMOOTH FACE TRACKING · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -65,7 +65,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 .camera .visionOverlay{position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden}
 .camera .visionBox{position:absolute;border:2px solid var(--cyan);border-radius:6px;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 12px rgba(95,212,208,.28);background:rgba(95,212,208,.06)}
 .camera .visionLabel{position:absolute;left:-2px;top:-19px;max-width:120px;padding:3px 5px;border-radius:5px;background:rgba(9,13,21,.82);color:#fff;font-size:6px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.faceTrackingOverlay{position:absolute;inset:0;pointer-events:none;z-index:6;overflow:hidden}.faceTrackBox{position:absolute;border:2px solid #7ee59a;border-radius:10px;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 15px rgba(126,229,154,.30);background:rgba(126,229,154,.05);transition:left .11s cubic-bezier(.22,.61,.36,1),top .11s cubic-bezier(.22,.61,.36,1),width .11s cubic-bezier(.22,.61,.36,1),height .11s cubic-bezier(.22,.61,.36,1)}.faceTrackBox.target{border-color:#69d8cf;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 18px rgba(105,216,207,.4)}.faceTrackLabel{position:absolute;left:-2px;top:-20px;padding:3px 5px;border-radius:5px;background:rgba(9,13,21,.86);color:#fff;font-size:6px;white-space:nowrap}.faceTrackBox.lost{opacity:.4;border-style:dashed}.faceEngineStatus{position:absolute;left:50%;transform:translateX(-50%);top:7px;z-index:9;padding:4px 7px;border-radius:999px;background:rgba(9,13,21,.72);color:#fff;font-size:6px;letter-spacing:.06em;opacity:0;transition:.2s}.faceEngineStatus.show{opacity:1}
+.faceTrackingOverlay{position:absolute;inset:0;pointer-events:none;z-index:6;overflow:hidden}.faceTrackBox{position:absolute;border:2px solid #7ee59a;border-radius:10px;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 15px rgba(126,229,154,.30);background:rgba(126,229,154,.05);transition:left .07s linear,top .07s linear,width .07s linear,height .07s linear}.faceTrackBox.target{border-color:#69d8cf;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 18px rgba(105,216,207,.4)}.faceTrackLabel{position:absolute;left:-2px;top:-20px;padding:3px 5px;border-radius:5px;background:rgba(9,13,21,.86);color:#fff;font-size:6px;white-space:nowrap}.faceTrackBox.lost{opacity:.4;border-style:dashed}.faceEngineStatus{position:absolute;left:50%;transform:translateX(-50%);top:7px;z-index:9;padding:4px 7px;border-radius:999px;background:rgba(9,13,21,.72);color:#fff;font-size:6px;letter-spacing:.06em;opacity:0;transition:.2s}.faceEngineStatus.show{opacity:1}
 .camera /* Module 6 social-awareness status badge */
 .socialAwareness{position:absolute;left:10px;bottom:10px;z-index:8;padding:5px 8px;border:1px solid rgba(95,212,208,.35);border-radius:999px;background:rgba(9,13,21,.72);backdrop-filter:blur(8px);font-size:9px;letter-spacing:.08em;color:#dffefa;opacity:0;transform:translateY(5px);transition:opacity .2s ease,transform .2s ease}
 .socialAwareness.show{opacity:1;transform:translateY(0)}
@@ -99,7 +99,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 /* 3D floating emoji avatar. Canvas draws the face so every emotion is programmable. */
 #face{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:6;filter:drop-shadow(0 22px 25px rgba(44,36,64,.16));animation:float 4s ease-in-out infinite;pointer-events:none}
-.emojiFallback{position:absolute;inset:0;display:grid;place-items:center;z-index:5;font-size:clamp(120px,30vw,210px);line-height:1;opacity:0;filter:drop-shadow(0 18px 22px rgba(15,22,35,.20));pointer-events:none;transition:opacity .25s ease}
+.emojiFallback{position:absolute;inset:0;display:grid;place-items:center;z-index:5;font-size:clamp(120px,30vw,210px);line-height:1;opacity:1;filter:drop-shadow(0 18px 22px rgba(15,22,35,.20));pointer-events:none;transition:opacity .25s ease}
 .emojiFallback.hidden{opacity:0}
 .avatarHint{position:absolute;left:50%;bottom:3%;transform:translateX(-50%);z-index:7;font-size:7px;letter-spacing:.14em;text-transform:uppercase;color:rgba(44,36,64,.32);white-space:nowrap;pointer-events:none}
 @keyframes float{50%{transform:translateY(-7px)}}
@@ -196,7 +196,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 /* ---------- Developer diagnostics page ---------- */
 .devPage{position:fixed;inset:0;z-index:9999;isolation:isolate;background:#10131d;color:#f5f7ff;padding:18px;overflow:auto;font-family:'JetBrains Mono',monospace;opacity:0;pointer-events:none;transform:translateY(10px);transition:.2s ease}
-.devPage.open{opacity:1;pointer-events:auto;transform:none;z-index:99999}
+.devPage.open{opacity:1;pointer-events:auto;transform:none}
 .devHeader{max-width:1100px;margin:0 auto 16px;display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
 .devHeader h2{margin:4px 0;font:600 21px 'Fredoka',sans-serif}.devHeader h2 span{font:600 9px 'JetBrains Mono';color:#69d8cf}
 .devSub{font-size:9px;color:#8f98aa}.devKicker{font-size:8px;letter-spacing:.16em;color:#ff9a78}
@@ -221,11 +221,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.37 · MODULE 8.2 FINAL LIVE FACE TRACKING</div>
+      <div id="roboBuildMarker">ROBO v2.38 · MODULE 8.2 SMOOTH FACE TRACKING</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.37 · 8.2 FINAL FACE TRACKING + MEM + IDENTITY</small></div>
+          <div class="brand">ROBO <small>v2.38 FACE TRACKING + MEM + IDENTITY + VISION</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -294,7 +294,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.37 MODULE 8.2 · FINAL LIVE FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.38 MODULE 8.2 · SMOOTH FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -326,16 +326,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       <div class="devRow"><span>Interaction state</span><b id="devSocialInteraction">IDLE</b></div>
       <div class="devRow"><span>Perception confidence</span><b id="devSocialConfidence">0%</b></div>
       <div class="devRow"><span>Last social change</span><b id="devSocialChange">none</b></div>
-    </section>
-    <section class="devCard">
-      <div class="devTitle">ACTIVE FACE ENGINE · MODULE 8.2</div>
-      <div class="devRow"><span>Engine</span><b id="devFaceEngine">OFFLINE</b></div>
-      <div class="devRow"><span>Faces detected</span><b id="devFaceCount">0</b></div>
-      <div class="devRow"><span>Target</span><b id="devFaceTarget">NONE</b></div>
-      <div class="devRow"><span>Tracking</span><b id="devFaceTracking">IDLE</b></div>
-      <div class="devRow"><span>Recognition</span><b id="devFaceRecognition">UNAVAILABLE</b></div>
-      <div class="devRow"><span>Identity</span><b id="devFaceIdentity">UNKNOWN</b></div>
-      <div class="devRow"><span>FPS</span><b id="devFaceFps">0</b></div>
     </section>
     <section class="devCard">
       <div class="devTitle">SYSTEM CHECK</div>
@@ -407,823 +397,17 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let latestVision = null;
   let visualMemory = null;
 
-  // Module 6 social-awareness state must exist before the first diagnostics render.
-  let socialAwareness = {
-    presence: "unknown",
-    personCount: 0,
-    interaction: "idle",
-    confidence: 0,
-    lastChange: "none",
-    primaryPerson: null,
-    people: [],
-    timestamp: 0,
-    session: 0
-  };
-  let previousSocialAwareness = null;
-
-
-  /* ---------- CORE UI / VOICE RUNTIME RESTORE ----------
-     v2.35: the previous runtime lost a foundational helper block. When
-     setState()/showCaption()/log()/buildRecognition() were missing, the
-     startup path and microphone path could fail even though the browser APIs
-     themselves were available. Keep these helpers local and dependency-light.
-  */
-  let micStream = null;
-  let recognition = null;
-  let bleDevice = null;
-  let bleChar = null;
-  let audioLevel = 0;
-  let lastActivity = performance.now();
-  let blink = 0;
-  let blinkTimer = 1800 + Math.random()*3000;
-  let t = 0;
-
-  let micAnalyser = null;
-  let micAudioContext = null;
-  let micMeterRAF = null;
-  let micVoiceLevel = 0;
-  let micPermissionStream = null;
-  let sttStarting = false;
-  let sttStartWatchdog = null;
-  let sttRuntimeState = "idle";
-
-  const SR = window.webkitSpeechRecognition || window.SpeechRecognition;
-
-  let sttSession = 0;
-  let sttHadResult = false;
-  let sttHadSpeech = false;
-  let sttRetryUsed = false;
-  let sttLastErrorCode = "";
-  let sttNoMatch = false;
-  let sttWatchdog = null;
-
-  const SERVICE_UUID = "0000ffe0-0000-1000-8000-00805f9b34fb";
-  const CHAR_UUID = "0000ffe1-0000-1000-8000-00805f9b34fb";
-
-  function log(msg){
-    const el = $("#log");
-    if(!el) return;
-    const line = document.createElement("div");
-    line.textContent =
-      "[" + new Date().toLocaleTimeString([], {hour12:false}) + "] " + String(msg);
-    el.prepend(line);
-    while(el.children.length > 8) el.lastElementChild.remove();
-  }
-
-  function ttsDiag(msg,data){
-    try{
-      if(typeof devLog === "function") devLog("TTS",msg,data);
-    }catch(_){}
-  }
-
-  function showCaption(text,on=true){
-    if(!caption || !captionText) return;
-    captionText.textContent = text || "Listening…";
-    caption.classList.toggle("show",!!on);
-  }
-
-  let captionTimer = null;
-
-  function hideCaption(ms=1800){
-    clearTimeout(captionTimer);
-    captionTimer = setTimeout(()=>{
-      if(caption) caption.classList.remove("show");
-    },Math.max(0,Number(ms)||0));
-  }
-
-  function emojiForState(next){
-    return ({
-      neutral:"🙂",
-      happy:"😄",
-      curious:"🧐",
-      sleepy:"😴",
-      listening:"👂",
-      thinking:"🤔",
-      talking:"😃",
-      excited:"🤩",
-      sad:"😔",
-      surprised:"😲",
-      angry:"😠",
-      love:"🥰",
-      embarrassed:"😳",
-      confused:"😕",
-      alert:"😮"
-    })[next] || "🙂";
-  }
-
-  function setState(next,note="",meta={}){
-    if(!stateData[next]) next="neutral";
-    previousState=state;
-    state=next;
-    stateBlend=0;
-
-    if(
-      !meta.behavioral &&
-      !["listening","thinking","talking"].includes(next)
-    ){
-      emotionalState=next;
-      emotionalIntensity=Math.max(
-        0,
-        Math.min(1,Number(meta.intensity ?? emotionalIntensity))
-      );
-      emotionalConfidence=Math.max(
-        0,
-        Math.min(1,Number(meta.confidence ?? emotionalConfidence))
-      );
-      emotionalSince=performance.now();
-    }
-
-    if(!meta.auto) lastActivity=performance.now();
-
-    const stateChip=$("#stateChip");
-    const status=$("#statusText");
-    const stateDot=$("#stateDot");
-
-    if(stateChip) stateChip.textContent=next.toUpperCase();
-    if(status) status.textContent=note || (next+" · active");
-
-    if(stateDot){
-      stateDot.className=
-        "dot " +
-        (
-          ["listening","talking","alert","excited","surprised"].includes(next)
-            ? "live"
-            : "ok"
-        );
-    }
-
-    device?.classList.remove(
-      "state-listening",
-      "state-thinking",
-      "state-talking"
-    );
-
-    if(next==="listening") device?.classList.add("state-listening");
-    if(next==="thinking") device?.classList.add("state-thinking");
-    if(next==="talking") device?.classList.add("state-talking");
-
-    document.querySelectorAll(".stateBtn").forEach(btn=>{
-      btn.classList.toggle(
-        "active",
-        btn.dataset.state===next
-      );
-    });
-
-    const fallback=$("#emojiFallback");
-    if(fallback) fallback.textContent=emojiForState(next);
-
-    log(note || ("state → "+next));
-  }
-
-  const IDLE_STATES=[
-    "neutral",
-    "curious",
-    "happy",
-    "sleepy",
-    "confused",
-    "surprised",
-    "excited"
-  ];
-
-  let autoIdleEnabled=true;
-  let idleTimer=null;
-  let lastAutoState="curious";
-
-  /* ---------- Animated avatar renderer v2.36 ---------- */
-  let avatarFrame=null;
-  let avatarLastTime=performance.now();
-  let avatarDpr=1;
-  let avatarW=0;
-  let avatarH=0;
-
-  function resizeAvatarCanvas(){
-    if(!canvas || !ctx) return;
-    const rect=canvas.getBoundingClientRect();
-    const w=Math.max(1,Math.round(rect.width));
-    const h=Math.max(1,Math.round(rect.height));
-    avatarDpr=Math.min(window.devicePixelRatio||1,2);
-    const targetW=Math.round(w*avatarDpr);
-    const targetH=Math.round(h*avatarDpr);
-    if(canvas.width!==targetW || canvas.height!==targetH){
-      canvas.width=targetW;
-      canvas.height=targetH;
-    }
-    avatarW=w;
-    avatarH=h;
-  }
-
-  function drawAvatar(time){
-    if(!ctx || !canvas) return;
-    resizeAvatarCanvas();
-
-    const dt=Math.min(0.05,Math.max(0,(time-avatarLastTime)/1000));
-    avatarLastTime=time;
-    t += dt;
-
-    const dpr=avatarDpr;
-    const w=avatarW||canvas.clientWidth||700;
-    const h=avatarH||canvas.clientHeight||700;
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-    ctx.clearRect(0,0,w,h);
-
-    const data=stateData[state]||stateData.curious;
-    const blend=Math.min(1,stateBlend);
-    stateBlend=Math.min(1,stateBlend+dt*4.5);
-
-    const cx=w/2;
-    const cy=h/2 + Math.sin(t*1.45)*3.5;
-    const radius=Math.min(w,h)*0.33*(lerp(1,data.scale,blend));
-
-    // Soft ambient glow behind the character.
-    const glow=0.12+data.glow*0.18;
-    const bg=ctx.createRadialGradient(cx,cy,radius*.25,cx,cy,radius*1.75);
-    bg.addColorStop(0,`rgba(255,190,45,${glow})`);
-    bg.addColorStop(.52,`rgba(255,139,55,${glow*.35})`);
-    bg.addColorStop(1,'rgba(255,139,55,0)');
-    ctx.fillStyle=bg;
-    ctx.beginPath();
-    ctx.arc(cx,cy,radius*1.75,0,Math.PI*2);
-    ctx.fill();
-
-    ctx.save();
-    ctx.translate(cx,cy);
-    ctx.rotate(data.tilt||0);
-
-    // Large golden 3D emoji head — visually close to the original Robo avatar.
-    const faceGrad=ctx.createRadialGradient(-radius*.28,-radius*.36,radius*.08,radius*.02,radius*.02,radius*1.15);
-    faceGrad.addColorStop(0,'#fff7ad');
-    faceGrad.addColorStop(.20,'#ffd95a');
-    faceGrad.addColorStop(.62,'#f5ad16');
-    faceGrad.addColorStop(.88,'#db8506');
-    faceGrad.addColorStop(1,'#a95f02');
-    ctx.fillStyle=faceGrad;
-    ctx.shadowColor='rgba(112,67,3,.30)';
-    ctx.shadowBlur=28;
-    ctx.shadowOffsetY=14;
-    ctx.beginPath();
-    ctx.arc(0,0,radius,0,Math.PI*2);
-    ctx.fill();
-    ctx.shadowColor='transparent';
-
-    // Specular highlight makes the face read as a glossy 3D object.
-    const shine=ctx.createRadialGradient(-radius*.42,-radius*.48,0,-radius*.42,-radius*.48,radius*.42);
-    shine.addColorStop(0,'rgba(255,255,255,.68)');
-    shine.addColorStop(.35,'rgba(255,255,255,.20)');
-    shine.addColorStop(1,'rgba(255,255,255,0)');
-    ctx.fillStyle=shine;
-    ctx.beginPath();
-    ctx.arc(-radius*.38,-radius*.43,radius*.38,0,Math.PI*2);
-    ctx.fill();
-
-    const eyeY=-radius*.03;
-    const eyeDX=radius*.38;
-    const eyeW=radius*.19;
-    const baseEyeH=radius*.245;
-    const blinkNow=blink>0.88 ? Math.max(.05,1-(blink-.88)/.12) : 1;
-    const eyeScale=Math.max(.45,Math.min(1.55,data.eye));
-    const pupilJitterX=Math.sin(t*.75)*radius*.015;
-    const pupilJitterY=Math.cos(t*.62)*radius*.012;
-
-    // Huge white eyes.
-    for(const ex of [-eyeDX,eyeDX]){
-      const ew=eyeW;
-      const eh=baseEyeH*blinkNow;
-      ctx.fillStyle='#fffdf8';
-      ctx.beginPath();
-      ctx.ellipse(ex,eyeY,ew,eh,0,0,Math.PI*2);
-      ctx.fill();
-
-      if(blinkNow>.18){
-        const irisR=radius*.105*eyeScale;
-        const irisGrad=ctx.createRadialGradient(ex-irisR*.25,eyeY-irisR*.25,irisR*.05,ex,eyeY,irisR);
-        irisGrad.addColorStop(0,'#f7dcff');
-        irisGrad.addColorStop(.35,'#b990ff');
-        irisGrad.addColorStop(.72,'#7351d9');
-        irisGrad.addColorStop(1,'#452a9c');
-        ctx.fillStyle=irisGrad;
-        ctx.beginPath();
-        ctx.arc(ex+pupilJitterX,eyeY+pupilJitterY,irisR,0,Math.PI*2);
-        ctx.fill();
-
-        ctx.fillStyle='#171222';
-        ctx.beginPath();
-        ctx.arc(ex+pupilJitterX,eyeY+pupilJitterY,irisR*.48,0,Math.PI*2);
-        ctx.fill();
-
-        ctx.fillStyle='#ffffff';
-        ctx.beginPath();
-        ctx.arc(ex-irisR*.28,eyeY-irisR*.34,irisR*.20,0,Math.PI*2);
-        ctx.fill();
-      }
-    }
-
-    // Expressive dark eyebrows.
-    ctx.strokeStyle='#56300a';
-    ctx.lineCap='round';
-    ctx.lineWidth=Math.max(5,radius*.045);
-    const browY=eyeY-radius*.31;
-    const browTilt=data.brow*radius*.42;
-    ctx.beginPath();
-    ctx.moveTo(-eyeDX-eyeW*.88,browY+browTilt);
-    ctx.quadraticCurveTo(-eyeDX,browY-radius*.055,-eyeDX+eyeW*.88,browY-browTilt);
-    ctx.moveTo(eyeDX-eyeW*.88,browY-browTilt);
-    ctx.quadraticCurveTo(eyeDX,browY-radius*.055,eyeDX+eyeW*.88,browY+browTilt);
-    ctx.stroke();
-
-    // Small nose/shadow.
-    ctx.fillStyle='rgba(132,77,5,.25)';
-    ctx.beginPath();
-    ctx.ellipse(0,radius*.12,radius*.045,radius*.055,0,0,Math.PI*2);
-    ctx.fill();
-
-    // Rosy cheeks.
-    const cheekGlow=state==='embarrassed'||state==='love'||state==='happy'||state==='excited';
-    if(cheekGlow){
-      for(const ex of [-1,1]){
-        const cg=ctx.createRadialGradient(ex*radius*.57,radius*.29,0,ex*radius*.57,radius*.29,radius*.18);
-        cg.addColorStop(0,'rgba(255,104,116,.40)');
-        cg.addColorStop(1,'rgba(255,104,116,0)');
-        ctx.fillStyle=cg;
-        ctx.beginPath();
-        ctx.arc(ex*radius*.57,radius*.29,radius*.18,0,Math.PI*2);
-        ctx.fill();
-      }
-    }
-
-    // Mouth: open/rounded for talking and stronger expressions.
-    const mouthY=radius*.36;
-    const speaking=talking;
-    const mouthOpen=speaking
-      ? radius*(.075+.055*(Math.sin(t*16)*.5+.5))
-      : Math.max(0,data.mouth)*radius*.54;
-
-    if(data.mouth<0){
-      ctx.strokeStyle='#5b3110';
-      ctx.lineWidth=Math.max(4,radius*.025);
-      ctx.beginPath();
-      ctx.arc(0,mouthY+radius*.035,radius*.18,1.10*Math.PI,1.90*Math.PI);
-      ctx.stroke();
-    }else{
-      ctx.fillStyle='#4a2514';
-      ctx.beginPath();
-      ctx.ellipse(0,mouthY,radius*.16,Math.max(radius*.055,mouthOpen),0,0,Math.PI*2);
-      ctx.fill();
-      if(speaking || state==='surprised' || state==='excited'){
-        ctx.fillStyle='#ff7b87';
-        ctx.beginPath();
-        ctx.ellipse(0,mouthY+radius*.045,radius*.085,Math.max(radius*.018,mouthOpen*.55),0,0,Math.PI*2);
-        ctx.fill();
-      }
-    }
-
-    ctx.restore();
-
-    if(time >= blinkTimer){
-      blink=1;
-      blinkTimer=time + 120 + Math.random()*120;
-    }
-    if(blink>0) blink=Math.max(0,blink-dt*7.5);
-
-    const fallback=$('#emojiFallback');
-    if(fallback) fallback.classList.add('hidden');
-
-    avatarFrame=requestAnimationFrame(drawAvatar);
-  }
-
-  function startAvatarRenderer(){
-    if(avatarFrame) return;
-    resizeAvatarCanvas();
-    avatarLastTime=performance.now();
-    avatarFrame=requestAnimationFrame(drawAvatar);
-  }
-
-  startAvatarRenderer();
-  window.addEventListener("resize",()=>{resizeAvatarCanvas();},{passive:true});
-
-  function scheduleIdleCycle(delay=6500){
-    clearTimeout(idleTimer);
-    idleTimer=setTimeout(runIdleCycle,delay);
-  }
-
-  function runIdleCycle(){
-    if(!autoIdleEnabled){
-      scheduleIdleCycle(5000);
-      return;
-    }
-
-    const busy=
-      listening ||
-      talking ||
-      state==="listening" ||
-      state==="talking" ||
-      state==="thinking";
-
-    const inactiveLongEnough=
-      performance.now()-lastActivity>3800;
-
-    if(busy || !inactiveLongEnough){
-      scheduleIdleCycle(3500);
-      return;
-    }
-
-    const choices=IDLE_STATES.filter(x=>x!==lastAutoState);
-    const next=
-      choices[Math.floor(Math.random()*choices.length)] ||
-      "curious";
-
-    lastAutoState=next;
-    setState(
-      next,
-      next+" · standing by",
-      {auto:true}
-    );
-
-    scheduleIdleCycle(
-      6000 + Math.random()*4500
-    );
-  }
-
-  function setAutoIdle(enabled){
-    autoIdleEnabled=Boolean(enabled);
-    const btn=$("#autoStateBtn");
-
-    if(btn){
-      btn.textContent=
-        "AUTO IDLE: "+
-        (autoIdleEnabled ? "ON" : "OFF");
-    }
-
-    if(autoIdleEnabled){
-      scheduleIdleCycle();
-    }else{
-      clearTimeout(idleTimer);
-      idleTimer=null;
-    }
-  }
-
-  function sttEventForStart(message){
-    log("STT · "+message);
-  }
-
-  function stopMicStream(){
-    if(micStream){
-      micStream.getTracks().forEach(t=>{try{t.stop();}catch(_){ }});
-      micStream=null;
-    }
-
-    if(micPermissionStream){
-      micPermissionStream.getTracks().forEach(t=>{try{t.stop();}catch(_){ }});
-      micPermissionStream=null;
-    }
-
-    if(micAnalyser){
-      try{micAnalyser.disconnect();}catch(_){}
-      micAnalyser=null;
-    }
-
-    if(micAudioContext){
-      try{micAudioContext.close();}catch(_){}
-      micAudioContext=null;
-    }
-
-    if(micMeterRAF){
-      cancelAnimationFrame(micMeterRAF);
-      micMeterRAF=null;
-    }
-
-    micVoiceLevel=0;
-  }
-
-  function startMicMeter(stream){
-    try{
-      micAudioContext=
-        new (window.AudioContext||window.webkitAudioContext)();
-
-      micAnalyser=
-        micAudioContext.createAnalyser();
-
-      micAnalyser.fftSize=512;
-
-      const source=
-        micAudioContext.createMediaStreamSource(stream);
-
-      source.connect(micAnalyser);
-
-      const data=
-        new Uint8Array(micAnalyser.fftSize);
-
-      const tick=()=>{
-        if(!micAnalyser) return;
-
-        micAnalyser.getByteTimeDomainData(data);
-
-        let sum=0;
-
-        for(const value of data){
-          const n=(value-128)/128;
-          sum+=n*n;
-        }
-
-        micVoiceLevel=
-          Math.min(
-            1,
-            Math.sqrt(sum/data.length)*3.8
-          );
-
-        const level=$("#devLevel");
-        if(level){
-          level.style.width=
-            Math.round(micVoiceLevel*100)+"%";
-        }
-
-        micMeterRAF=
-          requestAnimationFrame(tick);
-      };
-
-      tick();
-
-    }catch(err){
-      log(
-        "MIC · meter unavailable · "+
-        (err?.message||"unknown")
-      );
-    }
-  }
-
-  function setVoiceStatus(text){
-    showCaption(text,true);
-    log("VOICE · "+text);
-  }
-
-  function releaseMicForSTT(){
-    if(micStream){
-      micStream.getTracks().forEach(t=>{try{t.stop();}catch(_){ }});
-      micStream=null;
-    }
-
-    if(micPermissionStream){
-      micPermissionStream.getTracks().forEach(t=>{try{t.stop();}catch(_){ }});
-      micPermissionStream=null;
-    }
-
-    if(micAnalyser){
-      try{micAnalyser.disconnect();}catch(_){}
-      micAnalyser=null;
-    }
-
-    if(micAudioContext){
-      try{micAudioContext.close();}catch(_){}
-      micAudioContext=null;
-    }
-
-    if(micMeterRAF){
-      cancelAnimationFrame(micMeterRAF);
-      micMeterRAF=null;
-    }
-
-    micVoiceLevel=0;
-  }
-
-  function buildRecognition(){
-    if(!SR) return null;
-
-    const r=new SR();
-
-    r.continuous=false;
-    r.interimResults=true;
-    r.maxAlternatives=3;
-
-    const browserLang = String(navigator.language || "en-US");
-    r.lang = /^en-/i.test(browserLang) ? browserLang : "en-US";
-
-    // Android Chrome is more reliable when standard cloud SpeechRecognition owns startup.
-    // We only report on-device capability; we do not toggle processLocally during the gesture.
-    try{
-      if("processLocally" in r && typeof SR.available === "function") {
-        SR.available({langs:["en-US"],processLocally:true})
-          .then(result=>{
-            const ok=result==="available" || (Array.isArray(result) && result.includes("available"));
-            log(ok ? "STT · on-device capability detected · standard STT selected" : "STT · on-device unavailable · standard STT selected");
-          })
-          .catch(()=>log("STT · on-device capability check failed · standard STT selected"));
-      }
-    }catch(_){}
-
-    const sttEvent=(name,detail="")=>{
-      log(
-        "STT · "+
-        name+
-        (detail ? " · "+detail : "")
-      );
-    };
-
-    r.onaudiostart=()=>{
-      sttHadSpeech=false;
-      sttEvent("AUDIOSTART");
-      if(devStage) devStage.textContent="AUDIO INPUT ACTIVE";
-    };
-
-    r.onsoundstart=()=>{
-      sttHadSpeech=true;
-      sttEvent("SOUNDSTART");
-      if(devStage) devStage.textContent="SOUND DETECTED";
-    };
-
-    r.onspeechstart=()=>{
-      sttHadSpeech=true;
-      sttEvent("SPEECHSTART");
-      if(devStage) devStage.textContent="VOICE DETECTED";
-    };
-
-    r.onspeechend=()=>{
-      sttEvent("SPEECHEND");
-      if(devStage) devStage.textContent="VOICE ENDED";
-    };
-
-    r.onsoundend=()=>sttEvent("SOUNDEND");
-    r.onaudioend=()=>sttEvent("AUDIOEND");
-
-    r.onstart=()=>{
-      sttStarting=false;
-      sttRuntimeState="listening";
-      if(sttStartWatchdog){clearTimeout(sttStartWatchdog);sttStartWatchdog=null;}
-      listening=true;
-      micBtn.classList.add("listening");
-
-      setState(
-        "listening",
-        "listening · speak now",
-        {behavioral:true}
-      );
-
-      setVoiceStatus("LISTENING · speak now…");
-
-      try{
-        if(sttWatchdog) clearTimeout(sttWatchdog);
-        sttWatchdog=setTimeout(()=>{
-          if(listening){
-            log("STT · watchdog timeout · stopping");
-            try{r.stop();}catch(_){}
-          }
-        },12000);
-      }catch(_){}
-    };
-
-    r.onresult=(event)=>{
-      let interim="";
-
-      for(
-        let i=event.resultIndex;
-        i<event.results.length;
-        i++
-      ){
-        const result=event.results[i];
-
-        if(!result || !result[0]) continue;
-
-        const text=
-          String(result[0].transcript||"").trim();
-
-        if(!text) continue;
-
-        if(result.isFinal){
-          sttHadResult=true;
-
-          if(devTranscript){
-            devTranscript.textContent=text;
-          }
-
-          document.activeElement?.blur?.();
-
-          showCaption(
-            "ROBO HEARS\n"+text,
-            true
-          );
-
-          respond(text);
-        }else{
-          interim += text;
-        }
-      }
-
-      if(interim){
-        showCaption(
-          "HEARING\n"+interim,
-          true
-        );
-      }
-    };
-
-    r.onerror=(event)=>{
-      if(sttStartWatchdog){clearTimeout(sttStartWatchdog);sttStartWatchdog=null;}
-      const code=
-        event?.error ||
-        "unknown";
-
-      sttLastErrorCode=code;
-
-      sttEvent(
-        "ERROR",
-        code
-      );
-
-      sttStarting=false;
-      sttRuntimeState="error";
-      listening=false;
-      micBtn.classList.remove("listening");
-
-      if(sttWatchdog){
-        clearTimeout(sttWatchdog);
-        sttWatchdog=null;
-      }
-
-      releaseMicForSTT();
-
-      if(
-        code==="aborted" ||
-        code==="no-speech"
-      ){
-        setState(
-          "curious",
-          code==="no-speech"
-            ? "speech not detected"
-            : "listening stopped"
-        );
-        hideCaption(1800);
-        return;
-      }
-
-      setVoiceStatus(
-        "STT ERROR · "+
-        code+
-        " · tap mic again"
-      );
-
-      setState(
-        "curious",
-        "microphone ready"
-      );
-    };
-
-    r.onend=()=>{
-      if(sttStartWatchdog){clearTimeout(sttStartWatchdog);sttStartWatchdog=null;}
-      sttStarting=false;
-      sttRuntimeState="idle";
-
-      if(sttWatchdog){
-        clearTimeout(sttWatchdog);
-        sttWatchdog=null;
-      }
-
-      listening=false;
-      micBtn.classList.remove("listening");
-      releaseMicForSTT();
-
-      if(
-        !sttHadResult &&
-        sttHadSpeech &&
-        !sttRetryUsed
-      ){
-        sttRetryUsed=true;
-        log("STT · restarting once after incomplete result");
-
-        setTimeout(()=>{
-          if(!listening && !talking){
-            startSTT(true);
-          }
-        },180);
-
-        return;
-      }
-
-      if(
-        !talking &&
-        state==="listening"
-      ){
-        setState(
-          "curious",
-          "curious · standing by"
-        );
-      }
-
-      hideCaption(
-        sttHadResult ? 2200 : 1400
-      );
-    };
-
-    return r;
-  }
-
-  /* ---------- Active Face Tracking + Recognition v1 / Module 8.2 ----------
-     8.1 = real-time face detection.
-     8.2 = smooth target tracking: raw detector updates are filtered so the
-     primary face box follows continuously instead of jumping between frames.
-     Recognition remains opt-in via ENROLL FACE and stays independent of the
-     real-time tracking loop.
+  /* ---------- Active Face Tracking + Recognition v2 (Module 8) ----------
+     Clean integration on the known-good Robo baseline.
+     8.1 = real-time local face detection.
+     8.2 = smooth primary-face tracking using detector updates + requestAnimationFrame.
+     Recognition stays optional and never blocks tracking.
   */
   let faceEngineReady = false;
   let faceEngineLoading = false;
   let faceLoopTimer = null;
+  let faceLoopToken = 0;
+  let faceTickInFlight = false;
   let faceLastRun = 0;
   let faceLastFpsAt = performance.now();
   let faceFpsFrames = 0;
@@ -1231,47 +415,51 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let faceDetections = [];
   let faceTarget = null;
   let faceTargetLostAt = 0;
-  let faceSmoothedBox = null;
-  let faceTrackingInitialized = false;
-  let faceDetectionModel = null;
+  let faceSmoothBox = null;
   let faceRecognitionAvailable = false;
+  let faceRecognitionLoading = false;
   let faceRecognitionThreshold = 0.52;
   let faceRecognitionDistance = null;
   let faceRecognitionIdentity = null;
-  let faceRecognitionStatus = 'unavailable';
+  let faceRecognitionStatus = 'not-enrolled';
   let faceLastRecognitionAt = 0;
-  let faceTickInFlight = false;
-  let faceLoopToken = 0;
-  const FACE_MODEL_URI = 'https://justadudewhohacks.github.io/face-api.js/models';
+  let faceMisses = 0;
+  let faceLastAdaptiveAt = 0;
 
-  /* Smoothing constants for Module 8.2.
-     Lower alpha = smoother / slower.
-     We adapt slightly by movement magnitude so large movements still catch up.
-  */
-  const FACE_SMOOTH_ALPHA = 0.34;
-  const FACE_SMOOTH_FAST_ALPHA = 0.56;
-  const FACE_SMOOTH_FAST_DISTANCE = 0.18;
+  const FACE_MODEL_URI = 'https://justadudewhohacks.github.io/face-api.js/models';
   const FACE_TARGET_HOLD_MS = 850;
+  const FACE_DETECT_INTERVAL_MS = 105;
+  const FACE_SMOOTH_ALPHA = 0.42;
 
   function faceDiag(){
     try{
-      const e=$('#devFaceEngine'),
-            c=$('#devFaceCount'),
-            t=$('#devFaceTarget'),
-            tr=$('#devFaceTracking'),
-            r=$('#devFaceRecognition'),
-            i=$('#devFaceIdentity'),
-            f=$('#devFaceFps');
+      const e=$('#devFaceEngine');
+      const c=$('#devFaceCount');
+      const t=$('#devFaceTarget');
+      const tr=$('#devFaceTracking');
+      const r=$('#devFaceRecognition');
+      const i=$('#devFaceIdentity');
+      const f=$('#devFaceFps');
 
-      if(e) e.textContent=faceEngineReady?'ONLINE · FACE-API':(faceEngineLoading?'LOADING':'OFFLINE');
+      if(e) e.textContent =
+        faceEngineReady ? 'ONLINE · FACE-API' :
+        (faceEngineLoading ? 'LOADING' : 'OFFLINE');
+
       if(c) c.textContent=String(faceDetections.length);
       if(t) t.textContent=faceTarget?'PRIMARY':'NONE';
+
       if(tr){
         tr.textContent=faceTarget
-          ? (faceTrackingInitialized ? 'SMOOTH' : 'ACQUIRING')
-          : (faceSmoothedBox ? 'HOLD' : 'IDLE');
+          ? (faceSmoothBox?'SMOOTH':'ACQUIRING')
+          : (faceEngineReady?'SEARCHING':'IDLE');
       }
-      if(r) r.textContent=faceRecognitionAvailable?String(faceRecognitionStatus||'unavailable').toUpperCase():'UNAVAILABLE';
+
+      if(r){
+        r.textContent=faceRecognitionAvailable
+          ? String(faceRecognitionStatus||'READY').toUpperCase()
+          : (faceRecognitionLoading?'LOADING':'NOT-ENROLLED');
+      }
+
       if(i) i.textContent=faceRecognitionIdentity||'UNKNOWN';
       if(f) f.textContent=String(faceFps);
     }catch(_){}
@@ -1284,85 +472,361 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     el.classList.toggle('show',show);
   }
 
-  function clamp01(value){
-    return Math.max(0,Math.min(1,value));
+  function isValidFaceBox(box){
+    return !!box &&
+      Number.isFinite(Number(box.x)) &&
+      Number.isFinite(Number(box.y)) &&
+      Number.isFinite(Number(box.width)) &&
+      Number.isFinite(Number(box.height)) &&
+      Number(box.width)>2 &&
+      Number(box.height)>2;
   }
 
-  function smoothBox(previous,next,alpha){
-    if(!next) return previous || null;
-    if(!previous) return {...next};
-
+  function cloneBox(box){
+    if(!isValidFaceBox(box)) return null;
     return {
-      x: previous.x + (next.x - previous.x) * alpha,
-      y: previous.y + (next.y - previous.y) * alpha,
-      width: previous.width + (next.width - previous.width) * alpha,
-      height: previous.height + (next.height - previous.height) * alpha
+      x:Number(box.x),
+      y:Number(box.y),
+      width:Number(box.width),
+      height:Number(box.height)
     };
   }
 
-  function boxNormalizedDistance(a,b){
-    if(!isValidFaceBox(a) || !isValidFaceBox(b) || !camera.videoWidth || !camera.videoHeight) return Infinity;
-    const ac=boxCenter(a), bc=boxCenter(b);
+  function boxCenter(box){
+    if(!isValidFaceBox(box)) return null;
+    return {
+      x:box.x+box.width/2,
+      y:box.y+box.height/2
+    };
+  }
+
+  function boxDistance(a,b){
+    const ac=boxCenter(a);
+    const bc=boxCenter(b);
     if(!ac || !bc) return Infinity;
-    const dx=(ac.x-bc.x)/camera.videoWidth;
-    const dy=(ac.y-bc.y)/camera.videoHeight;
-    return Math.hypot(dx,dy);
+    return Math.hypot(ac.x-bc.x,ac.y-bc.y);
   }
 
-  function updateSmoothedTargetBox(nextBox){
-    if(!nextBox){
-      return;
-    }
+  function lerpBox(from,to,alpha){
+    if(!isValidFaceBox(to)) return cloneBox(from);
+    if(!isValidFaceBox(from)) return cloneBox(to);
 
-    if(!isValidFaceBox(nextBox)) return;
+    const k=Math.max(0,Math.min(1,alpha));
 
-    if(!isValidFaceBox(faceSmoothedBox) || !faceTrackingInitialized){
-      faceSmoothedBox={...nextBox};
-      faceTrackingInitialized=true;
-      return;
-    }
-
-    const movement=boxNormalizedDistance(faceSmoothedBox,nextBox);
-    const alpha=clamp01(
-      movement >= FACE_SMOOTH_FAST_DISTANCE
-        ? FACE_SMOOTH_FAST_ALPHA
-        : FACE_SMOOTH_ALPHA
-    );
-
-    faceSmoothedBox=smoothBox(faceSmoothedBox,nextBox,alpha);
+    return {
+      x:from.x+(to.x-from.x)*k,
+      y:from.y+(to.y-from.y)*k,
+      width:from.width+(to.width-from.width)*k,
+      height:from.height+(to.height-from.height)*k
+    };
   }
 
-  function renderFaceBox(box, isTarget, labelText, lost=false){
-    const overlay=$('#faceTrackingOverlay');
-    if(!overlay || !box || !camera.videoWidth || !camera.videoHeight) return;
+  function choosePrimaryFace(detections){
+    if(!Array.isArray(detections) || !detections.length) return null;
 
-    let left=box.x/camera.videoWidth*100;
-    let top=box.y/camera.videoHeight*100;
-    let width=box.width/camera.videoWidth*100;
-    let height=box.height/camera.videoHeight*100;
+    if(faceTarget && isValidFaceBox(faceTarget.box)){
+      let best=null;
+      let bestDist=Infinity;
 
-    if(cameraFacingMode==='user'){
-      left=100-(left+width);
+      for(const d of detections){
+        if(!isValidFaceBox(d?.box)) continue;
+        const dist=boxDistance(faceTarget.box,d.box);
+        if(dist<bestDist){
+          bestDist=dist;
+          best=d;
+        }
+      }
+
+      if(
+        best &&
+        bestDist <
+        Math.max(camera.videoWidth||1,camera.videoHeight||1)*0.28
+      ){
+        return best;
+      }
     }
 
-    left=Math.max(0,Math.min(99,left));
-    top=Math.max(0,Math.min(99,top));
-    width=Math.max(1,Math.min(100-left,width));
-    height=Math.max(1,Math.min(100-top,height));
+    const cx=(camera.videoWidth||1)/2;
+    const cy=(camera.videoHeight||1)/2;
 
-    const el=document.createElement('div');
-    el.className='faceTrackBox'+(isTarget?' target':'')+(lost?' lost':'');
-    el.style.left=left+'%';
-    el.style.top=top+'%';
-    el.style.width=width+'%';
-    el.style.height=height+'%';
+    return detections
+      .filter(d=>isValidFaceBox(d?.box))
+      .slice()
+      .sort((a,b)=>{
+        const aa=a.box.width*a.box.height;
+        const ab=b.box.width*b.box.height;
 
-    const label=document.createElement('span');
-    label.className='faceTrackLabel';
-    label.textContent=labelText;
-    el.appendChild(label);
+        const ac=boxCenter(a.box);
+        const bc=boxCenter(b.box);
 
-    overlay.appendChild(el);
+        const da=ac?Math.hypot(ac.x-cx,ac.y-cy):Infinity;
+        const db=bc?Math.hypot(bc.x-cx,bc.y-cy):Infinity;
+
+        return (ab-aa)*0.01 + da-db;
+      })[0] || null;
+  }
+
+  async function waitForFaceApi(timeoutMs=6000){
+    const started=performance.now();
+
+    while(
+      !window.faceapi &&
+      performance.now()-started<timeoutMs
+    ){
+      await new Promise(r=>setTimeout(r,50));
+    }
+
+    return !!window.faceapi;
+  }
+
+  async function ensureFaceEngine(){
+    if(faceEngineReady) return true;
+
+    if(faceEngineLoading){
+      while(faceEngineLoading){
+        await new Promise(r=>setTimeout(r,60));
+      }
+      return faceEngineReady;
+    }
+
+    faceEngineLoading=true;
+    faceDiag();
+    faceBadge('LOADING FACE ENGINE');
+
+    try{
+      const available=await waitForFaceApi();
+
+      if(!available){
+        throw new Error('face-api.js library unavailable');
+      }
+
+      if(!faceapi.nets.tinyFaceDetector){
+        throw new Error('TinyFaceDetector unavailable');
+      }
+
+      /*
+       * Only the lightweight detector blocks tracker startup.
+       * Recognition models are loaded independently in the background.
+       */
+      await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URI);
+
+      faceEngineReady=true;
+      faceRecognitionStatus=
+        getStoredFaceProfiles().length
+          ? 'ready'
+          : 'not-enrolled';
+
+      faceBadge('FACE TRACKER ONLINE');
+      devLog('FACE','tracker ready',{
+        detector:'face-api TinyFaceDetector',
+        inputSize:192,
+        scoreThreshold:.08,
+        video:
+          `${camera.videoWidth||0}x${camera.videoHeight||0}`
+      });
+
+      setTimeout(
+        ()=>faceBadge('',false),
+        1200
+      );
+
+      /*
+       * Recognition is deliberately non-blocking for 8.2.
+       */
+      ensureFaceRecognition().catch(()=>{});
+
+      faceDiag();
+      return true;
+
+    }catch(err){
+
+      faceEngineReady=false;
+
+      devLog(
+        'FACE ERROR',
+        'face tracker load failed',
+        {
+          message:
+            err?.message ||
+            String(err)
+        }
+      );
+
+      faceBadge('FACE TRACKER FAILED');
+      faceDiag();
+      return false;
+
+    }finally{
+      faceEngineLoading=false;
+    }
+  }
+
+  async function ensureFaceRecognition(){
+    if(faceRecognitionAvailable) return true;
+    if(faceRecognitionLoading) return false;
+
+    faceRecognitionLoading=true;
+    faceRecognitionStatus='loading';
+    faceDiag();
+
+    try{
+      if(!(await waitForFaceApi())) return false;
+
+      await faceapi.nets.faceLandmark68TinyNet.loadFromUri(FACE_MODEL_URI);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URI);
+
+      faceRecognitionAvailable=true;
+      faceRecognitionStatus=
+        getStoredFaceProfiles().length
+          ? 'ready'
+          : 'not-enrolled';
+
+      devLog('FACE','recognition models ready');
+      faceDiag();
+
+      return true;
+
+    }catch(err){
+
+      faceRecognitionAvailable=false;
+      faceRecognitionStatus='unavailable';
+
+      devLog(
+        'FACE ERROR',
+        'recognition models unavailable',
+        {
+          message:
+            err?.message ||
+            String(err)
+        }
+      );
+
+      faceDiag();
+      return false;
+
+    }finally{
+      faceRecognitionLoading=false;
+    }
+  }
+
+  async function detectLocalFaceBoxes(){
+    if(
+      !faceEngineReady ||
+      !window.faceapi ||
+      !cameraEnabled ||
+      !cameraStream ||
+      !camera.videoWidth ||
+      !camera.videoHeight ||
+      camera.readyState<2
+    ){
+      return [];
+    }
+
+    const detectorInput =
+      faceapi.TinyFaceDetectorOptions
+        ? new faceapi.TinyFaceDetectorOptions({
+            inputSize:192,
+            scoreThreshold:.08
+          })
+        : null;
+
+    if(!detectorInput){
+      return [];
+    }
+
+    try{
+      const detections =
+        await faceapi.detectAllFaces(
+          camera,
+          detectorInput
+        );
+
+      const mapped=Array.isArray(detections)
+        ? detections
+            .map(d=>{
+              const box=cloneBox(d?.box);
+              if(!box) return null;
+
+              return {
+                box,
+                score:
+                  Number.isFinite(Number(d?.score))
+                    ? Number(d.score)
+                    : 0
+              };
+            })
+            .filter(Boolean)
+        : [];
+
+      if(mapped.length){
+        faceMisses=0;
+        return mapped;
+      }
+
+      /*
+       * Adaptive retry:
+       * after repeated misses, give TinyFaceDetector a larger frame and a
+       * slightly more sensitive threshold. This is occasional, not every tick.
+       */
+      faceMisses++;
+
+      const now=performance.now();
+
+      if(
+        faceMisses>=3 &&
+        now-faceLastAdaptiveAt>1200
+      ){
+        faceLastAdaptiveAt=now;
+
+        const adaptiveOptions =
+          new faceapi.TinyFaceDetectorOptions({
+            inputSize:224,
+            scoreThreshold:.05
+          });
+
+        const retry =
+          await faceapi.detectAllFaces(
+            camera,
+            adaptiveOptions
+          );
+
+        return Array.isArray(retry)
+          ? retry
+              .map(d=>{
+                const box=cloneBox(d?.box);
+                if(!box) return null;
+
+                return {
+                  box,
+                  score:
+                    Number.isFinite(Number(d?.score))
+                      ? Number(d.score)
+                      : 0
+                };
+              })
+              .filter(Boolean)
+          : [];
+      }
+
+      return [];
+
+    }catch(err){
+
+      devLog(
+        'FACE ERROR',
+        'detector pass failed',
+        {
+          message:
+            err?.message ||
+            String(err),
+
+          video:
+            `${camera.videoWidth}x${camera.videoHeight}`
+        }
+      );
+
+      return [];
+    }
   }
 
   function renderFaceTarget(){
@@ -1371,51 +835,406 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     overlay.innerHTML='';
 
+    if(
+      !camera.videoWidth ||
+      !camera.videoHeight
+    ){
+      return;
+    }
+
+    const appendBox=(box,index,isTarget=false,labelText='FACE')=>{
+      if(!isValidFaceBox(box)) return;
+
+      let left=
+        box.x/
+        camera.videoWidth*100;
+
+      let top=
+        box.y/
+        camera.videoHeight*100;
+
+      let width=
+        box.width/
+        camera.videoWidth*100;
+
+      let height=
+        box.height/
+        camera.videoHeight*100;
+
+      if(cameraFacingMode==='user'){
+        left=100-(left+width);
+      }
+
+      left=Math.max(
+        0,
+        Math.min(99,left)
+      );
+
+      top=Math.max(
+        0,
+        Math.min(99,top)
+      );
+
+      width=Math.max(
+        1,
+        Math.min(100-left,width)
+      );
+
+      height=Math.max(
+        1,
+        Math.min(100-top,height)
+      );
+
+      const el=
+        document.createElement('div');
+
+      el.className=
+        'faceTrackBox '+
+        (isTarget?'target':'');
+
+      el.style.left=left+'%';
+      el.style.top=top+'%';
+      el.style.width=width+'%';
+      el.style.height=height+'%';
+
+      const label=
+        document.createElement('span');
+
+      label.className='faceTrackLabel';
+
+      const identity=
+        isTarget && faceRecognitionIdentity
+          ? faceRecognitionIdentity
+          : labelText;
+
+      label.textContent=
+        identity+
+        (isTarget?' · TARGET':'');
+
+      el.appendChild(label);
+      overlay.appendChild(el);
+    };
+
+    /*
+     * Draw non-primary detections first.
+     */
     faceDetections.forEach((d,idx)=>{
-      const rawBox=d.box;
-      if(!rawBox) return;
+      if(
+        faceTarget &&
+        d===faceTarget
+      ) return;
 
-      const isTarget=faceTarget===d && isValidFaceBox(faceTarget?.box);
-      const box=isTarget && isValidFaceBox(faceSmoothedBox) ? faceSmoothedBox : rawBox;
-      const identity=(isTarget && faceRecognitionIdentity)
-        ? faceRecognitionIdentity
-        : (idx===0 ? 'FACE' : 'FACE '+(idx+1));
-
-      renderFaceBox(
-        box,
-        isTarget,
-        identity+(isTarget?' · TARGET':''),
-        false
+      appendBox(
+        d.box,
+        idx,
+        false,
+        idx===0?'FACE':'FACE '+(idx+1)
       );
     });
 
-    /* Keep the last target visible for the short loss grace period so the
-       tracker doesn't visually snap/disappear on a single missed detector frame. */
-    if(
-      !faceDetections.length &&
-      faceSmoothedBox &&
-      faceTarget &&
-      faceTargetLostAt &&
-      performance.now()-faceTargetLostAt <= FACE_TARGET_HOLD_MS
-    ){
-      const identity=faceRecognitionIdentity || 'FACE';
-      renderFaceBox(
-        faceSmoothedBox,
+    /*
+     * Draw only the smoothed target last.
+     * This is what makes 8.2 visually smooth even though detector frames
+     * arrive much more slowly than the display refresh.
+     */
+    if(faceSmoothBox){
+      appendBox(
+        faceSmoothBox,
+        0,
         true,
-        identity+' · SEARCHING',
-        true
+        'FACE'
       );
     }
   }
 
-  function isValidFaceBox(box){
-    return !!box &&
-      Number.isFinite(Number(box.x)) &&
-      Number.isFinite(Number(box.y)) &&
-      Number.isFinite(Number(box.width)) &&
-      Number.isFinite(Number(box.height)) &&
-      Number(box.width)>1 &&
-      Number(box.height)>1;
+  function getStoredFaceProfiles(){
+    if(!roboMemory) return [];
+
+    if(!Array.isArray(roboMemory.faceProfiles)){
+      roboMemory.faceProfiles=[];
+    }
+
+    return roboMemory.faceProfiles;
+  }
+
+  function findFaceMatch(descriptor){
+    const profiles=getStoredFaceProfiles();
+
+    if(!profiles.length){
+      faceRecognitionDistance=null;
+      return null;
+    }
+
+    let best=null;
+    let bestDist=Infinity;
+
+    for(const profile of profiles){
+      const arr=
+        Array.isArray(profile?.descriptor)
+          ? profile.descriptor
+          : [];
+
+      if(arr.length!==descriptor.length) continue;
+
+      let sum=0;
+
+      for(
+        let i=0;
+        i<descriptor.length;
+        i++
+      ){
+        const diff=
+          descriptor[i]-
+          Number(arr[i]||0);
+
+        sum+=diff*diff;
+      }
+
+      const dist=Math.sqrt(sum);
+
+      if(dist<bestDist){
+        bestDist=dist;
+        best=profile;
+      }
+    }
+
+    faceRecognitionDistance=
+      Number.isFinite(bestDist)
+        ? bestDist
+        : null;
+
+    if(
+      best &&
+      bestDist<=faceRecognitionThreshold
+    ){
+      return best;
+    }
+
+    return null;
+  }
+
+  async function recognizeTargetFace(){
+    if(
+      !faceRecognitionAvailable ||
+      !cameraEnabled ||
+      !camera.videoWidth
+    ){
+      return null;
+    }
+
+    try{
+      const result=
+        await faceapi
+          .detectSingleFace(
+            camera,
+            new faceapi.TinyFaceDetectorOptions({
+              inputSize:224,
+              scoreThreshold:.08
+            })
+          )
+          .withFaceLandmarks(true)
+          .withFaceDescriptor();
+
+      if(!result){
+        faceRecognitionIdentity=null;
+        faceRecognitionStatus=
+          getStoredFaceProfiles().length
+            ? 'unknown-face'
+            : 'not-enrolled';
+        faceDiag();
+        return null;
+      }
+
+      const match=
+        findFaceMatch(
+          result.descriptor
+        );
+
+      if(match){
+        faceRecognitionIdentity=
+          match.displayName ||
+          roboMemory?.identity?.displayName ||
+          'KNOWN USER';
+
+        faceRecognitionStatus='recognized';
+        faceDiag();
+        return match;
+      }
+
+      faceRecognitionIdentity=null;
+      faceRecognitionStatus=
+        getStoredFaceProfiles().length
+          ? 'unknown-face'
+          : 'not-enrolled';
+
+      faceDiag();
+      return null;
+
+    }catch(err){
+
+      devLog(
+        'FACE ERROR',
+        'recognition pass failed',
+        {
+          message:
+            err?.message ||
+            String(err)
+        }
+      );
+
+      return null;
+    }
+  }
+
+  async function enrollCurrentFace(){
+    if(
+      !cameraEnabled ||
+      !cameraStream
+    ){
+      showCaption(
+        'Turn the camera on before enrolling your face.',
+        true
+      );
+      hideCaption(2600);
+      return;
+    }
+
+    if(
+      !roboMemory?.identity?.displayName
+    ){
+      showCaption(
+        'Tell Robo your name first, then enroll your face.',
+        true
+      );
+      hideCaption(2600);
+      return;
+    }
+
+    if(!(await ensureFaceEngine())){
+      showCaption(
+        'Face engine is not ready yet.',
+        true
+      );
+      hideCaption(2600);
+      return;
+    }
+
+    if(!(await ensureFaceRecognition())){
+      showCaption(
+        'Face recognition engine is not ready yet.',
+        true
+      );
+      hideCaption(2600);
+      return;
+    }
+
+    try{
+      const detections=
+        await faceapi
+          .detectAllFaces(
+            camera,
+            new faceapi.TinyFaceDetectorOptions({
+              inputSize:224,
+              scoreThreshold:.08
+            })
+          )
+          .withFaceLandmarks(true)
+          .withFaceDescriptors();
+
+      if(!detections.length){
+        showCaption(
+          'No face detected. Look at the camera and try again.',
+          true
+        );
+        hideCaption(2600);
+        return;
+      }
+
+      const primary=
+        detections
+          .slice()
+          .sort(
+            (a,b)=>
+              (
+                b.detection.box.width*
+                b.detection.box.height
+              )-
+              (
+                a.detection.box.width*
+                a.detection.box.height
+              )
+          )[0];
+
+      const profiles=
+        getStoredFaceProfiles();
+
+      const id=
+        roboMemory.identity.personId||
+        'primary-user';
+
+      const existing=
+        profiles.find(
+          p=>p.personId===id
+        );
+
+      const record={
+        personId:id,
+        displayName:
+          roboMemory.identity.displayName,
+        descriptor:
+          Array.from(
+            primary.descriptor
+          ),
+        createdAt:
+          existing?.createdAt||
+          Date.now(),
+        updatedAt:
+          Date.now()
+      };
+
+      if(existing){
+        Object.assign(
+          existing,
+          record
+        );
+      }else{
+        profiles.push(record);
+      }
+
+      roboMemory.faceProfiles=profiles;
+      roboMemory.identity.recognitionReady=true;
+      saveRoboMemory('face-enrolled');
+
+      faceRecognitionIdentity=
+        roboMemory.identity.displayName;
+
+      faceRecognitionStatus='recognized';
+      faceDiag();
+
+      showCaption(
+        'Face enrolled successfully.',
+        true
+      );
+      hideCaption(2600);
+
+    }catch(err){
+
+      devLog(
+        'FACE ERROR',
+        'face enrollment failed',
+        {
+          message:
+            err?.message||
+            String(err)
+        }
+      );
+
+      showCaption(
+        'Face enrollment failed. Try again.',
+        true
+      );
+      hideCaption(2600);
+    }
   }
 
   async function faceTrackingTick(){
@@ -1426,81 +1245,96 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       !window.faceapi ||
       !camera.videoWidth ||
       !camera.videoHeight ||
-      camera.readyState < 2
+      camera.readyState<2
     ){
       faceDetections=[];
-      faceTarget=null;
-      faceSmoothedBox=null;
-      faceTrackingInitialized=false;
-      renderFaceTarget();
       faceDiag();
+      renderFaceTarget();
       return;
     }
 
     try{
-      const mapped=await detectLocalFaceBoxes();
+      const mapped=
+        await detectLocalFaceBoxes();
+
       faceDetections=mapped;
 
-      if(faceTarget && !isValidFaceBox(faceTarget.box)){
-        faceTarget=null;
-        faceTargetLostAt=0;
-        faceSmoothedBox=null;
-        faceTrackingInitialized=false;
-      }
-
-      const primary=choosePrimaryFace(mapped);
+      const primary=
+        choosePrimaryFace(mapped);
 
       if(primary){
+
         const reacquired=
           !faceTarget ||
           (
-            faceTargetLostAt &&
-            performance.now()-faceTargetLostAt>FACE_TARGET_HOLD_MS
+            faceTargetLostAt>0 &&
+            performance.now()-faceTargetLostAt>
+              FACE_TARGET_HOLD_MS
           );
 
         faceTarget=primary;
         faceTargetLostAt=0;
 
-        if(reacquired){
-          faceSmoothedBox={...primary.box};
-          faceTrackingInitialized=true;
+        if(
+          reacquired ||
+          !isValidFaceBox(faceSmoothBox)
+        ){
+          faceSmoothBox=
+            cloneBox(primary.box);
         }else{
-          updateSmoothedTargetBox(primary.box);
+          faceSmoothBox=
+            lerpBox(
+              faceSmoothBox,
+              primary.box,
+              FACE_SMOOTH_ALPHA
+            );
         }
 
         if(
           faceRecognitionAvailable &&
           getStoredFaceProfiles().length &&
-          performance.now()-faceLastRecognitionAt>1200
+          performance.now()-faceLastRecognitionAt>1300
         ){
-          faceLastRecognitionAt=performance.now();
-          recognizeTargetFace(primary).catch(()=>{});
+          faceLastRecognitionAt=
+            performance.now();
+
+          recognizeTargetFace()
+            .catch(()=>{});
         }
 
       }else if(faceTarget){
 
         if(!faceTargetLostAt){
-          faceTargetLostAt=performance.now();
+          faceTargetLostAt=
+            performance.now();
         }
 
+        /*
+         * Hold the last smooth target briefly to prevent box disappearance
+         * during one missed detector frame.
+         */
         if(
-          performance.now()-faceTargetLostAt>FACE_TARGET_HOLD_MS
+          performance.now()-faceTargetLostAt>
+          FACE_TARGET_HOLD_MS
         ){
           faceTarget=null;
-          faceSmoothedBox=null;
-          faceTrackingInitialized=false;
+          faceSmoothBox=null;
           faceRecognitionIdentity=null;
-          faceRecognitionDistance=null;
           faceRecognitionStatus=
-            getStoredFaceProfiles().length ? 'ready' : 'not-enrolled';
+            getStoredFaceProfiles().length
+              ? 'ready'
+              : 'not-enrolled';
         }
       }
 
       faceFpsFrames++;
 
-      const now=performance.now();
+      const now=
+        performance.now();
 
-      if(now-faceLastFpsAt>=1000){
+      if(
+        now-faceLastFpsAt>=1000
+      ){
         faceFps=faceFpsFrames;
         faceFpsFrames=0;
         faceLastFpsAt=now;
@@ -1510,20 +1344,27 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       faceDiag();
 
     }catch(err){
+
       devLog(
         'FACE ERROR',
         'tracking pass failed',
         {
-          name:err?.name||'Error',
-          message:err?.message||String(err),
-          stack:String(err?.stack||'').slice(0,400)
+          message:
+            err?.message||
+            String(err),
+          stack:
+            err?.stack||
+            'no stack'
         }
       );
+
+      renderFaceTarget();
+      faceDiag();
     }
   }
 
   async function startFaceLoop(){
-    if(faceLoopTimer || faceTickInFlight) return;
+    if(faceLoopTimer) return;
 
     const token=++faceLoopToken;
 
@@ -1539,7 +1380,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return;
     }
 
-    const loop=async()=>{
+    const tick=async()=>{
       if(
         token!==faceLoopToken ||
         !cameraEnabled ||
@@ -1549,13 +1390,24 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         return;
       }
 
-      /* One detector inference at a time; keep the phone UI responsive. */
-      faceLoopTimer=setTimeout(loop,125);
+      faceLoopTimer=
+        setTimeout(
+          tick,
+          FACE_DETECT_INTERVAL_MS
+        );
 
-      if(faceTickInFlight) return;
-      if(performance.now()-faceLastRun<130) return;
+      if(
+        faceTickInFlight
+      ) return;
 
-      faceLastRun=performance.now();
+      if(
+        performance.now()-faceLastRun<
+        FACE_DETECT_INTERVAL_MS-10
+      ) return;
+
+      faceLastRun=
+        performance.now();
+
       faceTickInFlight=true;
 
       try{
@@ -1565,346 +1417,1425 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       }
     };
 
-    loop();
+    tick();
   }
 
   function stopFaceLoop(){
-    faceLoopToken++;
-    faceTickInFlight=false;
-    faceLastRun=0;
+    ++faceLoopToken;
 
     if(faceLoopTimer){
       clearTimeout(faceLoopTimer);
       faceLoopTimer=null;
     }
 
+    faceTickInFlight=false;
     faceDetections=[];
     faceTarget=null;
     faceTargetLostAt=0;
-    faceSmoothedBox=null;
-    faceTrackingInitialized=false;
+    faceSmoothBox=null;
     faceRecognitionIdentity=null;
     faceRecognitionDistance=null;
+    faceMisses=0;
 
     renderFaceTarget();
     faceDiag();
   }
 
-  function boxCenter(box){
-    if(!isValidFaceBox(box)) return null;
-    return {x:box.x+box.width/2,y:box.y+box.height/2};
+  /* ---------- User Perception & Social Awareness v1 (Module 6) ----------
+     Interprets structured vision into social context. Identity, gaze, and
+     continuous face tracking are intentionally NOT claimed here; those belong
+     to later Memory & Identity + Active Face Tracking modules.
+  */
+  let socialAwareness = {
+    presence: 'unknown', personCount: 0, primaryPerson: null, people: [],
+    interaction: 'idle', confidence: 0, lastChange: 'none', timestamp: 0, session: 0
+  };
+  let previousSocialAwareness = null;
+
+  /* ---------- Memory & Identity v1 (Module 7) ----------
+     Persistent browser-local memory for the primary Robo user. The schema is
+     deliberately identity-first and recognition-ready: a stable personId can
+     later be linked to face recognition without redesigning stored memories.
+     Robo only stores explicit/high-confidence user facts and supports explicit
+     remember/forget commands. No face identity is claimed here.
+  */
+  const MEMORY_STORAGE_KEY = 'robo_aios_memory_v1';
+  const MEMORY_SCHEMA_VERSION = 1;
+  const DEFAULT_MEMORY = {
+    schemaVersion: MEMORY_SCHEMA_VERSION,
+    primaryPersonId: 'primary-user',
+    identity: {
+      displayName: '',
+      aliases: [],
+      personId: 'primary-user',
+      recognitionReady: false
+    },
+    facts: [],
+    preferences: {},
+    memories: [],
+    faceProfiles: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+
+  let roboMemory = null;
+  let memoryReady = false;
+  let lastMemoryChange = 'none';
+
+  function cloneDefaultMemory(){
+    return JSON.parse(JSON.stringify(DEFAULT_MEMORY));
   }
 
-  function boxDistance(a,b){
-    const ac=boxCenter(a), bc=boxCenter(b);
-    if(!ac || !bc) return Infinity;
-    const dx=ac.x-bc.x, dy=ac.y-bc.y;
-    return Math.hypot(dx,dy);
-  }
-
-  function choosePrimaryFace(detections){
-    const valid=detections.filter(d=>isValidFaceBox(d?.box));
-    if(!valid.length) return null;
-
-    if(faceTarget && isValidFaceBox(faceTarget.box)){
-      let best=null,bestDist=Infinity;
-
-      for(const d of valid){
-        const dist=boxDistance(faceTarget.box,d.box);
-        if(dist<bestDist){
-          bestDist=dist;
-          best=d;
-        }
-      }
-
-      if(
-        best &&
-        bestDist < Math.max(camera.videoWidth,camera.videoHeight)*0.28
-      ){
-        return best;
-      }
-    }
-
-    const cx=camera.videoWidth/2;
-    const cy=camera.videoHeight/2;
-
-    return valid.slice().sort((a,b)=>{
-      const aa=a.box.width*a.box.height;
-      const ab=b.box.width*b.box.height;
-      const ac=boxCenter(a.box);
-      const bc=boxCenter(b.box);
-      const da=ac?Math.hypot(ac.x-cx,ac.y-cy):Infinity;
-      const db=bc?Math.hypot(bc.x-cx,bc.y-cy):Infinity;
-      return (ab-aa)*0.01 + da-db;
-    })[0] || null;
-  }
-
-  let faceApiLoadPromise=null;
-  let faceSsdReady=false;
-
-  function waitForFaceApi(timeoutMs=8000){
-    if(window.faceapi) return Promise.resolve(window.faceapi);
-    if(faceApiLoadPromise) return faceApiLoadPromise;
-
-    faceApiLoadPromise=new Promise((resolve,reject)=>{
-      const started=performance.now();
-      const poll=()=>{
-        if(window.faceapi){
-          resolve(window.faceapi);
-          return;
-        }
-        if(performance.now()-started>=timeoutMs){
-          reject(new Error('face-api.js library did not become available'));
-          return;
-        }
-        setTimeout(poll,60);
-      };
-      poll();
-    }).finally(()=>{ faceApiLoadPromise=null; });
-
-    return faceApiLoadPromise;
-  }
-
-
-  function waitForFaceApi(timeoutMs=9000){
-    if(window.faceapi) return Promise.resolve(window.faceapi);
-    if(faceApiLoadPromise) return faceApiLoadPromise;
-
-    faceApiLoadPromise=new Promise((resolve,reject)=>{
-      const started=performance.now();
-      const poll=()=>{
-        if(window.faceapi){
-          resolve(window.faceapi);
-          return;
-        }
-        if(performance.now()-started>=timeoutMs){
-          reject(new Error('face-api.js library did not become available'));
-          return;
-        }
-        setTimeout(poll,60);
-      };
-      poll();
-    }).finally(()=>{
-      faceApiLoadPromise=null;
-    });
-
-    return faceApiLoadPromise;
-  }
-
-  async function ensureFaceEngine(){
-    if(faceEngineReady) return true;
-
-    if(faceEngineLoading){
-      while(faceEngineLoading){
-        await new Promise(r=>setTimeout(r,60));
-      }
-      return faceEngineReady;
-    }
-
-    faceEngineLoading=true;
-    faceDiag();
-    faceBadge('LOADING FACE TRACKER');
-
+  function loadRoboMemory(){
+    let next = cloneDefaultMemory();
     try{
-      const api=await waitForFaceApi(9000);
+      const raw = localStorage.getItem(MEMORY_STORAGE_KEY);
+      if(raw){
+        const parsed = JSON.parse(raw);
+        if(parsed && typeof parsed === 'object'){
+          next = {
+            ...next,
+            ...parsed,
+            identity:{...next.identity,...(parsed.identity||{})},
+            preferences:{...(parsed.preferences||{})},
+            facts:Array.isArray(parsed.facts)?parsed.facts:[],
+            memories:Array.isArray(parsed.memories)?parsed.memories:[],
+             faceProfiles:Array.isArray(parsed.faceProfiles)?parsed.faceProfiles:[]
+          };
+          next.schemaVersion = MEMORY_SCHEMA_VERSION;
+          next.primaryPersonId = 'primary-user';
+          next.identity.personId = 'primary-user';
+          next.updatedAt = Number(parsed.updatedAt)||Date.now();
+        }
+      }
+    }catch(err){
+      console.warn('ROBO MEMORY load failed',err);
+      next = cloneDefaultMemory();
+    }
+    roboMemory = next;
+    memoryReady = true;
+    renderMemoryIdentity();
+    renderMemoryDiagnostics();
+  faceDiag();
+    return roboMemory;
+  }
 
-      if(!api){
-        throw new Error('face-api.js library unavailable');
+  function saveRoboMemory(change='updated'){
+    if(!roboMemory) return false;
+    roboMemory.schemaVersion = MEMORY_SCHEMA_VERSION;
+    roboMemory.primaryPersonId = 'primary-user';
+    roboMemory.identity.personId = 'primary-user';
+    roboMemory.updatedAt = Date.now();
+    try{
+      localStorage.setItem(MEMORY_STORAGE_KEY, JSON.stringify(roboMemory));
+      lastMemoryChange = change;
+      renderMemoryIdentity();
+      renderMemoryDiagnostics();
+      devLog('MEMORY',change);
+      return true;
+    }catch(err){
+      lastMemoryChange = 'save-failed';
+      devLog('MEMORY ERROR','persistent storage failed',{name:err?.name,message:err?.message});
+      renderMemoryDiagnostics();
+      return false;
+    }
+  }
+
+  function normalizeMemoryText(text){
+    return String(text||'').replace(/\s+/g,' ').trim();
+  }
+
+  function addMemoryRecord(text,type='memory'){
+    const value=normalizeMemoryText(text);
+    if(!value || !roboMemory) return false;
+    const key=value.toLowerCase();
+    const duplicate=roboMemory.memories.some(m=>String(m.text||'').toLowerCase()===key);
+    if(duplicate){
+      lastMemoryChange='already-known';
+      renderMemoryDiagnostics();
+      return false;
+    }
+    roboMemory.memories.unshift({id:'mem-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),text:value,type,personId:'primary-user',createdAt:Date.now(),updatedAt:Date.now()});
+    if(roboMemory.memories.length>100) roboMemory.memories.length=100;
+    saveRoboMemory('memory-added');
+    return true;
+  }
+
+  function addFact(key,value,source='explicit'){
+    if(!roboMemory) return false;
+    const k=normalizeMemoryText(key).toLowerCase();
+    const v=normalizeMemoryText(value);
+    if(!k || !v) return false;
+    const existing=roboMemory.facts.find(f=>String(f.key).toLowerCase()===k && f.personId==='primary-user');
+    if(existing){
+      existing.value=v; existing.source=source; existing.updatedAt=Date.now();
+    }else{
+      roboMemory.facts.push({key:k,value:v,source,personId:'primary-user',createdAt:Date.now(),updatedAt:Date.now()});
+    }
+    saveRoboMemory('fact-updated');
+    return true;
+  }
+
+  function setIdentityName(name){
+    const value=normalizeMemoryText(name).replace(/[.?!]+$/,'').trim();
+    if(!value || !roboMemory) return false;
+    const old=roboMemory.identity.displayName;
+    roboMemory.identity.displayName=value;
+    roboMemory.identity.recognitionReady=true;
+    addFact('name',value,'identity');
+    lastMemoryChange=old && old!==value ? 'identity-updated' : 'identity-saved';
+    saveRoboMemory(lastMemoryChange);
+    return true;
+  }
+
+  function addAlias(alias){
+    const value=normalizeMemoryText(alias).replace(/[.?!]+$/,'').trim();
+    if(!value || !roboMemory) return false;
+    if(!roboMemory.identity.aliases.some(a=>a.toLowerCase()===value.toLowerCase())){
+      roboMemory.identity.aliases.push(value);
+      saveRoboMemory('alias-added');
+    }
+    return true;
+  }
+
+  function forgetMemoryByText(query){
+    const q=normalizeMemoryText(query).toLowerCase();
+    if(!q || !roboMemory) return false;
+    let changed=false;
+    roboMemory.memories=roboMemory.memories.filter(m=>{
+      const hit=String(m.text||'').toLowerCase().includes(q);
+      if(hit) changed=true;
+      return !hit;
+    });
+    roboMemory.facts=roboMemory.facts.filter(f=>{
+      const hit=String(f.key||'').toLowerCase().includes(q) || String(f.value||'').toLowerCase().includes(q);
+      if(hit) changed=true;
+      return !hit;
+    });
+    if(changed) saveRoboMemory('memory-forgotten');
+    return changed;
+  }
+
+  function clearAllRoboMemory(){
+    roboMemory=cloneDefaultMemory();
+    try{localStorage.removeItem(MEMORY_STORAGE_KEY);}catch(_){}
+    memoryReady=true;
+    lastMemoryChange='memory-cleared';
+    renderMemoryIdentity();
+    renderMemoryDiagnostics();
+    devLog('MEMORY','all persistent memory cleared');
+  }
+
+  function getMemorySummary(){
+    if(!roboMemory) return 'I do not have persistent memory yet.';
+    const parts=[];
+    if(roboMemory.identity.displayName) parts.push(`Your name is ${roboMemory.identity.displayName}.`);
+    const facts=roboMemory.facts.filter(f=>f.key!=='name').slice(0,12);
+    if(facts.length) parts.push(facts.map(f=>`${f.key}: ${f.value}`).join('; ')+'.');
+    const memories=roboMemory.memories.slice(0,8);
+    if(memories.length) parts.push(memories.map(m=>m.text).join(' | '));
+    return parts.length ? parts.join(' ') : 'I do not have any persistent memories about you yet.';
+  }
+
+  function buildMemoryContextMessage(){
+    if(!roboMemory || !memoryReady) return null;
+    const name=roboMemory.identity.displayName;
+    const facts=roboMemory.facts.slice(0,15);
+    const memories=roboMemory.memories.slice(0,15);
+    const lines=[
+      'MEMORY & IDENTITY CONTEXT — persistent browser-local memory for the primary user.',
+      'Person ID: primary-user.',
+      `Known name: ${name || 'unknown'}.`,
+      `Recognition-ready profile: ${roboMemory.identity.recognitionReady ? 'yes' : 'no face identity linked yet'}.`,
+      facts.length ? 'Facts: '+facts.map(f=>`${f.key}=${f.value}`).join(' | ') : 'Facts: none stored.',
+      memories.length ? 'Remembered notes: '+memories.map(m=>m.text).join(' | ') : 'Remembered notes: none stored.',
+      'Use memory only when relevant. Do not claim face recognition or visual identity unless a future identity module explicitly provides it.',
+      'Do not invent memories. Treat these stored items as user-provided facts, not model guesses.'
+    ];
+    return lines.join('\n');
+  }
+
+  function renderMemoryIdentity(){
+    const badge=$('#memoryIdentity');
+    if(!badge || !roboMemory) return;
+    const name=roboMemory.identity.displayName;
+    badge.textContent=(faceRecognitionIdentity||name) ? `MEMORY · ${(faceRecognitionIdentity||name)}` : 'MEMORY · NO PROFILE';
+    badge.dataset.state=name ? 'known' : 'unknown';
+    badge.classList.toggle('show',Boolean(memoryReady));
+  }
+
+  function renderMemoryDiagnostics(){
+    if(typeof devMemoryStatus==='undefined' || !devMemoryStatus || !roboMemory) return;
+    devMemoryStatus.textContent=memoryReady ? 'ONLINE' : 'OFFLINE';
+    devMemoryIdentity.textContent=roboMemory.identity.displayName || 'UNKNOWN';
+    devMemoryCount.textContent=String(roboMemory.memories.length);
+    devMemoryFacts.textContent=String(roboMemory.facts.length);
+    devMemoryChange.textContent=lastMemoryChange;
+  }
+
+  function handleMemoryCommand(text){
+    const raw=normalizeMemoryText(text);
+    const l=raw.toLowerCase();
+    if(!raw || !roboMemory) return null;
+
+    if(/^(what do you remember|what do you know about me|what do you remember about me|show my memory|show me what you remember)/.test(l)){
+      return {handled:true,reply:getMemorySummary(),emotion:'happy'};
+    }
+
+    if(/^(forget everything|forget all memories|clear all memory|erase all memory|delete all memories)$/.test(l)){
+      clearAllRoboMemory();
+      return {handled:true,reply:'I cleared my persistent memory about you.',emotion:'neutral'};
+    }
+
+    const forgetName=/^(?:forget my name|delete my name|remove my name from memory)$/i.test(raw);
+    if(forgetName){
+      const had=Boolean(roboMemory.identity.displayName);
+      roboMemory.identity.displayName='';
+      roboMemory.identity.recognitionReady=false;
+      roboMemory.facts=roboMemory.facts.filter(f=>String(f.key).toLowerCase()!=='name');
+      if(had) saveRoboMemory('identity-forgotten');
+      else { lastMemoryChange='name-not-found'; renderMemoryDiagnostics(); }
+      return {handled:true,reply:had ? 'Okay. I forgot your name.' : 'I do not currently have your name stored.',emotion:'neutral'};
+    }
+
+    const rememberedName=raw.match(/^remember(?: that)?\s+(?:my name is|i am|i\'m)\s+([A-Za-z][A-Za-z .\'-]{1,40})[.!?]?$/i);
+    if(rememberedName){
+      const value=rememberedName[1].trim();
+      if(setIdentityName(value)) return {handled:true,reply:`I will remember your name as ${value}.`,emotion:'happy'};
+    }
+
+    const forget=l.match(/^(?:forget|remove from memory|delete from memory)\s+(.+)$/);
+    if(forget){
+      const ok=forgetMemoryByText(forget[1]);
+      return {handled:true,reply:ok ? 'Okay. I removed that from my persistent memory.' : 'I could not find that memory to remove.',emotion:ok?'neutral':'confused'};
+    }
+
+    const remember=raw.match(/^(?:remember that|remember)\s+(.+)$/i);
+    if(remember){
+      const note=normalizeMemoryText(remember[1]).replace(/[.?!]+$/,'');
+      const ok=addMemoryRecord(note,'explicit');
+      return {handled:true,reply:ok ? 'Got it. I will remember that.' : 'I already have that in memory.',emotion:'happy'};
+    }
+
+    const name=raw.match(/^(?:my name is|i am|i'm)\s+([A-Za-z][A-Za-z .\'-]{1,40})[.!?]?$/i);
+    if(name){
+      const value=name[1].trim();
+      if(setIdentityName(value)) return {handled:true,reply:`Nice to meet you, ${value}. I will remember your name.`,emotion:'happy'};
+    }
+
+    const callMe=raw.match(/^(?:call me|you can call me)\s+([A-Za-z][A-Za-z .\'-]{1,40})[.!?]?$/i);
+    if(callMe){
+      const value=callMe[1].trim();
+      if(setIdentityName(value)){ addAlias(value); return {handled:true,reply:`Understood. I will call you ${value}.`,emotion:'happy'}; }
+    }
+
+    const like=raw.match(/^(?:i like|i love|i enjoy)\s+(.+)$/i);
+    if(like){
+      const value=normalizeMemoryText(like[1]).replace(/[.?!]+$/,'');
+      addFact('likes',value);
+      return {handled:true,reply:'Got it. I will keep that preference in mind.',emotion:'happy'};
+    }
+
+    const dislike=raw.match(/^(?:i dislike|i hate|i don't like|i do not like)\s+(.+)$/i);
+    if(dislike){
+      const value=normalizeMemoryText(dislike[1]).replace(/[.?!]+$/,'');
+      addFact('dislikes',value);
+      return {handled:true,reply:'Understood. I will keep that preference in mind.',emotion:'neutral'};
+    }
+
+    const prefer=raw.match(/^(?:i prefer|my preference is)\s+(.+)$/i);
+    if(prefer){
+      const value=normalizeMemoryText(prefer[1]).replace(/[.?!]+$/,'');
+      addFact('preferences',value);
+      return {handled:true,reply:'Got it. I will remember that preference.',emotion:'happy'};
+    }
+
+    const favorite=raw.match(/^my favorite\s+(.+?)\s+is\s+(.+)$/i);
+    if(favorite){
+      const category=normalizeMemoryText(favorite[1]).replace(/[.?!]+$/,'');
+      const value=normalizeMemoryText(favorite[2]).replace(/[.?!]+$/,'');
+      addFact(`favorite ${category}`,value);
+      return {handled:true,reply:`Got it. Your favorite ${category} is ${value}.`,emotion:'happy'};
+    }
+
+    return null;
+  }
+
+  let micStream = null;
+  let recognition = null;
+  let bleDevice = null;
+  let bleChar = null;
+  let audioLevel = 0;
+  let lastActivity = performance.now();
+  let blink = 0;
+  let blinkTimer = 1800 + Math.random()*3000;
+  let t = 0;
+
+  const SERVICE_UUID = "0000ffe0-0000-1000-8000-00805f9b34fb";
+  const CHAR_UUID = "0000ffe1-0000-1000-8000-00805f9b34fb";
+
+  function log(msg){
+    const line = document.createElement("div");
+    line.textContent = "[" + new Date().toLocaleTimeString([], {hour12:false}) + "] " + msg;
+    $("#log").prepend(line);
+    while($("#log").children.length > 5) $("#log").lastElementChild.remove();
+  }
+
+  // Developer diagnostics bridge. TTS events must appear in the copied diagnostic log,
+  // not only in the tiny five-line UI log.
+  function ttsDiag(msg,data){
+    try{
+      if(typeof devLog==='function') devLog('TTS',msg,data);
+    }catch(_){}
+  }
+
+  function showCaption(text, on=true){
+    captionText.textContent = text || "Listening…";
+    caption.classList.toggle("show", on);
+  }
+
+  let captionTimer;
+  function hideCaption(ms=1800){
+    clearTimeout(captionTimer);
+    captionTimer = setTimeout(() => caption.classList.remove("show"), ms);
+  }
+
+  function setState(next, note="", meta={}){
+    if(!stateData[next]) next = "neutral";
+    previousState = state;
+    state = next;
+    stateBlend = 0;
+    if(!meta.behavioral && !["listening","thinking","talking"].includes(next)){
+      emotionalState = next;
+      emotionalIntensity = Math.max(0,Math.min(1,Number(meta.intensity ?? emotionalIntensity)));
+      emotionalConfidence = Math.max(0,Math.min(1,Number(meta.confidence ?? emotionalConfidence)));
+      emotionalSince = performance.now();
+    }
+    if(!meta.auto) lastActivity = performance.now();
+
+    $("#stateChip").textContent = next.toUpperCase();
+    $("#statusText").textContent = note || state + " · active";
+    $("#stateDot").className = "dot " + (
+      ["listening","talking","alert","excited","surprised"].includes(state) ? "live" : "ok"
+    );
+
+    device.classList.remove(
+      "state-listening","state-thinking","state-talking"
+    );
+    if(state === "listening") device.classList.add("state-listening");
+    if(state === "thinking") device.classList.add("state-thinking");
+    if(state === "talking") device.classList.add("state-talking");
+
+    document.querySelectorAll(".stateBtn").forEach(b =>
+      b.classList.toggle("active", b.dataset.state === state)
+    );
+    log(note || ("state → " + state));
+  }
+
+  /* ---------- Natural idle emotion cycle ----------
+     Robo changes state occasionally when nothing is happening, but never
+     steals control from real listening/talking/thinking activity. */
+  const IDLE_STATES = [
+    "neutral", "curious", "happy", "sleepy", "confused", "surprised", "excited"
+  ];
+  let autoIdleEnabled = true;
+  let idleTimer = null;
+  let lastAutoState = "curious";
+
+  function scheduleIdleCycle(delay = 5500 + Math.random()*4500){
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(runIdleCycle, delay);
+  }
+
+  function runIdleCycle(){
+    if(!autoIdleEnabled){ scheduleIdleCycle(5000); return; }
+
+    const busy = listening || talking || state === "listening" ||
+      state === "talking" || state === "thinking";
+    const inactiveLongEnough = performance.now() - lastActivity > 3800;
+
+    if(busy || !inactiveLongEnough){
+      scheduleIdleCycle(3500 + Math.random()*2500);
+      return;
+    }
+
+    const choices = IDLE_STATES.filter(s => s !== lastAutoState);
+    let next = choices[Math.floor(Math.random()*choices.length)];
+
+    // Keep the idle personality believable: sleepy is less frequent and
+    // surprise/excitement are short-lived accents rather than constant states.
+    if(next === "sleepy" && Math.random() < .45) next = "neutral";
+    if(next === "surprised" && Math.random() < .35) next = "curious";
+    if(next === "excited" && Math.random() < .35) next = "happy";
+
+    lastAutoState = next;
+    setState(next, "idle auto · " + next, {auto:true});
+    scheduleIdleCycle(5000 + Math.random()*7000);
+  }
+
+  function setAutoIdle(on){
+    autoIdleEnabled = !!on;
+    const btn = $("#autoStateBtn");
+    if(btn) btn.textContent = "AUTO IDLE: " + (autoIdleEnabled ? "ON" : "OFF");
+    log("automatic idle states → " + (autoIdleEnabled ? "ON" : "OFF"));
+    if(autoIdleEnabled) scheduleIdleCycle(1800);
+    else clearTimeout(idleTimer);
+  }
+
+  /* Start the natural idle personality after the UI has settled. */
+  scheduleIdleCycle(5000);
+
+  /* ---------- 3D floating emoji renderer ---------- */
+  let rendererErrorShown = false;
+  function drawFace(dt){
+    try{
+      const rect = canvas.getBoundingClientRect();
+      const s = Math.max(160, Math.min(rect.width || 400, rect.height || 400));
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const px = Math.round(s*dpr);
+      if(canvas.width !== px || canvas.height !== px) canvas.width = canvas.height = px;
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+
+      t += dt/1000;
+
+      // Natural blinking for the emoji eyes.
+      blinkTimer -= dt;
+      if(blinkTimer <= 0){
+        blink = 0.001;
+        blinkTimer = 2600 + Math.random()*3600;
+      }
+      if(blink > 0){
+        blink += dt/110;
+        if(blink >= 1.9) blink = 0;
       }
 
-      await api.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URI);
+      stateBlend = Math.min(1,stateBlend + dt/260);
+      const a = stateData[previousState] || stateData.neutral;
+      let b = stateData[state] || stateData.neutral;
+      if(!["listening","thinking","talking"].includes(state)){
+        const intensity = Math.max(.18,Math.min(1,emotionalIntensity));
+        b = {
+          scale: 1.02 + (b.scale - 1.02) * intensity,
+          eye: .92 + (b.eye - .92) * intensity,
+          brow: b.brow * intensity,
+          mouth: .02 + (b.mouth - .02) * intensity,
+          tilt: b.tilt * intensity,
+          glow: .20 + (b.glow - .20) * intensity
+        };
+      }
+      const k = stateBlend < .5 ? 2*stateBlend*stateBlend : 1-Math.pow(-2*stateBlend+2,2)/2;
+      const glow = lerp(a.glow,b.glow,k);
+      const faceScale = lerp(a.scale||1,b.scale||1,k);
+      const cx=s/2, cy=s/2 + Math.sin(t*1.2)*s*.012;
+      const r=s*.285*faceScale;
 
-      faceDetectionModel={
-        inputSize:160,
-        scoreThreshold:0.05
-      };
+      ctx.clearRect(0,0,s,s);
 
-      faceEngineReady=true;
-      faceRecognitionAvailable=false;
-      faceRecognitionStatus='loading';
+      // Soft aura
+      const aura=ctx.createRadialGradient(cx,cy,r*.45,cx,cy,r*1.75);
+      aura.addColorStop(0,`rgba(255,184,72,${.08+glow*.10})`);
+      aura.addColorStop(.55,`rgba(255,123,84,${.025+glow*.05})`);
+      aura.addColorStop(1,'rgba(255,123,84,0)');
+      ctx.fillStyle=aura;
+      ctx.beginPath();ctx.arc(cx,cy,r*1.75,0,Math.PI*2);ctx.fill();
 
-      devLog('FACE','Face tracker ready',{
-        detector:'face-api TinyFaceDetector',
-        inputSize:224,
-        scoreThreshold:0.05,
-        video:`${camera.videoWidth}x${camera.videoHeight}`
+      // 3D emoji sphere with highlight and shadow
+      ctx.save();
+      ctx.shadowColor=`rgba(44,36,64,${.22+glow*.10})`;
+      ctx.shadowBlur=s*.055;
+      ctx.shadowOffsetY=s*.035;
+      const sphere=ctx.createRadialGradient(cx-r*.42,cy-r*.48,r*.05,cx+r*.15,cy+r*.18,r*1.12);
+      sphere.addColorStop(0,'#fff6b0');
+      sphere.addColorStop(.22,'#ffe66d');
+      sphere.addColorStop(.58,'#f7c83f');
+      sphere.addColorStop(.84,'#e7a927');
+      sphere.addColorStop(1,'#b87412');
+      ctx.fillStyle=sphere;
+      ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
+      ctx.restore();
+
+      // Subtle 3D rim
+      const rim=ctx.createRadialGradient(cx-r*.5,cy-r*.5,r*.58,cx,cy,r*1.02);
+      rim.addColorStop(.72,'rgba(255,255,255,0)');
+      rim.addColorStop(.90,`rgba(255,245,185,${.22+glow*.10})`);
+      rim.addColorStop(1,'rgba(122,70,8,.22)');
+      ctx.fillStyle=rim;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
+
+      // Specular highlight
+      const shine=ctx.createRadialGradient(cx-r*.42,cy-r*.48,0,cx-r*.22,cy-r*.30,r*.42);
+      shine.addColorStop(0,'rgba(255,255,255,.72)');
+      shine.addColorStop(.22,'rgba(255,255,255,.25)');
+      shine.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=shine;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
+
+      // Emotion values
+      const eyeOpen=lerp(a.eye,b.eye,k);
+      const brow=lerp(a.brow,b.brow,k);
+      const mouth=lerp(a.mouth,b.mouth,k);
+      const tilt=lerp(a.tilt,b.tilt,k);
+      const blinkAmount=blink;
+      const talkingNow=state==='talking' || talking;
+      const talkOpen=talkingNow ? (0.035 + (0.5+0.5*Math.sin(t*15.5))*0.075) : 0;
+      const eyeH=Math.max(.06, eyeOpen*(1-blinkAmount*.95));
+      const eyeY=cy-r*.08;
+      const eyeGap=r*.62;
+      const eyeW=r*.25;
+      const eyeHeight=r*.30*eyeH;
+
+      ctx.save();ctx.translate(cx,cy);ctx.rotate(tilt);ctx.translate(-cx,-cy);
+
+      // Brows
+      [-1,1].forEach(side=>{
+        const ex=cx+side*eyeGap;
+        const by=eyeY-eyeHeight*1.18+brow*r*.42;
+        ctx.strokeStyle='#5b3514';ctx.lineWidth=Math.max(3,s*.013);ctx.lineCap='round';
+        ctx.beginPath();
+        ctx.moveTo(ex-eyeW*.55,by-side*brow*r*.22);
+        ctx.quadraticCurveTo(ex,by-brow*r*.12,ex+eyeW*.55,by+side*brow*r*.22);
+        ctx.stroke();
       });
 
-      faceBadge('FACE TRACKER ONLINE');
+      // Eyes + pupils
+      [-1,1].forEach(side=>{
+        const ex=cx+side*eyeGap;
+        const ey=eyeY;
+        const ew=eyeW, eh=eyeHeight;
+        ctx.fillStyle='#fffdf7';
+        ctx.beginPath();ctx.ellipse(ex,ey,ew,Math.max(ew*.16,eh),0,0,Math.PI*2);ctx.fill();
+        const px=ex+Math.sin(t*.9+side)*ew*.08;
+        const py=ey+Math.cos(t*.75+side)*eh*.05;
+        const pr=Math.min(ew,Math.max(ew*.34,eh*.58));
+        const iris=ctx.createRadialGradient(px-pr*.3,py-pr*.35,pr*.08,px,py,pr);
+        iris.addColorStop(0,'#bfefff');iris.addColorStop(.38,'#78b9ff');iris.addColorStop(.72,'#7055c8');iris.addColorStop(1,'#26183e');
+        ctx.fillStyle=iris;ctx.beginPath();ctx.arc(px,py,pr,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#141020';ctx.beginPath();ctx.ellipse(px,py,pr*.36,pr*.58,0,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(px-pr*.32,py-pr*.34,pr*.19,0,Math.PI*2);ctx.fill();
+      });
 
-      faceDiag();
-      setTimeout(()=>faceBadge('',false),1800);
-
-      /* Optional SSD fallback. Never blocks the live tracker. */
-      (async()=>{
-        try{
-          await Promise.race([
-            api.nets.ssdMobilenetv1.loadFromUri(FACE_MODEL_URI),
-            new Promise((_,reject)=>
-              setTimeout(
-                ()=>reject(new Error('SSD fallback model timeout')),
-                9000
-              )
-            )
-          ]);
-          faceSsdReady=true;
-          devLog('FACE','SSD fallback model ready');
-          faceDiag();
-        }catch(err){
-          faceSsdReady=false;
-          devLog(
-            'FACE',
-            'SSD fallback unavailable; TinyFaceDetector remains active',
-            {message:err?.message||String(err)}
-          );
-          faceDiag();
+      // Cheeks / emotion marks
+      if(['happy','love','embarrassed','excited'].includes(state)){
+        [-1,1].forEach(side=>{
+          const bx=cx+side*r*.58, by=cy+r*.25;
+          const g=ctx.createRadialGradient(bx,by,0,bx,by,r*.14);
+          g.addColorStop(0,'rgba(244,110,93,.42)');g.addColorStop(1,'rgba(244,110,93,0)');
+          ctx.fillStyle=g;ctx.beginPath();ctx.arc(bx,by,r*.14,0,Math.PI*2);ctx.fill();
+        });
+      }
+      if(state==='embarrassed'){
+        ctx.strokeStyle='rgba(210,85,70,.6)';ctx.lineWidth=s*.008;ctx.lineCap='round';
+        for(const side of [-1,1]){
+          for(let j=0;j<3;j++){
+            const x=cx+side*(r*.52+j*r*.08);const y=cy+r*(.18+j*.04);
+            ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+side*r*.045,y+r*.035);ctx.stroke();
+          }
         }
-      })();
+      }
+      if(state==='sad'){
+        ctx.strokeStyle='rgba(70,150,220,.8)';ctx.lineWidth=s*.012;ctx.lineCap='round';
+        [-1,1].forEach(side=>{ctx.beginPath();ctx.moveTo(cx+side*eyeGap,eyeY+eyeHeight*.65);ctx.lineTo(cx+side*eyeGap,eyeY+eyeHeight*1.05);ctx.stroke()});
+      }
+      if(state==='love'){
+        ctx.fillStyle='rgba(239,127,174,.9)';
+        [-1,1].forEach(side=>{const hx=cx+side*eyeGap,hy=eyeY;const hs=r*.10;ctx.beginPath();ctx.moveTo(hx,hy+hs);ctx.bezierCurveTo(hx-hs*1.8,hy-hs*.1,hx-hs,hy-hs*1.45,hx,hy-hs*.55);ctx.bezierCurveTo(hx+hs,hy-hs*1.45,hx+hs*1.8,hy-hs*.1,hx,hy+hs);ctx.fill()});
+      }
 
-      /* Recognition remains background-only. */
-      (async()=>{
-        try{
-          await Promise.race([
-            Promise.all([
-              api.nets.faceLandmark68TinyNet.loadFromUri(FACE_MODEL_URI),
-              api.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URI)
-            ]),
-            new Promise((_,reject)=>
-              setTimeout(
-                ()=>reject(new Error('recognition model timeout')),
-                9000
-              )
-            )
-          ]);
+      // Mouth. Shape changes by state and talking animation.
+      const mw=r*.62;
+      const my=cy+r*.38;
+      ctx.strokeStyle='#5b3514';ctx.lineWidth=Math.max(4,s*.016);ctx.lineCap='round';ctx.lineJoin='round';
+      if(talkingNow){
+        ctx.fillStyle='#6b2c25';ctx.beginPath();ctx.ellipse(cx,my,mw*.34,Math.max(r*.055,talkOpen*r*1.7),0,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(cx,my-r*.01,mw*.20,r*.022,0,0,Math.PI*2);ctx.fill();
+      }else if(['happy','excited','love'].includes(state)){
+        ctx.fillStyle='#5b3514';ctx.beginPath();ctx.arc(cx,my,r*.16,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#f07d73';ctx.beginPath();ctx.ellipse(cx,my+r*.055,r*.09,r*.045,0,0,Math.PI*2);ctx.fill();
+      }else if(['sad','confused'].includes(state)){
+        ctx.beginPath();ctx.moveTo(cx-mw*.42,my+r*.04);ctx.quadraticCurveTo(cx,my-mouth*r*.95,cx+mw*.42,my+r*.04);ctx.stroke();
+      }else if(state==='surprised' || state==='alert'){
+        ctx.fillStyle='#5b3514';ctx.beginPath();ctx.ellipse(cx,my,r*.13,r*(.10+Math.max(0,mouth)*.25),0,0,Math.PI*2);ctx.fill();
+      }else if(state==='angry'){
+        ctx.beginPath();ctx.moveTo(cx-mw*.42,my);ctx.quadraticCurveTo(cx,my+r*.08,cx+mw*.42,my);ctx.stroke();
+      }else{
+        ctx.beginPath();ctx.moveTo(cx-mw*.42,my);ctx.quadraticCurveTo(cx,my+mouth*r*.45,cx+mw*.42,my);ctx.stroke();
+      }
+      ctx.restore();
 
-          faceRecognitionAvailable=true;
-          faceRecognitionStatus='ready';
-          devLog('FACE','Face recognition models ready');
-          faceDiag();
+      // Tiny floating particles make the avatar feel alive.
+      const particleColor = state==='angry'||state==='alert' ? '#ff7654' : state==='love' ? '#ef7fae' : '#5fd4d0';
+      for(let i=0;i<4;i++){
+        const ang=t*(.45+i*.06)+i*1.6;
+        const px2=cx+Math.cos(ang)*r*(1.15+i*.08);
+        const py2=cy+Math.sin(ang*1.15)*r*(.85+i*.05);
+        ctx.fillStyle=particleColor;ctx.globalAlpha=.25+.08*Math.sin(t+i);
+        ctx.beginPath();ctx.arc(px2,py2,s*(.006+i*.001),0,Math.PI*2);ctx.fill();
+      }
+      ctx.globalAlpha=1;
 
-        }catch(err){
-          faceRecognitionAvailable=false;
-          faceRecognitionStatus='unavailable';
-
-          devLog(
-            'FACE',
-            'recognition models unavailable; live tracking remains active',
-            {message:err?.message||String(err)}
-          );
-
-          faceDiag();
-        }
-      })();
-
-      return true;
-
+      const fallback = $('#emojiFallback');
+      if(fallback) fallback.classList.add('hidden');
     }catch(err){
-      faceEngineReady=false;
-      faceRecognitionAvailable=false;
-      faceRecognitionStatus='load-failed';
-      faceSsdReady=false;
-
-      devLog(
-        'FACE ERROR',
-        'face tracker load failed',
-        {
-          name:err?.name||'Error',
-          message:err?.message||String(err),
-          video:`${camera.videoWidth}x${camera.videoHeight}`
-        }
-      );
-
-      faceBadge('FACE TRACKER LOAD FAILED');
-      faceDiag();
-
-      return false;
-
-    }finally{
-      faceEngineLoading=false;
+      console.error('ROBO emoji renderer error:',err);
+      if(!rendererErrorShown){
+        rendererErrorShown=true;
+        const fallback=$('#emojiFallback');
+        if(fallback) fallback.classList.remove('hidden');
+        showCaption('Avatar renderer error — fallback emoji active.',true);
+        hideCaption(5000);
+      }
     }
   }
 
-  let faceLastSsdAt=0;
+  let lastFrame=performance.now();
+  function frame(now){
+    const dt=Math.min(50,now-lastFrame);lastFrame=now;
+    drawFace(dt);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
 
-  async function detectLocalFaceBoxes(){
-    if(
-      !camera ||
-      !camera.videoWidth ||
-      !camera.videoHeight ||
-      camera.readyState < 2 ||
-      !faceEngineReady ||
-      !window.faceapi
-    ){
-      return [];
+  /* ---------- Media + voice diagnostics ---------- */
+  let micAnalyser=null, micAudioContext=null, micMeterRAF=null, micVoiceLevel=0;
+  let micPermissionStream=null;
+  let sttStarting=false;
+
+  function stopMicStream(){
+    if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; }
+    if(micPermissionStream){ micPermissionStream.getTracks().forEach(t=>t.stop()); micPermissionStream=null; }
+    if(micAnalyser){ micAnalyser.disconnect(); micAnalyser=null; }
+    if(micAudioContext){ micAudioContext.close().catch(()=>{}); micAudioContext=null; }
+    if(micMeterRAF){ cancelAnimationFrame(micMeterRAF); micMeterRAF=null; }
+    micVoiceLevel=0;
+  }
+
+  function setVoiceStatus(text){
+    showCaption(text,true);
+    log('VOICE · '+text);
+  }
+
+  function startMicMeter(stream){
+    try{
+      micAudioContext=new (window.AudioContext||window.webkitAudioContext)();
+      micAnalyser=micAudioContext.createAnalyser();
+      micAnalyser.fftSize=512;
+      const source=micAudioContext.createMediaStreamSource(stream);
+      source.connect(micAnalyser);
+      const data=new Uint8Array(micAnalyser.fftSize);
+      const tick=()=>{
+        if(!micAnalyser) return;
+        micAnalyser.getByteTimeDomainData(data);
+        let sum=0;
+        for(const v of data){ const n=(v-128)/128; sum+=n*n; }
+        micVoiceLevel=Math.min(1,Math.sqrt(sum/data.length)*3.8);
+        if(micVoiceLevel>.045 && !listening) log('MIC · sound detected');
+        micMeterRAF=requestAnimationFrame(tick);
+      };
+      tick();
+    }catch(e){ log('MIC · meter unavailable: '+e.message); }
+  }
+
+  function stopCamera(reason='manual'){
+    cameraSession += 1;
+    if(visionRequestController){ try{ visionRequestController.abort(); }catch(_){ } visionRequestController=null; }
+    const stream=cameraStream;
+    cameraStream=null;
+    cameraEnabled=false;
+    stopFaceLoop();
+    if(stream) stream.getTracks().forEach(track=>{ try{track.stop();}catch(_){ } });
+    const video=$('#camera');
+    if(video){ try{video.pause();}catch(_){ } video.srcObject=null; }
+    $('#cameraBox')?.classList.add('empty');
+    $('#cameraBox')?.classList.remove('rear');
+    clearVisionOverlay();
+    latestVision=null;
+    const btn=$('#cameraBtn');
+    if(btn){ btn.textContent='CAMERA OFF'; btn.classList.remove('active'); btn.setAttribute('aria-pressed','false'); }
+    const switchBtn=$('#cameraSwitchBtn');
+    if(switchBtn){ switchBtn.disabled=true; switchBtn.textContent='REAR CAM'; switchBtn.setAttribute('aria-pressed','false'); }
+    $('#mediaDot').className='dot ok';
+    $('#mediaText').textContent='MIC READY';
+    log('CAM · OFF · all tracks stopped · vision disabled · '+reason);
+  }
+
+  function releaseMicForSTT(){
+    // SpeechRecognition on Android Chrome needs exclusive ownership of the
+    // microphone. Never keep a getUserMedia audio track open while STT runs.
+    if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}
+    if(micPermissionStream){micPermissionStream.getTracks().forEach(t=>t.stop());micPermissionStream=null;}
+    if(micMeterRAF){cancelAnimationFrame(micMeterRAF);micMeterRAF=null;}
+    if(micAnalyser){try{micAnalyser.disconnect();}catch(_){} micAnalyser=null;}
+    if(micAudioContext){micAudioContext.close().catch(()=>{});micAudioContext=null;}
+    micVoiceLevel=0;
+  }
+
+  async function startCamera(facingMode=cameraFacingMode){
+    if(!navigator.mediaDevices?.getUserMedia) throw new Error('Camera API unavailable');
+
+    // Every start gets a unique session. If the user turns the camera off
+    // while getUserMedia() or video.play() is still pending, that old start
+    // is no longer allowed to resurrect the camera.
+    const startSession=++cameraSession;
+
+    const video=$('#camera');
+    const box=$('#cameraBox');
+    if(!video || !box) throw new Error('Camera UI unavailable');
+
+    // A stopped MediaStream object must never be reused. Android Chrome can
+    // otherwise hand us a dead track and leave the preview black/empty.
+    if(cameraStream){
+      const liveTrack=cameraStream.getVideoTracks()[0];
+      if(liveTrack?.readyState!=='live') stopCamera();
     }
+
+    if(cameraStream){
+      const liveTrack=cameraStream.getVideoTracks()[0];
+      if(liveTrack?.readyState==='live'){
+        video.autoplay=true;
+        video.playsInline=true;
+        video.muted=true;
+        video.srcObject=cameraStream;
+        box.classList.remove('empty');
+        try{ await video.play(); }catch(err){
+          if(err?.name!=='AbortError') throw err;
+        }
+        if(video.videoWidth<2 || video.videoHeight<2){
+          throw new Error('Camera stream is live but video frame is not ready');
+        }
+        cameraEnabled=true;
+      startFaceLoop();
+        cameraFacingMode=facingMode;
+        const btn=$('#cameraBtn');
+        if(btn){btn.textContent='CAMERA ON';btn.classList.add('active');btn.setAttribute('aria-pressed','true');}
+        const switchBtn=$('#cameraSwitchBtn');
+        if(switchBtn){switchBtn.disabled=false;switchBtn.textContent=facingMode==='environment'?'FRONT CAM':'REAR CAM';switchBtn.setAttribute('aria-pressed',String(facingMode==='environment'));}
+        $('#cameraBox').classList.toggle('rear',facingMode==='environment');
+        $('#mediaDot').className='dot ok';
+        $('#mediaText').textContent=facingMode==='environment'?'REAR CAMERA ON':'CAMERA ON';
+        log('CAM · existing live stream reused · '+facingMode+' · '+video.videoWidth+'x'+video.videoHeight);
+        return cameraStream;
+      }
+    }
+
+    log('CAM · requesting camera permission');
+
+    let stream;
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({
+        video:{
+          facingMode:{exact:facingMode},
+          width:{ideal:1280},
+          height:{ideal:720},
+          frameRate:{ideal:30,max:30}
+        },
+        audio:false
+      });
+    }catch(firstErr){
+      log('CAM · preferred constraints failed · '+(firstErr?.name||'unknown'));
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facingMode}},audio:false});
+    }
+
+    if(startSession!==cameraSession){
+      stream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
+      throw new DOMException('Camera start was cancelled','AbortError');
+    }
+
+    const track=stream.getVideoTracks()[0];
+    if(!track){
+      stream.getTracks().forEach(t=>t.stop());
+      throw new Error('Camera permission granted but no video track returned');
+    }
+
+    // Keep cameraEnabled false until we have a real rendered video frame.
+    cameraStream=stream;
+    cameraEnabled=false;
+    video.autoplay=true;
+    video.playsInline=true;
+    video.muted=true;
+    video.setAttribute('autoplay','');
+    video.setAttribute('playsinline','');
+    video.srcObject=stream;
+    box.classList.remove('empty');
+
+    const waitForVideoFrame=()=>new Promise((resolve,reject)=>{
+      const deadline=performance.now()+4000;
+      let done=false;
+      let timer=null;
+      const finish=(err)=>{
+        if(done)return;
+        done=true;
+        clearTimeout(timer);
+        video.removeEventListener('loadedmetadata',check);
+        video.removeEventListener('canplay',check);
+        video.removeEventListener('playing',check);
+        track.removeEventListener('ended',onEnded);
+        if(err) reject(err); else resolve();
+      };
+      const check=()=>{
+        if(video.videoWidth>1 && video.videoHeight>1) finish();
+        else if(performance.now()>=deadline) finish(new Error('Camera opened but no video frame became available'));
+      };
+      const onEnded=()=>finish(new Error('Camera track ended while starting'));
+      video.addEventListener('loadedmetadata',check);
+      video.addEventListener('canplay',check);
+      video.addEventListener('playing',check);
+      track.addEventListener('ended',onEnded,{once:true});
+      timer=setInterval(check,100);
+      check();
+    });
 
     try{
-      let detections=await faceapi.detectAllFaces(
-        camera,
-        new faceapi.TinyFaceDetectorOptions({
-          inputSize:faceDetectionModel?.inputSize || 160,
-          scoreThreshold:faceDetectionModel?.scoreThreshold ?? 0.05
-        })
-      );
-
-      /*
-       * SSD is recovery-only. Running SSD continuously on mobile can monopolize
-       * the main thread and freeze the rest of Robo's UI.
-       */
-      const now=performance.now();
-
-      if(
-        !detections.length &&
-        faceSsdReady &&
-        now-faceLastSsdAt>=1800
-      ){
-        faceLastSsdAt=now;
-
-        detections=await faceapi.detectAllFaces(
-          camera,
-          new faceapi.SsdMobilenetv1Options({
-            minConfidence:0.08,
-            maxResults:3
-          })
-        );
+      // Start playback first, then wait for actual dimensions. This avoids
+      // declaring CAMERA ON while Android Chrome still has a blank video box.
+      let played=false;
+      for(let attempt=0;attempt<3 && !played;attempt++){
+        try{
+          await video.play();
+          played=true;
+        }catch(err){
+          if(err?.name==='AbortError' && attempt<2){
+            await new Promise(r=>setTimeout(r,250*(attempt+1)));
+            continue;
+          }
+          throw err;
+        }
       }
 
-      return detections
-        .map(d=>{
-          const b=d?.box;
-          if(!b) return null;
-
-          const box={
-            x:Number(b.x),
-            y:Number(b.y),
-            width:Number(b.width),
-            height:Number(b.height)
-          };
-
-          if(!isValidFaceBox(box)) return null;
-
-          return {
-            box,
-            score:Number.isFinite(Number(d?.score))
-              ? Number(d.score)
-              : 0
-          };
-        })
-        .filter(Boolean);
-
+      await waitForVideoFrame();
+      if(startSession!==cameraSession){
+        stream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
+        throw new DOMException('Camera start was cancelled','AbortError');
+      }
+      cameraEnabled=true;
+      startFaceLoop();
+      cameraFacingMode=facingMode;
+      const cameraBtn=$('#cameraBtn');
+      if(cameraBtn){cameraBtn.textContent='CAMERA ON';cameraBtn.classList.add('active');cameraBtn.setAttribute('aria-pressed','true');}
+      const switchBtn=$('#cameraSwitchBtn');
+      if(switchBtn){switchBtn.disabled=false;switchBtn.textContent=facingMode==='environment'?'FRONT CAM':'REAR CAM';switchBtn.setAttribute('aria-pressed',String(facingMode==='environment'));}
+      $('#cameraBox').classList.toggle('rear',facingMode==='environment');
+      $('#mediaDot').className='dot ok';
+      $('#mediaText').textContent=facingMode==='environment'?'REAR CAMERA ON':'CAMERA ON';
+      log('CAM · LIVE · '+facingMode+' · '+video.videoWidth+'x'+video.videoHeight);
+      return stream;
     }catch(err){
-      devLog(
-        'FACE ERROR',
-        'local face detector failed',
-        {
-          name:err?.name||'Error',
-          message:err?.message||String(err),
-          stack:String(err?.stack||'').slice(0,500),
-          video:`${camera.videoWidth}x${camera.videoHeight}`
-        }
-      );
-      return [];
+      log('CAM · startup failed after permission · '+(err?.name||'unknown')+' · '+(err?.message||''));
+      stream.getTracks().forEach(t=>{try{t.stop();}catch(_){}});
+      if(cameraStream===stream) cameraStream=null;
+      cameraEnabled=false;
+      video.pause?.();
+      if(video.srcObject===stream) video.srcObject=null;
+      box.classList.add('empty');
+      throw err;
     }
+  }
+
+  async function requestMicPermission(){
+    if(!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone API unavailable');
+
+    // Permission check only. The temporary audio track is stopped immediately
+    // so it cannot compete with Chrome SpeechRecognition later.
+    const stream=await navigator.mediaDevices.getUserMedia({
+      audio:{
+        echoCancellation:true,
+        noiseSuppression:true,
+        autoGainControl:true,
+        channelCount:1
+      },
+      video:false
+    });
+
+    stream.getTracks().forEach(t=>t.stop());
+    micPermissionStream=null;
+    log('MIC · permission granted · audio track released for STT');
+    return true;
+  }
+
+  async function toggleCamera(){
+    if(cameraEnabled || cameraStream){
+      stopCamera('manual OFF');
+      setVoiceStatus('CAMERA OFF · lens released · voice only');
+      hideCaption(1800);
+      return;
+    }
+    if(window.__roboCameraStarting) return;
+    window.__roboCameraStarting=true;
+    try{
+      setVoiceStatus('CAMERA STARTING · requesting permission…');
+      await startCamera(cameraFacingMode);
+      log('CAM · ON · '+cameraFacingMode+' · independent camera control');
+      setVoiceStatus(cameraFacingMode==='environment'?'REAR CAMERA ON · microphone remains independent':'CAMERA ON · microphone remains independent');
+      hideCaption(2500);
+    }catch(err){
+      stopCamera('startup failed');
+      $('#mediaDot').className='dot';
+      $('#mediaText').textContent='CAMERA ERROR';
+      log('CAM · start failed · '+(err?.name||'unknown')+' · '+(err?.message||''));
+      setVoiceStatus('CAMERA ERROR · '+(err?.message||err?.name||'camera unavailable'));
+      hideCaption(6000);
+    }finally{ window.__roboCameraStarting=false; }
+  }
+
+  async function switchCamera(){
+    if(window.__roboCameraStarting) return;
+    if(!cameraEnabled || !cameraStream){
+      setVoiceStatus('CAMERA OFF · turn the camera on first');
+      hideCaption(1800);
+      return;
+    }
+    const nextFacing=cameraFacingMode==='user' ? 'environment' : 'user';
+    window.__roboCameraStarting=true;
+    try{
+      stopCamera('switching lens');
+      setVoiceStatus(nextFacing==='environment'?'SWITCHING · rear camera…':'SWITCHING · front camera…');
+      await startCamera(nextFacing);
+      setVoiceStatus(nextFacing==='environment'?'REAR CAMERA ON':'FRONT CAMERA ON');
+      hideCaption(1800);
+    }catch(err){
+      stopCamera('camera switch failed');
+      $('#mediaDot').className='dot';
+      $('#mediaText').textContent='CAMERA ERROR';
+      setVoiceStatus('CAMERA SWITCH ERROR · '+(err?.message||err?.name||'camera unavailable'));
+      hideCaption(5000);
+    }finally{ window.__roboCameraStarting=false; }
+  }
+
+  $('#cameraBtn').addEventListener('click',toggleCamera);
+  $('#cameraSwitchBtn').addEventListener('click',switchCamera);
+
+    /* ---------- Speech recognition (v2.12 hardened pipeline) ---------- */
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  let sttSession=0;
+  let sttHadResult=false;
+  let sttHadSpeech=false;
+  let sttRetryUsed=false;
+  let sttLastErrorCode="";
+  let sttNoMatch=false;
+  let sttWatchdog=null;
+
+  function sttEventForStart(message){
+    log('STT · '+message);
+  }
+
+  function buildRecognition(){
+    if(!SR) return null;
+    const r=new SR();
+    r.continuous=false;
+    r.interimResults=true;
+    r.maxAlternatives=3;
+    const browserLang=(navigator.language||'en-US').toLowerCase();
+    r.lang=browserLang.startsWith('en-') ? browserLang : 'en-US';
+
+    /* Some newer engines expose local recognition. We only opt in when the
+       browser explicitly reports that the language is available; otherwise
+       the normal Chrome recognition service remains the fallback. */
+    try{
+      if('processLocally' in r && typeof SR.available==='function'){
+        SR.available({langs:['en-US'],processLocally:true}).then(result=>{
+          const ok=result==='available' || (Array.isArray(result)&&result.includes('available'));
+          if(ok){ r.processLocally=true; log('STT · on-device recognition available'); }
+          else log('STT · on-device recognition unavailable · using Chrome service');
+        }).catch(()=>log('STT · on-device availability check failed · using Chrome service'));
+      }
+    }catch(_){ }
+
+    const sttEvent=(name,detail='')=>log('STT · '+name+(detail?' · '+detail:''));
+    r.onaudiostart=()=>{sttHadSpeech=false;sttEvent('audio start');setVoiceStatus('MIC ACTIVE · STT LISTENING');};
+    r.onsoundstart=()=>{sttEvent('sound detected');setVoiceStatus('SOUND DETECTED · STT ACTIVE');};
+    r.onspeechstart=()=>{sttHadSpeech=true;sttEvent('speech detected');setVoiceStatus('VOICE DETECTED · TRANSCRIBING');};
+    r.onspeechend=()=>{sttEvent('speech ended');};
+    r.onsoundend=()=>{sttEvent('sound ended');};
+    r.onaudioend=()=>{sttEvent('audio ended');};
+    r.onnomatch=()=>{
+      sttNoMatch=true;
+      sttEvent('NO MATCH · speech detected but no words recognized');
+      log('STT · no-match diagnostic · lang='+r.lang+' · onDevice='+(r.processLocally===true?'true':'false'));
+      setVoiceStatus('STT NO MATCH · Chrome heard speech but returned no words');
+      if(devStage)devStage.textContent='NO MATCH · NO TRANSCRIPT';
+    };
+
+    r.onstart=()=>{
+      listening=true; sttStarting=false; sttHadResult=false; sttHadSpeech=false; sttLastErrorCode=''; sttNoMatch=false;
+      clearTimeout(sttWatchdog);
+      sttWatchdog=setTimeout(()=>{
+        if(listening && sttHadSpeech && !sttHadResult){
+          sttEvent('WATCHDOG · speech detected but no transcript after 12s');
+          setVoiceStatus('STT WAITING · Chrome heard you but has not returned text');
+        }
+      },12000);
+      micBtn.classList.add('listening');
+      setState('listening','listening · capturing speech');
+      setVoiceStatus('MIC ACTIVE · STT LISTENING');
+      sttEvent('session start #'+sttSession);
+    };
+
+    r.onresult=(e)=>{
+      sttHadResult=true;
+      let interim='',finalText='';
+      const changed=[];
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        const result=e.results[i];
+        const alt=result && result[0];
+        if(!alt) continue;
+        const tx=(alt.transcript||'').trim();
+        if(tx) changed.push({index:i,final:!!result.isFinal,text:tx,confidence:Number(alt.confidence||0)});
+        if(result.isFinal) finalText+=(tx?' '+tx:''); else interim+=(tx?' '+tx:'');
+      }
+      finalText=finalText.trim(); interim=interim.trim();
+      const text=(finalText||interim).trim();
+      if(text){
+        const first=changed[0]||{};
+        sttEvent(first.final?'FINAL RESULT': 'INTERIM RESULT',text+' · confidence '+(first.confidence||0).toFixed(3));
+        showCaption('ROBO HEARS\n'+text,true);
+        if(devTranscript) devTranscript.textContent=text;
+        if(devStage) devStage.textContent=first.final?'FINAL TRANSCRIPT RECEIVED':'INTERIM TRANSCRIPT RECEIVED';
+      }
+      if(finalText){
+        const q=finalText;
+        setState('thinking','thinking · processing your words');
+        setTimeout(()=>respond(q),350);
+      }
+    };
+
+    r.onerror=(e)=>{
+      listening=false; sttStarting=false; micBtn.classList.remove('listening');
+      clearTimeout(sttWatchdog);
+      const code=e&&e.error?e.error:'unknown';
+      sttLastErrorCode=code;
+      sttEvent('ERROR',code+(e&&e.message?' · '+e.message:''));
+      setState('confused','voice · '+code);
+      const messages={
+        'not-allowed':'STT ERROR · microphone permission blocked',
+        'service-not-allowed':'STT ERROR · speech service unavailable',
+        'no-speech':'STT ERROR · no speech detected',
+        'audio-capture':'STT ERROR · microphone unavailable',
+        'network':'STT ERROR · speech service network failure',
+        'aborted':'STT stopped · tap mic to try again',
+        'language-not-supported':'STT ERROR · language not supported'
+      };
+      setVoiceStatus(messages[code]||('STT ERROR · '+code));
+      if(code==='audio-capture'||code==='not-allowed'){
+        releaseMicForSTT();
+        $('#mediaText').textContent='MIC ERROR';
+      }
+      // Android Chrome can report audio-capture while its Google speech
+      // service is still releasing the previous recorder. One delayed retry
+      // is safe; repeated automatic retries are not.
+      if(code==='audio-capture' && !sttRetryUsed){
+        sttRetryUsed=true;
+        setVoiceStatus('STT HANDOFF · releasing Google audio recorder…');
+        setTimeout(()=>startSTT(true),700);
+        return;
+      }
+      hideCaption(6000);
+    };
+
+    r.onend=()=>{
+      listening=false; sttStarting=false; micBtn.classList.remove('listening');
+      clearTimeout(sttWatchdog);
+      releaseMicForSTT();
+      sttEvent('ended');
+      if(sttHadSpeech && !sttHadResult && !sttNoMatch && !sttLastErrorCode){
+        sttEvent('NO RESULT · Chrome detected speech but returned no transcript');
+        setVoiceStatus('STT NO RESULT · speech detected, transcript not returned');
+        if(devStage) devStage.textContent='SPEECH DETECTED · NO TRANSCRIPT';
+        /* One clean retry catches stale Chrome recognition sessions without
+           creating an endless restart loop. */
+        if(!sttRetryUsed){
+          sttRetryUsed=true;
+          setTimeout(()=>startSTT(true),450);
+          return;
+        }
+      }
+      sttRetryUsed=false;
+      if(!talking && state==='listening') setState('curious','curious · standing by');
+    };
+    return hookRecognitionDiagnostics(r);
+  }
+
+  if(SR) recognition=buildRecognition();
+
+  async function startSTT(isRetry=false){
+    if(!recognition){setVoiceStatus('STT UNAVAILABLE · Chrome SpeechRecognition not exposed');return;}
+    if(listening||sttStarting)return;
+
+    try{
+      sttSession++;
+      if(!isRetry) sttRetryUsed=false;
+      recognition=buildRecognition();
+      sttStarting=true;
+
+      // Stop TTS and every getUserMedia audio resource before asking Google
+      // SpeechRecognition for the microphone. Android Chrome does not reliably
+      // allow both to own the audio input at the same time.
+      stopRoboAudio('STT requested');
+      if('speechSynthesis' in window) speechSynthesis.cancel();
+      releaseMicForSTT();
+
+      setVoiceStatus(isRetry?'STT RETRY · speak now…':'STT STARTING · microphone released · speak now…');
+
+      if(talking){
+        talking=false;
+        micBtn.classList.remove('talking');
+      }
+
+      // IMPORTANT: do not await a timer here. On Android Chrome, delaying
+      // SpeechRecognition.start() can break the user-gesture/audio handoff.
+      // The microphone getUserMedia tracks were already stopped above.
+      sttEventForStart('calling SpeechRecognition.start()');
+      recognition.start();
+    }catch(e){
+      sttStarting=false;
+      console.warn(e);
+      log('STT start exception · '+(e?.name||'unknown')+' · '+(e?.message||''));
+
+      // A failed start can leave a stale audio resource behind. Release it
+      // before reporting the error so the next tap starts cleanly.
+      releaseMicForSTT();
+
+      const msg=e?.name==='InvalidStateError'
+        ? 'STT BUSY · tap mic again'
+        : 'STT START FAILED · '+(e?.message||e?.name||'unknown error');
+      setVoiceStatus(msg);
+      hideCaption(6000);
+    }
+  }
+
+
+  /* ---------- AI brain (v2.12) ----------
+     Provider-neutral client adapter. The browser talks only to /api/robo.
+     Secrets stay server-side in Vercel Environment Variables.
+  */
+  const conversation=[];
+  const MAX_HISTORY=10;
+  let aiRequestInFlight=false;
+
+  /* ---------- Personality / emotion engine v2 ----------
+     Uses negation, priority, context, intensity and confidence instead of
+     treating every keyword as an emotion. Behavioural states such as
+     listening/thinking/talking remain separate from the underlying mood.
+  */
+  const EMOTION_RULES = [
+    {state:'alert', intensity:.92, confidence:.96, words:['emergency','danger','dangerous','urgent','warning','help me','save me','fire','accident']},
+    {state:'angry', intensity:.78, confidence:.90, words:["i am angry","i'm angry","very angry","furious","enraged","annoyed","frustrated","pissed off","hate this"]},
+    {state:'sad', intensity:.70, confidence:.88, words:['sad','upset','hurt','lonely','crying','cry','depressed','heartbroken','miserable']},
+    {state:'love', intensity:.72, confidence:.86, words:["i love you","love you","you are cute","you're cute","adorable","my friend","miss you","missed you"]},
+    {state:'surprised', intensity:.76, confidence:.84, words:['wow','whoa','no way','seriously','really','surprise']},
+    {state:'excited', intensity:.82, confidence:.82, words:['excited','amazing',"let's go",'cannot wait',"can't wait",'this is awesome']},
+    {state:'happy', intensity:.62, confidence:.76, words:['great','awesome','excellent','fantastic','brilliant','thank you','thanks','glad','happy','nice']},
+    {state:'confused', intensity:.55, confidence:.70, words:["i do not understand","i don't understand",'confused','makes no sense','what do you mean','i am lost']},
+    {state:'curious', intensity:.48, confidence:.55, words:['tell me','i wonder','curious','interesting','show me','explain']}
+  ];
+
+  const EMOTION_NEGATION = /\b(no|not|never|dont|don't|do not|isnt|isn't|wasnt|wasn't|cannot|can't|cant|without)\b/;
+
+  function emotionWordsMatch(text, phrase){
+    const normalized=text.replace(/[^a-z0-9' ]/g,' ').replace(/\s+/g,' ').trim();
+    return normalized.includes(phrase);
+  }
+
+  function inferEmotion(text){
+    const raw=String(text||'').trim();
+    const l=raw.toLowerCase().replace(/[^a-z0-9' ]/g,' ').replace(/\s+/g,' ').trim();
+    if(!l) return {state:'curious',intensity:.35,confidence:.20,reason:'empty'};
+
+    const explicit=l.match(/\b(?:be|act|make yourself|show|look|turn|become)\s+(happy|sad|angry|excited|sleepy|surprised|confused|curious|love|alert|neutral)\b/);
+    if(explicit) return {state:explicit[1],intensity:.88,confidence:.98,reason:'explicit mood command'};
+
+    const scores=new Map();
+    for(const rule of EMOTION_RULES){
+      for(const phrase of rule.words){
+        const index=l.indexOf(phrase);
+        if(index<0) continue;
+        const before=l.slice(Math.max(0,index-24),index);
+        if(EMOTION_NEGATION.test(before)) continue;
+        const score=rule.confidence+(phrase.includes(' ')?.04:0);
+        const existing=scores.get(rule.state);
+        if(!existing || score>existing.score){
+          scores.set(rule.state,{score,intensity:rule.intensity,confidence:rule.confidence,reason:phrase});
+        }
+      }
+    }
+
+    if(/\b(think about|think through|reason|work this out|figure this out|analyze|analyse|calculate)\b/.test(l)){
+      scores.set('thinking',{score:.68,intensity:.52,confidence:.78,reason:'reasoning request'});
+    }
+
+    if(scores.size){
+      const ranked=[...scores.entries()].sort((a,b)=>b[1].score-a[1].score);
+      const [state,data]=ranked[0];
+      return {state,intensity:data.intensity,confidence:data.confidence,reason:data.reason};
+    }
+
+    if(/\?|\b(why|how|what|where|when|who|which|can you|could you)\b/.test(l)){
+      return {state:'curious',intensity:.42,confidence:.58,reason:'question'};
+    }
+
+    return {state:'neutral',intensity:.28,confidence:.35,reason:'no emotional evidence'};
+  }
+
+  function getEmotionSnapshot(){
+    return {
+      state:emotionalState,
+      intensity:Number(emotionalIntensity.toFixed(2)),
+      confidence:Number(emotionalConfidence.toFixed(2)),
+      ageMs:Math.max(0,Math.round(performance.now()-emotionalSince))
+    };
+  }
+
+  function localFallback(text){
+    const l=(text||'').toLowerCase().trim();
+    if(!l) return "I didn't catch that.";
+    if(/\b(hi|hello|hey)\b/.test(l)) return 'Hey! I heard you clearly.';
+    if(/how are you/.test(l)) return "I'm doing great. My voice pipeline is online.";
+    if(/can you hear me/.test(l)) return "Yes. I can hear you clearly.";
+    if(/what are you|who are you/.test(l)) return "I'm Robo, your AIOS companion.";
+    if(/test/.test(l)) return "Test received. The v2.12 brain pipeline is working.";
+    return "I heard you: " + text.trim();
+  }
+
+  const visionCanvas=document.createElement('canvas');
+  const visionCtx=visionCanvas.getContext('2d',{alpha:false});
+
+  function isVisionQuestion(text){
+    const l=(text||'').toLowerCase().trim();
+    return (
+      /\b(see|seeing|look|looking|camera|image|picture|photo|screen|display|visible|shown)\b/.test(l) ||
+      /\bwhat\s+(do\s+you|can\s+you)\s+see\b/.test(l) ||
+      /\bwhat.*in\s+front\s+of\s+me\b/.test(l) ||
+      /\bwhat.*around\s+me\b/.test(l) ||
+      /\bdescribe.*scene\b/.test(l) ||
+      /\bidentify.*object\b/.test(l) ||
+      /\bwhat.*(holding|carrying|wearing|in my hand)\b/.test(l) ||
+      /\bwhat.*(is|are)\s+(this|that|these|those)\b/.test(l) ||
+      /\bwhat.*(object|objects|item|items)\b/.test(l) ||
+      /\bhow many\b/.test(l) ||
+      /\b(kya|kya hai|kya dikh|dikhta|dikhti|dikhao|dekho|dekh|batao|bata)\b/.test(l) ||
+      /\b(kya\s+dekh|kya\s+dikh|kitne|kitni|kaunsa|kaunsi|kaun)\b/.test(l) ||
+      /\b(क्या|दिख|दिखाओ|देख|देखो|कितने|कितनी|कौन|क्या है)\b/.test(l)
+    );
+  }
+
+  function isFreshVisionQuestion(text){
+    const l=(text||'').toLowerCase().trim();
+    return (
+      /\b(now|currently|right now|at the moment)\b/.test(l) ||
+      /\b(where|left|right|behind|front|next to|near|far|moved|move|still there|still here|changed|change|appeared|disappeared|gone)\b/.test(l) ||
+      /\b(is|are)\s+.*\b(still|there|here|gone)\b/.test(l) ||
+      /\bwhere did .* go\b/.test(l)
+    );
+  }
+
+  function isVisualMemoryFollowup(text){
+    const l=(text||'').toLowerCase().trim();
+    return (
+      /\b(it|that|this|they|them|the same|the object|the item)\b/.test(l) ||
+      /\bwhat (color|colour|kind|type|shape|size)\b/.test(l) ||
+      /\bwhat was\b/.test(l) ||
+      /\bwas (it|that|this)\b/.test(l) ||
+      /\bhow many\b/.test(l) ||
+      /\bdescribe (it|that|this|the object|the item)\b/.test(l) ||
+      /\bwhat did you see\b/.test(l)
+    );
+  }
+
+  function buildVisualMemoryMessage(){
+    if(!visualMemory) return null;
+
+    const ageSeconds=Math.max(
+      0,
+      Math.round((Date.now()-visualMemory.timestamp)/1000)
+    );
+
+    const objects=Array.isArray(visualMemory.objects)
+      ? visualMemory.objects
+      : [];
+
+    const objectLines=objects.slice(0,12).map((o)=>{
+      const name=String(o?.name||'object');
+      const count=Math.max(1,Number.parseInt(o?.count,10)||1);
+      const confidence=Number.isFinite(Number(o?.confidence))
+        ? Math.round(Number(o.confidence))
+        : 0;
+      return `- ${name}: count ${count}, confidence ${confidence}/100`;
+    }).join('\n');
+
+    return [
+      'VISUAL MEMORY — this is a previous camera observation, not a live feed.',
+      `Observed approximately ${ageSeconds} seconds ago in camera session ${visualMemory.session}.`,
+      `Scene: ${String(visualMemory.scene||'No scene description available.')}`,
+      objectLines ? `Objects:\n${objectLines}` : 'Objects: none confidently detected.',
+      visualMemory.tracking?.summary
+        ? `Last same-session tracking result: ${visualMemory.tracking.summary}`
+        : '',
+      'Use this memory only for questions about what was previously seen. Never claim that the camera currently sees these things.'
+    ].join('\n');
+  }
+
+  function captureVisionFrame(){
+    const video = $('#camera');
+    const track = cameraStream?.getVideoTracks?.()[0];
+
+    if(!cameraEnabled || !cameraStream || !video || !track){
+      devLog('VISION ERROR','capture blocked · camera stream unavailable');
+      return null;
+    }
+
+    if(track.readyState !== 'live'){
+      devLog('VISION ERROR','capture blocked · video track is not live',{readyState:track.readyState});
+      return null;
+    }
+
+    if(video.videoWidth < 2 || video.videoHeight < 2){
+      devLog('VISION ERROR','capture blocked · video has no usable dimensions',{readyState:video.readyState,videoWidth:video.videoWidth,videoHeight:video.videoHeight});
+      return null;
+    }
+
+    const maxWidth = 768;
+    const scale = Math.min(1, maxWidth / video.videoWidth);
+    const width = Math.max(2, Math.round(video.videoWidth * scale));
+    const height = Math.max(2, Math.round(video.videoHeight * scale));
+
+    visionCanvas.width = width;
+    visionCanvas.height = height;
+
+    visionCtx.save();
+    visionCtx.setTransform(1,0,0,1,0,0);
+    visionCtx.drawImage(video,0,0,width,height);
+    visionCtx.restore();
+
+    const dataUrl = visionCanvas.toDataURL('image/jpeg',0.82);
+    const comma = dataUrl.indexOf(',');
+    if(comma < 0){
+      devLog('VISION ERROR','canvas capture returned invalid data URL');
+      return null;
+    }
+
+    const data=dataUrl.slice(comma+1);
+    if(data.length < 1000){
+      devLog('VISION ERROR','camera frame unexpectedly small',{bytes:data.length,width,height});
+      return null;
+    }
+
+    return {
+      mimeType:'image/jpeg',
+      data,
+      width,
+      height
+    };
+  }
+
+  function clearVisionOverlay(){
+    const overlay=$('#visionOverlay');
+    const summary=$('#visionSummary');
+    if(overlay) overlay.innerHTML='';
+    if(summary){summary.textContent='';summary.classList.remove('show');}
+  }
+
+  let visionBoxTimer = null;
+
+  function normalizeVisionObjectName(name){
+    return String(name||'object').toLowerCase().replace(/\s+/g,' ').trim();
   }
 
   function boxCenter(box){
@@ -2062,11 +2993,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function renderSocialDiagnostics(){
     if(typeof devSocialPresence==='undefined' || !devSocialPresence) return;
     const s=socialAwareness;
-    devSocialPresence.textContent=String(s?.presence||'unknown').toUpperCase();
-    devSocialCount.textContent=String(Number.isFinite(Number(s?.personCount)) ? Number(s.personCount) : 0);
-    devSocialInteraction.textContent=String(s?.interaction||'idle').toUpperCase();
-    devSocialConfidence.textContent=(Number.isFinite(Number(s?.confidence)) ? Number(s.confidence) : 0)+'%';
-    devSocialChange.textContent=String(s?.lastChange||'none');
+    devSocialPresence.textContent=s.presence.toUpperCase();
+    devSocialCount.textContent=String(s.personCount);
+    devSocialInteraction.textContent=s.interaction.toUpperCase();
+    devSocialConfidence.textContent=s.confidence+'%';
+    devSocialChange.textContent=s.lastChange;
   }
 
   function renderVisionResult(visionData){
@@ -2235,234 +3166,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     for(const token of tokens) if(hindiWords.includes(token)) score++;
     return (score>=2 || (score>=1 && tokens.length<=5)) ? 'hi' : 'en';
   }
-
-
-  /* ---------- v2.35 restored STT + emotion/vision helpers ---------- */
-function startSTT(isRetry=false){
-    if(!SR){setVoiceStatus('STT UNAVAILABLE · Chrome SpeechRecognition not exposed'); if(devStt)devStt.textContent='UNAVAILABLE'; return;}
-    if(listening||sttStarting)return;
-
-    try{
-      sttSession++;
-      if(!isRetry) sttRetryUsed=false;
-      recognition=buildRecognition();
-      if(!recognition || typeof recognition.start!=='function'){
-        throw new Error('SpeechRecognition runtime unavailable');
-      }
-      sttStarting=true;
-      sttRuntimeState="starting";
-
-      // Stop TTS and every getUserMedia audio resource before asking Google
-      // SpeechRecognition for the microphone. Android Chrome does not reliably
-      // allow both to own the audio input at the same time.
-      stopRoboAudio('STT requested');
-      if('speechSynthesis' in window) speechSynthesis.cancel();
-      releaseMicForSTT();
-
-      setVoiceStatus(isRetry?'STT RETRY · speak now…':'STT STARTING · microphone released · speak now…');
-
-      if(talking){
-        talking=false;
-        micBtn.classList.remove('talking');
-      }
-
-      // IMPORTANT: do not await a timer here. On Android Chrome, delaying
-      // SpeechRecognition.start() can break the user-gesture/audio handoff.
-      // The microphone getUserMedia tracks were already stopped above.
-      sttEventForStart('calling SpeechRecognition.start()');
-      if(sttStartWatchdog) clearTimeout(sttStartWatchdog);
-      sttStartWatchdog=setTimeout(()=>{
-        if(sttStarting && !listening){
-          sttStarting=false;
-          sttRuntimeState="timeout";
-          const msg='SpeechRecognition did not fire onstart within 3s';
-          devLog('STT ERROR',msg,{constructor:SR?.name||'unknown',secureContext:Boolean(window.isSecureContext)});
-          setVoiceStatus('STT START TIMEOUT · tap mic again');
-          try{recognition?.abort();}catch(_){ }
-          releaseMicForSTT();
-        }
-        sttStartWatchdog=null;
-      },3000);
-      recognition.start();
-    }catch(e){
-      sttStarting=false;
-      sttRuntimeState="error";
-      console.warn(e);
-      log('STT start exception · '+(e?.name||'unknown')+' · '+(e?.message||''));
-
-      // A failed start can leave a stale audio resource behind. Release it
-      // before reporting the error so the next tap starts cleanly.
-      releaseMicForSTT();
-
-      const msg=e?.name==='InvalidStateError'
-        ? 'STT BUSY · tap mic again'
-        : 'STT START FAILED · '+(e?.message||e?.name||'unknown error');
-      setVoiceStatus(msg);
-      hideCaption(6000);
-    }
-  }
-
-
-
-  /* ---------- Personality / emotion engine v2 ----------
-     Uses negation, priority, context, intensity and confidence instead of
-     treating every keyword as an emotion. Behavioural states such as
-     listening/thinking/talking remain separate from the underlying mood.
-  */
-  const EMOTION_RULES = [
-    {state:'alert', intensity:.92, confidence:.96, words:['emergency','danger','dangerous','urgent','warning','help me','save me','fire','accident']},
-    {state:'angry', intensity:.78, confidence:.90, words:["i am angry","i'm angry","very angry","furious","enraged","annoyed","frustrated","pissed off","hate this"]},
-    {state:'sad', intensity:.70, confidence:.88, words:['sad','upset','hurt','lonely','crying','cry','depressed','heartbroken','miserable']},
-    {state:'love', intensity:.72, confidence:.86, words:["i love you","love you","you are cute","you're cute","adorable","my friend","miss you","missed you"]},
-    {state:'surprised', intensity:.76, confidence:.84, words:['wow','whoa','no way','seriously','really','surprise']},
-    {state:'excited', intensity:.82, confidence:.82, words:['excited','amazing',"let's go",'cannot wait',"can't wait",'this is awesome']},
-    {state:'happy', intensity:.62, confidence:.76, words:['great','awesome','excellent','fantastic','brilliant','thank you','thanks','glad','happy','nice']},
-    {state:'confused', intensity:.55, confidence:.70, words:["i do not understand","i don't understand",'confused','makes no sense','what do you mean','i am lost']},
-    {state:'curious', intensity:.48, confidence:.55, words:['tell me','i wonder','curious','interesting','show me','explain']}
-  ];
-
-  const EMOTION_NEGATION = /\b(no|not|never|dont|don't|do not|isnt|isn't|wasnt|wasn't|cannot|can't|cant|without)\b/;
-
-  function emotionWordsMatch(text, phrase){
-    const normalized=text.replace(/[^a-z0-9' ]/g,' ').replace(/\s+/g,' ').trim();
-    return normalized.includes(phrase);
-  }
-
-  function inferEmotion(text){
-    const raw=String(text||'').trim();
-    const l=raw.toLowerCase().replace(/[^a-z0-9' ]/g,' ').replace(/\s+/g,' ').trim();
-    if(!l) return {state:'curious',intensity:.35,confidence:.20,reason:'empty'};
-
-    const explicit=l.match(/\b(?:be|act|make yourself|show|look|turn|become)\s+(happy|sad|angry|excited|sleepy|surprised|confused|curious|love|alert|neutral)\b/);
-    if(explicit) return {state:explicit[1],intensity:.88,confidence:.98,reason:'explicit mood command'};
-
-    const scores=new Map();
-    for(const rule of EMOTION_RULES){
-      for(const phrase of rule.words){
-        const index=l.indexOf(phrase);
-        if(index<0) continue;
-        const before=l.slice(Math.max(0,index-24),index);
-        if(EMOTION_NEGATION.test(before)) continue;
-        const score=rule.confidence+(phrase.includes(' ')?.04:0);
-        const existing=scores.get(rule.state);
-        if(!existing || score>existing.score){
-          scores.set(rule.state,{score,intensity:rule.intensity,confidence:rule.confidence,reason:phrase});
-        }
-      }
-    }
-
-    if(/\b(think about|think through|reason|work this out|figure this out|analyze|analyse|calculate)\b/.test(l)){
-      scores.set('thinking',{score:.68,intensity:.52,confidence:.78,reason:'reasoning request'});
-    }
-
-    if(scores.size){
-      const ranked=[...scores.entries()].sort((a,b)=>b[1].score-a[1].score);
-      const [state,data]=ranked[0];
-      return {state,intensity:data.intensity,confidence:data.confidence,reason:data.reason};
-    }
-
-    if(/\?|\b(why|how|what|where|when|who|which|can you|could you)\b/.test(l)){
-      return {state:'curious',intensity:.42,confidence:.58,reason:'question'};
-    }
-
-    return {state:'neutral',intensity:.28,confidence:.35,reason:'no emotional evidence'};
-  }
-
-  function getEmotionSnapshot(){
-    return {
-      state:emotionalState,
-      intensity:Number(emotionalIntensity.toFixed(2)),
-      confidence:Number(emotionalConfidence.toFixed(2)),
-      ageMs:Math.max(0,Math.round(performance.now()-emotionalSince))
-    };
-  }
-
-  function localFallback(text){
-    const l=(text||'').toLowerCase().trim();
-    if(!l) return "I didn't catch that.";
-    if(/\b(hi|hello|hey)\b/.test(l)) return 'Hey! I heard you clearly.';
-    if(/how are you/.test(l)) return "I'm doing great. My voice pipeline is online.";
-    if(/can you hear me/.test(l)) return "Yes. I can hear you clearly.";
-    if(/what are you|who are you/.test(l)) return "I'm Robo, your AIOS companion.";
-    if(/test/.test(l)) return "Test received. The v2.12 brain pipeline is working.";
-    return "I heard you: " + text.trim();
-  }
-
-  function isVisionQuestion(text){
-    const l=(text||'').toLowerCase().trim();
-    return (
-      /\b(see|seeing|look|looking|camera|image|picture|photo|screen|display|visible|shown)\b/.test(l) ||
-      /\bwhat\s+(do\s+you|can\s+you)\s+see\b/.test(l) ||
-      /\bwhat.*in\s+front\s+of\s+me\b/.test(l) ||
-      /\bwhat.*around\s+me\b/.test(l) ||
-      /\bdescribe.*scene\b/.test(l) ||
-      /\bidentify.*object\b/.test(l) ||
-      /\bwhat.*(holding|carrying|wearing|in my hand)\b/.test(l) ||
-      /\bwhat.*(is|are)\s+(this|that|these|those)\b/.test(l) ||
-      /\bwhat.*(object|objects|item|items)\b/.test(l) ||
-      /\bhow many\b/.test(l) ||
-      /\b(kya|kya hai|kya dikh|dikhta|dikhti|dikhao|dekho|dekh|batao|bata)\b/.test(l) ||
-      /\b(kya\s+dekh|kya\s+dikh|kitne|kitni|kaunsa|kaunsi|kaun)\b/.test(l) ||
-      /\b(क्या|दिख|दिखाओ|देख|देखो|कितने|कितनी|कौन|क्या है)\b/.test(l)
-    );
-  }
-
-  function isFreshVisionQuestion(text){
-    const l=(text||'').toLowerCase().trim();
-    return (
-      /\b(now|currently|right now|at the moment)\b/.test(l) ||
-      /\b(where|left|right|behind|front|next to|near|far|moved|move|still there|still here|changed|change|appeared|disappeared|gone)\b/.test(l) ||
-      /\b(is|are)\s+.*\b(still|there|here|gone)\b/.test(l) ||
-      /\bwhere did .* go\b/.test(l)
-    );
-  }
-
-  function isVisualMemoryFollowup(text){
-    const l=(text||'').toLowerCase().trim();
-    return (
-      /\b(it|that|this|they|them|the same|the object|the item)\b/.test(l) ||
-      /\bwhat (color|colour|kind|type|shape|size)\b/.test(l) ||
-      /\bwhat was\b/.test(l) ||
-      /\bwas (it|that|this)\b/.test(l) ||
-      /\bhow many\b/.test(l) ||
-      /\bdescribe (it|that|this|the object|the item)\b/.test(l) ||
-      /\bwhat did you see\b/.test(l)
-    );
-  }
-
-  function buildVisualMemoryMessage(){
-    if(!visualMemory) return null;
-
-    const ageSeconds=Math.max(
-      0,
-      Math.round((Date.now()-visualMemory.timestamp)/1000)
-    );
-
-    const objects=Array.isArray(visualMemory.objects)
-      ? visualMemory.objects
-      : [];
-
-    const objectLines=objects.slice(0,12).map((o)=>{
-      const name=String(o?.name||'object');
-      const count=Math.max(1,Number.parseInt(o?.count,10)||1);
-      const confidence=Number.isFinite(Number(o?.confidence))
-        ? Math.round(Number(o.confidence))
-        : 0;
-      return `- ${name}: count ${count}, confidence ${confidence}/100`;
-    }).join('\n');
-
-    return [
-      'VISUAL MEMORY — this is a previous camera observation, not a live feed.',
-      `Observed approximately ${ageSeconds} seconds ago in camera session ${visualMemory.session}.`,
-      `Scene: ${String(visualMemory.scene||'No scene description available.')}`,
-      objectLines ? `Objects:\n${objectLines}` : 'Objects: none confidently detected.',
-      visualMemory.tracking?.summary
-        ? `Last same-session tracking result: ${visualMemory.tracking.summary}`
-        : '',
-      'Use this memory only for questions about what was previously seen. Never claim that the camera currently sees these things.'
-    ].join('\n');
-  }
-
 
   async function callRoboBrain(
     messages,
@@ -2711,7 +3414,7 @@ function startSTT(isRetry=false){
       const reply=String(data.text).trim();
       conversation.push({role:'assistant',content:reply});
       while(conversation.length>MAX_HISTORY) conversation.shift();
-      if(devAI) devAI.textContent=String(data?.provider||'GEMINI').toUpperCase()+' · CONNECTED';
+      if(devAI) devAI.textContent=(data.provider||'GEMINI').toUpperCase()+' · CONNECTED';
       if(devStage) devStage.textContent='AI RESPONSE RECEIVED';
       setState(emotion,emotion+' · AI response',{intensity:emotionResult.intensity,confidence:emotionResult.confidence});
       speak(reply,languageHint);
@@ -2920,14 +3623,7 @@ function startSTT(isRetry=false){
 
   micBtn.addEventListener('click',async()=>{
     lastActivity=performance.now();
-    devLog('MIC','tap',{speechRecognitionAvailable:typeof SR==='function',constructor:SR?.name||'none',secureContext:Boolean(window.isSecureContext),permission:devMicPermission?.textContent||'unknown'});
-    if(!SR){
-      setVoiceStatus('MIC UNAVAILABLE · SpeechRecognition API is not exposed by this browser');
-      if(devStt)devStt.textContent='UNAVAILABLE';
-      return;
-    }
-    if(listening){try{recognition?.stop();}catch(_){ }return;}
-    recognition=null;
+    if(listening){try{recognition.stop();}catch(_){ }return;}
     if('speechSynthesis' in window) speechSynthesis.cancel();
     await startSTT(false);
   });
@@ -2939,291 +3635,11 @@ function startSTT(isRetry=false){
   });
 
 
-  /* ---------- Camera controls + active face tracking ---------- */
-  async function startCamera(){
-    if(cameraEnabled && cameraStream){
-      startFaceLoop();
-      return;
-    }
-
-    try{
-      if(cameraStream){
-        cameraStream.getTracks().forEach(t=>{try{t.stop();}catch(_){ }});
-        cameraStream=null;
-      }
-
-      const stream=await navigator.mediaDevices.getUserMedia({
-        audio:false,
-        video:{
-          facingMode:{ideal:cameraFacingMode},
-          width:{ideal:720,max:1280},
-          height:{ideal:1280,max:1280}
-        }
-      });
-
-      cameraStream=stream;
-      cameraSession++;
-
-      const video=$('#camera');
-      video.srcObject=stream;
-
-      await new Promise(resolve=>{
-        if(video.readyState>=2){
-          resolve();
-          return;
-        }
-        const onReady=()=>{cleanup();resolve();};
-        const cleanup=()=>{
-          video.removeEventListener('loadedmetadata',onReady);
-          clearTimeout(timer);
-        };
-        const timer=setTimeout(()=>{cleanup();resolve();},1600);
-        video.addEventListener('loadedmetadata',onReady,{once:true});
-      });
-
-      try{ await video.play(); }catch(_){}
-
-      cameraEnabled=true;
-
-      $('#cameraBox').classList.remove('empty');
-      $('#cameraBox').classList.toggle('rear',cameraFacingMode==='environment');
-      $('#cameraBtn').textContent='CAMERA ON';
-      $('#cameraBtn').classList.add('active');
-      $('#cameraBtn').setAttribute('aria-pressed','true');
-      $('#cameraSwitchBtn').disabled=false;
-      $('#cameraSwitchBtn').textContent=
-        cameraFacingMode==='user' ? 'REAR CAM' : 'FRONT CAM';
-
-      $('#mediaDot').className='dot live';
-      $('#mediaText').textContent='CAMERA LIVE';
-
-      devLog('CAMERA','camera started',{
-        facingMode:cameraFacingMode,
-        video:`${video.videoWidth}x${video.videoHeight}`,
-        session:cameraSession
-      });
-
-      faceBadge('STARTING FACE TRACKER');
-      faceDiag();
-
-      await startFaceLoop();
-
-    }catch(err){
-      cameraEnabled=false;
-
-      if(cameraStream){
-        cameraStream.getTracks().forEach(t=>{try{t.stop();}catch(_){ }});
-      }
-
-      cameraStream=null;
-
-      devLog('CAMERA ERROR','camera start failed',{
-        name:err?.name||'Error',
-        message:err?.message||String(err)
-      });
-
-      $('#cameraBtn').textContent='CAMERA OFF';
-      $('#cameraBtn').classList.remove('active');
-      $('#cameraBtn').setAttribute('aria-pressed','false');
-      $('#cameraSwitchBtn').disabled=true;
-      $('#mediaDot').className='dot';
-      $('#mediaText').textContent='MEDIA OFF';
-
-      showCaption('Camera could not be started.',true);
-      hideCaption(3500);
-    }
-  }
-
-  function stopCamera(){
-    cameraSession++;
-
-    if(visionRequestController){
-      try{visionRequestController.abort();}catch(_){}
-      visionRequestController=null;
-    }
-
-    stopFaceLoop();
-
-    if(cameraStream){
-      cameraStream.getTracks().forEach(track=>{
-        try{track.stop();}catch(_){}
-      });
-    }
-
-    cameraStream=null;
-    cameraEnabled=false;
-
-    const video=$('#camera');
-
-    try{
-      video.pause();
-      video.srcObject=null;
-    }catch(_){}
-
-    $('#cameraBox').classList.add('empty');
-    $('#cameraBox').classList.remove('rear');
-
-    $('#cameraBtn').textContent='CAMERA OFF';
-    $('#cameraBtn').classList.remove('active');
-    $('#cameraBtn').setAttribute('aria-pressed','false');
-    $('#cameraSwitchBtn').disabled=true;
-
-    $('#mediaDot').className='dot';
-    $('#mediaText').textContent='MEDIA OFF';
-
-    faceBadge('',false);
-    devLog('CAMERA','camera stopped');
-  }
-
-  $('#cameraBtn').addEventListener('click',async()=>{
-    if(cameraEnabled){
-      stopCamera();
-    }else{
-      await startCamera();
-    }
-  });
-
-  $('#cameraSwitchBtn').addEventListener('click',async()=>{
-    if(!cameraEnabled) return;
-
-    stopCamera();
-
-    cameraFacingMode=
-      cameraFacingMode==='user'
-        ? 'environment'
-        : 'user';
-
-    await startCamera();
-  });
-
-  /* ---------- Module 7 compatibility/runtime guard ----------
-     v2.35 lost several Module 7 function declarations while the UI/diagnostics
-     still referenced them. A ReferenceError during startup stopped the entire
-     IIFE before button handlers were attached. Keep memory/identity isolated so
-     the core UI, voice, camera and Module 8 tracker cannot die because the
-     optional memory layer is unavailable.
-  */
-  let roboMemoryState = {
-    identity: null,
-    memories: [],
-    facts: [],
-    lastChange: 'none'
-  };
-  let storedFaceProfiles = [];
-
-  function loadRoboMemory(){
-    try{
-      const raw=localStorage.getItem('robo_aios_memory_v1');
-      if(raw){
-        const parsed=JSON.parse(raw);
-        if(parsed && typeof parsed==='object'){
-          roboMemoryState={
-            identity:parsed.identity||null,
-            memories:Array.isArray(parsed.memories)?parsed.memories:[],
-            facts:Array.isArray(parsed.facts)?parsed.facts:[],
-            lastChange:parsed.lastChange||'none'
-          };
-        }
-      }
-      const profiles=localStorage.getItem('robo_aios_face_profiles_v1');
-      if(profiles){
-        const parsedProfiles=JSON.parse(profiles);
-        storedFaceProfiles=Array.isArray(parsedProfiles)?parsedProfiles:[];
-      }
-    }catch(err){
-      roboMemoryState={identity:null,memories:[],facts:[],lastChange:'storage unavailable'};
-      storedFaceProfiles=[];
-    }
-  }
-
-  function persistRoboMemory(){
-    try{
-      localStorage.setItem('robo_aios_memory_v1',JSON.stringify(roboMemoryState));
-    }catch(_){ }
-  }
-
-  function getStoredFaceProfiles(){
-    return Array.isArray(storedFaceProfiles)?storedFaceProfiles:[];
-  }
-
-  function renderMemoryIdentity(){
-    const badge=$('#memoryIdentity');
-    if(!badge) return;
-    const identity=roboMemoryState?.identity;
-    if(identity){
-      badge.textContent='MEMORY · '+String(identity).slice(0,40);
-      badge.dataset.state='known';
-    }else{
-      badge.textContent='MEMORY · NO PROFILE';
-      badge.dataset.state='unknown';
-    }
-    badge.classList.toggle('show',Boolean(identity));
-  }
-
-  function renderMemoryDiagnostics(){
-    const status=$('#devMemoryStatus');
-    const identity=$('#devMemoryIdentity');
-    const count=$('#devMemoryCount');
-    const facts=$('#devMemoryFacts');
-    const change=$('#devMemoryChange');
-    if(status) status.textContent='READY';
-    if(identity) identity.textContent=roboMemoryState?.identity||'—';
-    if(count) count.textContent=String(roboMemoryState?.memories?.length||0);
-    if(facts) facts.textContent=String(roboMemoryState?.facts?.length||0);
-    if(change) change.textContent=roboMemoryState?.lastChange||'none';
-  }
-
-  function handleMemoryCommand(_text){
-    /* Memory commands are optional here; returning null keeps normal AI flow. */
-    return null;
-  }
-
-  function buildMemoryContextMessage(){
-    const facts=Array.isArray(roboMemoryState?.facts)?roboMemoryState.facts:[];
-    const memories=Array.isArray(roboMemoryState?.memories)?roboMemoryState.memories:[];
-    if(!facts.length && !memories.length && !roboMemoryState?.identity) return null;
-    const lines=['ROBO MEMORY CONTEXT.'];
-    if(roboMemoryState.identity) lines.push('Known identity: '+roboMemoryState.identity);
-    if(facts.length) lines.push('Known facts: '+facts.slice(-12).join(' | '));
-    if(memories.length) lines.push('Recent memories: '+memories.slice(-8).join(' | '));
-    return lines.join('\\n');
-  }
-
-  function buildVisualMemoryMessage(){
-    if(!visualMemory) return null;
-    const scene=String(visualMemory.scene||'').trim();
-    if(!scene && !visualMemory.objects?.length) return null;
-    const objects=Array.isArray(visualMemory.objects)
-      ? visualMemory.objects.slice(0,12).map(o=>String(o.name||'object')+' ×'+(o.count||1)).join(', ')
-      : '';
-    return [
-      'VISUAL MEMORY CONTEXT — not a current camera frame.',
-      scene?'Previous scene: '+scene:'',
-      objects?'Previous objects: '+objects:''
-    ].filter(Boolean).join('\\n');
-  }
-
-  async function recognizeTargetFace(_primary){
-    faceRecognitionStatus=getStoredFaceProfiles().length?'ready':'not-enrolled';
-    faceRecognitionIdentity=null;
-    faceRecognitionDistance=null;
-    faceDiag();
-    return null;
-  }
-
-  async function enrollCurrentFace(){
-    devLog('FACE','face enrollment is not active in Module 8.2 tracking build');
-    showCaption('Face recognition enrollment is disabled until tracking is stable.',true);
-    hideCaption(3000);
-    return false;
-  }
-
-  /* ---------- Developer diagnostics runtime ---------- */
+/* ---------- Developer diagnostics runtime ---------- */
 const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript"), devMemoryStatus=$("#devMemoryStatus"), devMemoryIdentity=$("#devMemoryIdentity"), devMemoryCount=$("#devMemoryCount"), devMemoryFacts=$("#devMemoryFacts"), devMemoryChange=$("#devMemoryChange");
   loadRoboMemory();
 const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
 const devSocialPresence=$("#devSocialPresence"), devSocialCount=$("#devSocialCount"), devSocialInteraction=$("#devSocialInteraction"), devSocialConfidence=$("#devSocialConfidence"), devSocialChange=$("#devSocialChange");
-devSocialPresence.textContent="UNKNOWN"; devSocialCount.textContent="0"; devSocialInteraction.textContent="IDLE"; devSocialConfidence.textContent="0%"; devSocialChange.textContent="none";
 window.__roboStructuredVisionReady=false;
 let devLogLines=["[BOOT] Developer diagnostics ready."];
 
@@ -3238,18 +3654,11 @@ function devLog(type,msg,data){
 function devStageSet(s){if(devStage)devStage.textContent=s;devLog("STAGE",s)}
 if(devBrowser)devBrowser.textContent=navigator.userAgent.includes("Chrome")?"Chrome":"Other";
 if(devAI)devAI.textContent="CHECKING · PROVIDER ADAPTER";
-if(devStt){
-  const srAvailable=typeof SR==='function';
-  devStt.textContent=srAvailable ? (sttRuntimeState==='listening'?'LISTENING':sttRuntimeState==='starting'?'STARTING':((sttRuntimeState==='error'||sttRuntimeState==='timeout')?'ERROR · '+(sttLastErrorCode||sttRuntimeState):'READY · TAP MIC')) : 'UNAVAILABLE';
-  devStt.dataset.runtime=srAvailable?'ready':'unavailable';
-}
+if(devStt)devStt.textContent=(window.SpeechRecognition||window.webkitSpeechRecognition)?"SUPPORTED":"UNSUPPORTED";
 if(devCamera)devCamera.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
 if(devMic)devMic.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
 if(devMicPermission)devMicPermission.textContent="UNKNOWN · tap CAMERA or MIC";
-if(devLocalStt){
-  const proto=SR&&SR.prototype;
-  devLocalStt.textContent=(proto && "processLocally" in proto)?"SUPPORTED API":"NOT EXPOSED";
-}
+if(devLocalStt)devLocalStt.textContent=(window.SpeechRecognition&&"processLocally" in SpeechRecognition.prototype)?"SUPPORTED API":"NOT EXPOSED";
 async function refreshMicPermissionDiagnostic(){
   if(!devMicPermission)return;
   try{
@@ -3305,27 +3714,21 @@ function runDevChecks(){
   const list=[
     ["HTTPS / localhost",location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"],
     ["getUserMedia",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
-    ["SpeechRecognition API",typeof SR==='function'],
-    ["SpeechRecognition runtime",typeof SR==='function' && (sttRuntimeState!=="idle" || sttLastErrorCode!=="")],
+    ["SpeechRecognition",!!(window.SpeechRecognition||window.webkitSpeechRecognition)],
     ["Speech synthesis","speechSynthesis" in window],
     ["Camera",!!$("#camera") && !!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
-    ["3D emoji avatar",!!$("#face") && !!avatarFrame],
+    ["3D emoji canvas",!!$("#face")],
     ["Media permission API",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
-    ["On-device STT API",!!(SR&&SR.prototype&&"processLocally" in SR.prototype)],
-    ["Module 1 core AI brain",typeof callRoboBrain==='function'],
-    ["Module 2 voice I/O",typeof buildRecognition==='function' && typeof speakWithElevenLabs==='function'],
-    ["Module 3 vision intelligence",typeof isVisionQuestion==='function' && typeof renderVisionResult==='function'],
-    ["Module 4 object tracking",typeof compareVisualObjects==='function' && typeof renderVisionResult==='function'],
-    ["AI adapter route",typeof fetch==='function'],
+    ["On-device STT API",!!(window.SpeechRecognition&&"processLocally" in SpeechRecognition.prototype)],
+    ["AI adapter route",true],
     ["Camera vision capture",!!(cameraEnabled && cameraStream && $("#camera")?.videoWidth>1 && $("#camera")?.videoHeight>1)],
     ["Camera state",cameraEnabled && !!cameraStream],
     ["Structured vision state",!!window.__roboStructuredVisionReady],
-    ["Module 5 emotion engine",typeof inferEmotion==='function' && typeof setState==='function'],
-     ["Module 6 social awareness engine",typeof deriveSocialAwareness==='function' && typeof buildSocialAwarenessMessage==='function'],
-     ["Module 7 memory engine",typeof handleMemoryCommand==='function' && typeof buildMemoryContextMessage==='function'],
+    ["Module 6 social awareness engine",typeof deriveSocialAwareness==="function"],
      ["Module 8 face tracking engine",typeof ensureFaceEngine==="function"],
      ["Module 8 face overlay",!!$("#faceTrackingOverlay")],
     ["Social awareness UI",!!$("#socialAwareness")],
+    ["Module 7 memory engine",typeof handleMemoryCommand==="function"],
     ["Persistent memory storage",typeof localStorage!=="undefined"],
     ["Memory identity UI",!!$("#memoryIdentity")],
     ["AI API key",null]
@@ -3344,22 +3747,6 @@ function runDevChecks(){
 }
 runDevChecks();
 
-function refreshRuntimeTruth(){
-  try{
-    if(devStt){
-      devStt.textContent = !SR
-        ? 'UNAVAILABLE'
-        : sttRuntimeState==='listening' ? 'LISTENING'
-        : sttRuntimeState==='starting' ? 'STARTING'
-        : (sttRuntimeState==='error'||sttRuntimeState==='timeout') ? 'ERROR · '+(sttLastErrorCode||sttRuntimeState)
-        : 'READY · TAP MIC';
-    }
-    faceDiag();
-    renderSocialDiagnostics();
-  }catch(_){ }
-}
-setInterval(refreshRuntimeTruth,1000);
-
 $("#devPageBtn").addEventListener("click",()=>{
   devPage.classList.add("open");
   devPage.setAttribute("aria-hidden","false");
@@ -3376,77 +3763,40 @@ $("#clearLogs").addEventListener("click",()=>{
   devLogs.textContent=devLogLines[0];
 });
 $("#copyLogs").addEventListener("click",async()=>{
-  const text=id=>$(id)?.textContent||'—';
   const payload=[
-    "ROBO AIOS v2.37 MODULE 8.2 FINAL LIVE FACE TRACKING DIAGNOSTICS",
+    "ROBO AIOS v2.38 MODULE 8.2 SMOOTH FACE TRACKING DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
-    "Stage: "+text('#devStage'),
-    "Camera: "+text('#devCamera'),
-    "Mic API: "+text('#devMic'),
-    "Mic permission: "+text('#devMicPermission'),
-    "STT: "+text('#devStt'),
-    "On-device STT: "+text('#devLocalStt'),
-    "AI brain: "+text('#devAI'),
-    "Face engine: "+text('#devFaceEngine'),
-    "Faces detected: "+text('#devFaceCount'),
-    "Face target: "+text('#devFaceTarget'),
-    "Face tracking: "+text('#devFaceTracking'),
-    "Face recognition: "+text('#devFaceRecognition'),
-    "Face identity: "+text('#devFaceIdentity'),
-    "Face FPS: "+text('#devFaceFps'),
-    "Social presence: "+text('#devSocialPresence'),
-    "People detected: "+text('#devSocialCount'),
-    "Social interaction: "+text('#devSocialInteraction'),
-    "Social confidence: "+text('#devSocialConfidence'),
-    "Social change: "+text('#devSocialChange'),
-    "Memory status: "+text('#devMemoryStatus'),
-    "Memory identity: "+text('#devMemoryIdentity'),
-    "Persistent memories: "+text('#devMemoryCount'),
-    "Profile facts: "+text('#devMemoryFacts'),
-    "Last memory change: "+text('#devMemoryChange'),
+    "Stage: "+devStage.textContent,
+    "Camera: "+devCamera.textContent,
+    "Mic API: "+devMic.textContent,
+    "Mic permission: "+devMicPermission.textContent,
+    "STT: "+devStt.textContent,
+    "On-device STT: "+devLocalStt.textContent,
+    "AI brain: "+devAI.textContent,
+    "Social presence: "+devSocialPresence.textContent,
+    "People detected: "+devSocialCount.textContent,
+    "Social interaction: "+devSocialInteraction.textContent,
+    "Social confidence: "+devSocialConfidence.textContent,
+    "Social change: "+devSocialChange.textContent,
+    "Memory status: "+devMemoryStatus.textContent,
+    "Memory identity: "+devMemoryIdentity.textContent,
+    "Persistent memories: "+devMemoryCount.textContent,
+    "Profile facts: "+devMemoryFacts.textContent,
+    "Last memory change: "+devMemoryChange.textContent,
     "",
     "TRANSCRIPT:",
-    text('#devTranscript'),
+    devTranscript.textContent,
     "",
     "LOG:",
     devLogLines.join("\n")
   ].join("\n");
-
   try{
-    if(navigator.clipboard && window.isSecureContext){
-      await navigator.clipboard.writeText(payload);
-      devLog("UI","Diagnostics copied to clipboard");
-      return;
-    }
-
-    const ta=document.createElement('textarea');
-    ta.value=payload;
-    ta.setAttribute('readonly','');
-    ta.style.position='fixed';
-    ta.style.left='-9999px';
-    ta.style.top='0';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    const copied=document.execCommand('copy');
-    ta.remove();
-    if(copied){
-      devLog("UI","Diagnostics copied to clipboard · legacy fallback");
-    }else{
-      throw new Error('Clipboard API unavailable');
-    }
+    await navigator.clipboard.writeText(payload);
+    devLog("UI","Diagnostics copied to clipboard");
   }catch(e){
     devLog("ERROR","Clipboard copy failed",{name:e?.name,message:e?.message});
-    try{
-      const win=window.open('', '_blank');
-      if(win){
-        win.document.write('<pre style="white-space:pre-wrap;word-break:break-word;font:14px monospace;padding:16px">'+payload.replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))+'</pre>');
-        win.document.close();
-        devLog("UI","Diagnostics opened in new window as copy fallback");
-      }
-    }catch(_){ }
   }
 });
 
@@ -3538,16 +3888,15 @@ function hookRecognitionDiagnostics(r){
 
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
-  setAutoIdle(true);
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.36 MODULE 8.2 ACTIVE FACE TRACKING + RECOGNITION · Gemini AI brain");
+  log("ROBO AIOS v2.38 MODULE 8.2 SMOOTH FACE TRACKING · Gemini AI brain");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
   log("AI provider adapter online · Gemini structured vision enabled");
   log("natural idle emotion cycle → ON");
   log("Module 6 social awareness online · presence/person count/context enabled");
   log("Module 7 memory + identity online · persistent profile enabled");
-  log("Module 8.2 smooth real-time face tracking engine ready · v2.35");
+  log("Module 8 active face tracking + recognition engine ready");
   renderSocialDiagnostics();
   renderMemoryIdentity();
   renderMemoryDiagnostics();
