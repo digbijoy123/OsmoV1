@@ -2,7 +2,7 @@
  * ROBO AIOS — Gemini AI + vision adapter
  * Vercel serverless function: /api/robo
  *
- * v2.27 backend
+ * v2.28 backend
  *
  * FIXES:
  * - Explicitly accepts cameraEnabled from client.
@@ -799,10 +799,6 @@ export default async function handler(
         'gemini',
     ).toLowerCase();
 
-  /*
-   * GET = diagnostics
-   */
-
   if (
     req.method ===
     'GET'
@@ -896,12 +892,6 @@ export default async function handler(
             req.body,
           )
         : req.body || {};
-
-    /*
-     * ---------------------------------------------------
-     * ELEVENLABS TTS REQUEST
-     * ---------------------------------------------------
-     */
 
     if (
       body.tts === true
@@ -997,7 +987,7 @@ export default async function handler(
 
         /*
          * HTTP headers must be ASCII-safe.
-         * Do not use the Unicode ellipsis character here.
+         * Do not use the Unicode ellipsis character.
          */
 
         const maskedVoice =
@@ -1064,12 +1054,6 @@ export default async function handler(
         );
       }
     }
-
-    /*
-     * ---------------------------------------------------
-     * GEMINI REQUEST
-     * ---------------------------------------------------
-     */
 
     const provider =
       PROVIDERS[
