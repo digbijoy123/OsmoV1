@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.29 MODULE 8.2 LIVE FACE TRACKING HARDENED</title>
+<title>ROBO AIOS v2.30 MODULE 8.2 LIVE FACE TRACKING FACE-API HARDENED</title>
 <style>
 :root{
   --void:#090d15;
@@ -212,9 +212,6 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 @media(max-width:700px){.devGrid{grid-template-columns:1fr}.devLogCard{grid-column:auto}.devHeader h2{font-size:17px}}
 
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.20.0/dist/tf-core.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.20.0/dist/tf-converter.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.20.0/dist/tf-backend-webgl.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js" defer></script>
 </head>
 <body>
@@ -224,11 +221,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.29 · MODULE 8.2 LIVE FACE TRACKING</div>
+      <div id="roboBuildMarker">ROBO v2.30 · MODULE 8.2 LIVE FACE TRACKING</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.29 · 8.2 LIVE FACE TRACKING + MEM + IDENTITY</small></div>
+          <div class="brand">ROBO <small>v2.30 · 8.2 LIVE FACE TRACKING + MEM + IDENTITY</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -297,7 +294,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.29 MODULE 8.2 · LIVE FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.30 MODULE 8.2 · LIVE FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -463,7 +460,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             i=$('#devFaceIdentity'),
             f=$('#devFaceFps');
 
-      if(e) e.textContent=faceEngineReady?(blazeFaceReady?'ONLINE · BLAZEFACE':'ONLINE'):(faceEngineLoading?'LOADING':'OFFLINE');
+      if(e) e.textContent=faceEngineReady?(faceEngineReady?'ONLINE · FACE-API':'OFFLINE'):(faceEngineLoading?'LOADING':'OFFLINE');
       if(c) c.textContent=String(faceDetections.length);
       if(t) t.textContent=faceTarget?'PRIMARY':'NONE';
       if(tr){
@@ -664,63 +661,30 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     })[0] || null;
   }
 
-  const BLAZEFACE_CDNS = [
-    'https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.js',
-    'https://unpkg.com/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.js'
-  ];
-  let blazeFaceLoadPromise = null;
+  let faceApiLoadPromise=null;
+  let faceSsdReady=false;
 
-  function getBlazeFaceGlobal(){
-    return window.blazeface || window.blazeFace || null;
-  }
+  function waitForFaceApi(timeoutMs=8000){
+    if(window.faceapi) return Promise.resolve(window.faceapi);
+    if(faceApiLoadPromise) return faceApiLoadPromise;
 
-  function loadExternalScript(src){
-    return new Promise((resolve,reject)=>{
-      const existing = Array.from(document.scripts).find(s=>s.src===src);
-      if(existing){
-        if(getBlazeFaceGlobal()) return resolve(getBlazeFaceGlobal());
-        existing.addEventListener('load',()=>resolve(getBlazeFaceGlobal()));
-        existing.addEventListener('error',()=>reject(new Error('script failed: '+src)),{once:true});
-        return;
-      }
-      const script=document.createElement('script');
-      script.src=src;
-      script.async=true;
-      script.crossOrigin='anonymous';
-      script.onload=()=>{
-        const lib=getBlazeFaceGlobal();
-        if(lib) resolve(lib);
-        else reject(new Error('script loaded but BlazeFace global was not created'));
-      };
-      script.onerror=()=>reject(new Error('script failed: '+src));
-      document.head.appendChild(script);
-    });
-  }
-
-  async function ensureBlazeFaceLibrary(){
-    const ready=getBlazeFaceGlobal();
-    if(ready) return ready;
-    if(blazeFaceLoadPromise) return blazeFaceLoadPromise;
-
-    blazeFaceLoadPromise=(async()=>{
-      let lastError=null;
-      for(const src of BLAZEFACE_CDNS){
-        try{
-          const lib=await loadExternalScript(src);
-          if(lib) return lib;
-        }catch(err){
-          lastError=err;
-          devLog('FACE ERROR','BlazeFace CDN load failed',{src,message:err?.message||String(err)});
+    faceApiLoadPromise=new Promise((resolve,reject)=>{
+      const started=performance.now();
+      const poll=()=>{
+        if(window.faceapi){
+          resolve(window.faceapi);
+          return;
         }
-      }
-      throw lastError || new Error('BlazeFace library unavailable from all configured CDNs');
-    })();
+        if(performance.now()-started>=timeoutMs){
+          reject(new Error('face-api.js library did not become available'));
+          return;
+        }
+        setTimeout(poll,60);
+      };
+      poll();
+    }).finally(()=>{ faceApiLoadPromise=null; });
 
-    try{
-      return await blazeFaceLoadPromise;
-    }finally{
-      if(!getBlazeFaceGlobal()) blazeFaceLoadPromise=null;
-    }
+    return faceApiLoadPromise;
   }
 
   async function ensureFaceEngine(){
@@ -735,87 +699,81 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     faceEngineLoading=true;
     faceDiag();
-    faceBadge('LOADING LIVE FACE ENGINE');
+    faceBadge('LOADING FACE TRACKER');
 
     try{
-      // Tracking must not depend on face-api.js. Initialize TensorFlow and
-      // BlazeFace first; recognition assets are optional and loaded separately.
-      if(!window.tf){
-        throw new Error('TensorFlow.js core is unavailable');
+      const api=await waitForFaceApi(9000);
+
+      if(!api){
+        throw new Error('face-api.js library unavailable');
       }
 
-      try{
-        if(tf.findBackend && tf.findBackend('webgl')){
-          await tf.setBackend('webgl');
-        }
-      }catch(_){ }
+      // TinyFaceDetector is the fast live detector. It is the only model that
+      // must finish loading before 8.2 starts. Larger fallback/recognition
+      // models are loaded in the background and never block tracking.
+      await api.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URI);
 
-      await tf.ready();
-      faceBackendReady=!!tf.getBackend();
-
-      if(!faceBackendReady){
-        throw new Error('TensorFlow backend failed to initialize');
-      }
-
-      const blazeLib=await ensureBlazeFaceLibrary();
-
-      if(!blazeLib || typeof blazeLib.load!=='function'){
-        throw new Error('BlazeFace library loaded but load() is unavailable');
-      }
-
-      if(!blazeFaceModel){
-        blazeFaceModel=await blazeLib.load({
-          maxFaces:10,
-          scoreThreshold:0.45
-        });
-      }
-
-      if(!blazeFaceModel){
-        throw new Error('BlazeFace model failed to initialize');
-      }
-
-      blazeFaceReady=true;
       faceDetectionModel={
         inputSize:320,
-        scoreThreshold:0.25
+        scoreThreshold:0.12
       };
 
-      // Make tracking available immediately. Do not block live tracking on
-      // optional face-api recognition model downloads.
       faceEngineReady=true;
       faceRecognitionAvailable=false;
-      devLog('FACE','BlazeFace tracker ready',{backend:tf.getBackend(),video:`${camera.videoWidth}x${camera.videoHeight}`,cdn:getBlazeFaceGlobal()?'loaded':'missing'});
       faceRecognitionStatus='loading';
-      faceBadge('LIVE FACE TRACKER ONLINE');
+
+      devLog('FACE','Face tracker ready',{
+        detector:'face-api TinyFaceDetector',
+        ssdFallback:'loading',
+        video:`${camera.videoWidth}x${camera.videoHeight}`
+      });
+
+      faceBadge('FACE TRACKER ONLINE');
       faceDiag();
       setTimeout(()=>faceBadge('',false),1800);
 
-      // Recognition is optional. Load it in the background.
-      if(window.faceapi){
-        (async()=>{
-          try{
-            await Promise.race([
-              Promise.all([
-                faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URI),
-                faceapi.nets.faceLandmark68TinyNet.loadFromUri(FACE_MODEL_URI),
-                faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URI)
-              ]),
-              new Promise((_,reject)=>setTimeout(()=>reject(new Error('recognition model timeout')),7000))
-            ]);
-            faceRecognitionAvailable=true;
-            faceRecognitionStatus='ready';
-            faceDiag();
-          }catch(err){
-            faceRecognitionAvailable=false;
-            faceRecognitionStatus='unavailable';
-            devLog('FACE','recognition models unavailable; live tracking remains active',{message:err?.message||String(err)});
-            faceDiag();
-          }
-        })();
-      }else{
-        faceRecognitionStatus='unavailable';
-        faceDiag();
-      }
+      // SSD fallback is optional and loads in the background.
+      (async()=>{
+        try{
+          await Promise.race([
+            api.nets.ssdMobilenetv1.loadFromUri(FACE_MODEL_URI),
+            new Promise((_,reject)=>setTimeout(()=>reject(new Error('SSD fallback model timeout')),9000))
+          ]);
+          faceSsdReady=true;
+          devLog('FACE','SSD fallback model ready');
+          faceDiag();
+        }catch(err){
+          faceSsdReady=false;
+          devLog('FACE','SSD fallback unavailable; TinyFaceDetector remains active',{
+            message:err?.message||String(err)
+          });
+          faceDiag();
+        }
+      })();
+
+      // Recognition is loaded separately and never blocks the live tracker.
+      (async()=>{
+        try{
+          await Promise.race([
+            Promise.all([
+              api.nets.faceLandmark68TinyNet.loadFromUri(FACE_MODEL_URI),
+              api.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URI)
+            ]),
+            new Promise((_,reject)=>setTimeout(()=>reject(new Error('recognition model timeout')),9000))
+          ]);
+          faceRecognitionAvailable=true;
+          faceRecognitionStatus='ready';
+          faceDiag();
+          devLog('FACE','Face recognition models ready');
+        }catch(err){
+          faceRecognitionAvailable=false;
+          faceRecognitionStatus='unavailable';
+          devLog('FACE','recognition models unavailable; live tracking remains active',{
+            message:err?.message||String(err)
+          });
+          faceDiag();
+        }
+      })();
 
       return true;
     }catch(err){
@@ -825,12 +783,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       faceRecognitionAvailable=false;
       faceRecognitionStatus='load-failed';
 
-      devLog('FACE ERROR','live face engine load failed',{
+      devLog('FACE ERROR','face tracker load failed',{
         message:err?.message||String(err),
-        backend:window.tf?.getBackend?.()||'none'
+        detector:'face-api',
+        video:`${camera.videoWidth}x${camera.videoHeight}`
       });
 
-      faceBadge('FACE ENGINE LOAD FAILED');
+      faceBadge('FACE TRACKER LOAD FAILED');
       faceDiag();
       return false;
     }finally{
@@ -843,59 +802,53 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return [];
     }
 
-    if(!blazeFaceReady || !blazeFaceModel){
+    if(!window.faceapi || !faceEngineReady){
       return [];
     }
 
     try{
-      const predictions=await blazeFaceModel.estimateFaces(camera,false);
+      const options=new faceapi.TinyFaceDetectorOptions({
+        inputSize:320,
+        scoreThreshold:0.12
+      });
 
-      if(!Array.isArray(predictions)){
-        return [];
+      let detections=await faceapi.detectAllFaces(camera,options);
+
+      // Difficult lighting / smaller faces: use SSD MobileNet as a fallback.
+      if(!detections.length && faceSsdReady){
+        detections=await faceapi.detectAllFaces(
+          camera,
+          new faceapi.SsdMobilenetv1Options({
+            minConfidence:0.20,
+            maxResults:5
+          })
+        );
       }
 
-      return predictions.map(p=>{
-        const tl=Array.isArray(p?.topLeft) ? p.topLeft : null;
-        const br=Array.isArray(p?.bottomRight) ? p.bottomRight : null;
-
-        if(!tl || !br || tl.length<2 || br.length<2){
-          return null;
-        }
-
-        const x=Number(tl[0]);
-        const y=Number(tl[1]);
-        const right=Number(br[0]);
-        const bottom=Number(br[1]);
-        const width=right-x;
-        const height=bottom-y;
-        const probability=Array.isArray(p?.probability)
-          ? Number(p.probability[0]||0)
-          : Number(p?.probability||0);
-
-        if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(width)||!Number.isFinite(height)){
-          return null;
-        }
+      return detections.map(d=>{
+        const b=d?.box;
+        if(!b) return null;
 
         const box={
-          x:Math.max(0,x),
-          y:Math.max(0,y),
-          width,
-          height
+          x:Number(b.x),
+          y:Number(b.y),
+          width:Number(b.width),
+          height:Number(b.height)
         };
 
-        if(!isValidFaceBox(box)){
-          return null;
-        }
+        if(!isValidFaceBox(box)) return null;
 
         return {
           box,
-          score:Number.isFinite(probability)?probability:0
+          score:Number.isFinite(Number(d?.score)) ? Number(d.score) : 0
         };
       }).filter(Boolean);
+
     }catch(err){
-      devLog('FACE ERROR','local detector failed',{
+      devLog('FACE ERROR','local face-api detector failed',{
+        name:err?.name||'Error',
         message:err?.message||String(err),
-        backend:window.tf?.getBackend?.()||'none',
+        stack:String(err?.stack||'').slice(0,300),
         video:`${camera.videoWidth}x${camera.videoHeight}`
       });
       return [];
