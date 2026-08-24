@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.65 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.66 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -56,7 +56,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 /* Camera */
 .camera{position:absolute;left:50%;right:auto;top:92px;width:min(92%,420px);height:auto;aspect-ratio:16/9;transform:translateX(-50%);border-radius:18px;overflow:hidden;background:#080b11;border:2px solid rgba(255,255,255,.75);box-shadow:0 12px 28px rgba(44,36,64,.22);z-index:25}
-.camera video{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1)}
+.camera video{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1)}.camera #cameraPreviewCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover;transform:scaleX(-1);z-index:1;background:#080b11}.camera.rear #cameraPreviewCanvas{transform:none}.camera #cameraPreviewCanvas.hidden{display:none}
 .camera.rear video{transform:none}
 #cameraSwitchBtn:disabled{opacity:.45;cursor:not-allowed}
 .camera .camLabel{position:absolute;left:8px;bottom:6px;padding:4px 6px;border-radius:8px;background:rgba(0,0,0,.55);color:#fff;font-size:7px}
@@ -222,11 +222,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.65 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.66 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.65</small></div>
+          <div class="brand">ROBO <small>v2.66</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -237,7 +237,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       </header>
 
       <div class="camera empty" id="cameraBox">
-        <video id="camera" autoplay playsinline muted></video>
+        <video id="camera" autoplay playsinline muted></video><canvas id="cameraPreviewCanvas" class="hidden" aria-hidden="true"></canvas>
         <div class="visionOverlay" id="visionOverlay"></div><div class="faceTrackingOverlay" id="faceTrackingOverlay"></div>
         <div class="visionSummary" id="visionSummary"></div>
         <div class="socialAwareness" id="socialAwareness" data-state="unknown">SOCIAL · UNKNOWN</div>
@@ -295,7 +295,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.65 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.66 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -420,6 +420,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let cameraStartState = 'idle';
   let cameraStartQueued = false;
   let cameraStartAbortToken = 0;
+  let cameraPreviewRaf = null;
+  let cameraPreviewRunning = false;
+  let cameraPreviewFrameToken = 0;
+  let cameraPreviewCanvas = null;
+  let cameraPreviewCtx = null;
   let visionRequestController = null;
   let latestVision = null;
   let visualMemory = null;
@@ -874,7 +879,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   function renderLiveTargetPanel(){
-    // v2.65: the camera panel is intentionally clean.
+    // v2.66: the camera panel is intentionally clean.
     // Live identity is shown on the face tracking box itself.
     const summary=$('#visionSummary');
     if(!summary) return;
@@ -3014,6 +3019,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const stream=cameraStream;
     cameraStream=null;
     cameraEnabled=false;
+    stopCameraPreviewRenderer();
+    const previewCanvas=$('#cameraPreviewCanvas');
+    if(previewCanvas){previewCanvas.classList.add('hidden');}
     stopFaceLoop();
     if(stream) stream.getTracks().forEach(track=>{ try{track.stop();}catch(_){ } });
     const video=$('#camera');
@@ -3062,7 +3070,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 
   /*
-   * v2.65 CAMERA PREVIEW HARDENING
+   * v2.66 CAMERA PREVIEW HARDENING
    * Camera permission can succeed while Android Chrome has not yet committed
    * the MediaStream to a visible video compositor frame. A later tab/page
    * restore can make the exact same stream suddenly appear, which is the
@@ -3070,6 +3078,47 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
    * waits for metadata/playback, waits for a rendered frame when supported,
    * and forces one layout repaint without changing the media stream itself.
    */
+
+  function stopCameraPreviewRenderer(){
+    cameraPreviewRunning=false;
+    cameraPreviewFrameToken++;
+    if(cameraPreviewRaf!=null){
+      try{ cancelAnimationFrame(cameraPreviewRaf); }catch(_){}
+      cameraPreviewRaf=null;
+    }
+  }
+
+  function startCameraPreviewRenderer(video){
+    if(!video) return;
+    const canvas=$('#cameraPreviewCanvas');
+    if(!canvas) return;
+    cameraPreviewCanvas=canvas;
+    cameraPreviewCtx=canvas.getContext('2d',{alpha:false,desynchronized:true});
+    if(!cameraPreviewCtx) return;
+
+    stopCameraPreviewRenderer();
+    cameraPreviewRunning=true;
+    const token=++cameraPreviewFrameToken;
+
+    const draw=()=>{
+      if(!cameraPreviewRunning || token!==cameraPreviewFrameToken) return;
+      if(cameraEnabled===false && !cameraStream) return;
+      const w=video.videoWidth||0;
+      const h=video.videoHeight||0;
+      if(w>1 && h>1){
+        if(canvas.width!==w) canvas.width=w;
+        if(canvas.height!==h) canvas.height=h;
+        try{
+          cameraPreviewCtx.drawImage(video,0,0,w,h);
+          canvas.classList.remove('hidden');
+        }catch(_){}
+      }
+      cameraPreviewRaf=requestAnimationFrame(draw);
+    };
+    draw();
+    log('CAM · canvas preview renderer started');
+  }
+
   async function ensureCameraPreview(video, stream, track){
     if(!video || !stream || !track) throw new Error('Camera preview unavailable');
 
@@ -3160,12 +3209,16 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       }));
     }
 
-    // Force a compositor repaint. This does not touch srcObject or the track.
-    const priorVisibility=video.style.visibility;
-    video.style.visibility='hidden';
-    void video.offsetWidth;
-    video.style.visibility=priorVisibility || 'visible';
-    video.style.opacity='1';
+    // Use a dedicated canvas preview renderer. Android Chrome can have a live
+    // MediaStream/video element while its compositor stays black until a tab
+    // lifecycle change. Drawing the decoded frame into canvas gives the user a
+    // deterministic live preview without changing the camera stream or detector.
+    startCameraPreviewRenderer(video);
+    const previewCanvas=$('#cameraPreviewCanvas');
+    if(previewCanvas){
+      previewCanvas.classList.remove('hidden');
+      previewCanvas.style.transform=cameraFacingMode==='environment'?'none':'scaleX(-1)';
+    }
 
     return {
       width:video.videoWidth,
@@ -3215,6 +3268,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           switchBtn.setAttribute('aria-pressed',String(facingMode==='environment'));
         }
         $('#cameraBox').classList.toggle('rear',facingMode==='environment');
+        const previewCanvas=$('#cameraPreviewCanvas'); if(previewCanvas) previewCanvas.style.transform=facingMode==='environment'?'none':'scaleX(-1)';
         $('#mediaDot').className='dot ok';
         $('#mediaText').textContent=facingMode==='environment'?'REAR CAMERA ON':'CAMERA ON';
         renderLiveTargetPanel();
@@ -3292,6 +3346,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         switchBtn.setAttribute('aria-pressed',String(facingMode==='environment'));
       }
       $('#cameraBox').classList.toggle('rear',facingMode==='environment');
+      const previewCanvas=$('#cameraPreviewCanvas'); if(previewCanvas) previewCanvas.style.transform=facingMode==='environment'?'none':'scaleX(-1)';
       $('#mediaDot').className='dot ok';
       $('#mediaText').textContent=facingMode==='environment'?'REAR CAMERA ON':'CAMERA ON';
       renderLiveTargetPanel();
@@ -3454,6 +3509,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           ensureCameraPreview(video,cameraStream,track)
             .then(meta=>{
               $('#cameraBox')?.classList.remove('empty');
+              startCameraPreviewRenderer(video);
               log('CAM · preview resumed after visibility restore',meta);
               renderFaceTarget();
             })
@@ -4837,7 +4893,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.65 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.66 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4969,7 +5025,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.65 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.66 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
