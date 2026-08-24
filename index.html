@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.43 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.44 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -65,7 +65,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 .camera .visionOverlay{position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden}
 .camera .visionBox{position:absolute;border:2px solid var(--cyan);border-radius:6px;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 12px rgba(95,212,208,.28);background:rgba(95,212,208,.06)}
 .camera .visionLabel{position:absolute;left:-2px;top:-19px;max-width:120px;padding:3px 5px;border-radius:5px;background:rgba(9,13,21,.82);color:#fff;font-size:6px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.faceTrackingOverlay{position:absolute;inset:0;pointer-events:none;z-index:6;overflow:hidden}.faceTrackBox{position:absolute;box-sizing:border-box;aspect-ratio:1/1;border:2px solid #7ee59a;border-radius:8px;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 15px rgba(126,229,154,.30);background:rgba(126,229,154,.05);transition:left .07s linear,top .07s linear,width .07s linear,height .07s linear}.faceTrackBox.target{border-color:#69d8cf;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 18px rgba(105,216,207,.4)}.faceTrackLabel{position:absolute;left:-2px;top:-24px;max-width:180px;padding:4px 7px;border-radius:6px;background:rgba(9,13,21,.92);color:#fff;font-size:8px;font-weight:700;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.faceTrackBox.unknown .faceTrackLabel{opacity:.82}.faceTrackBox.lost{opacity:.4;border-style:dashed}.faceEngineStatus{position:absolute;left:50%;transform:translateX(-50%);top:7px;z-index:9;padding:4px 7px;border-radius:999px;background:rgba(9,13,21,.72);color:#fff;font-size:6px;letter-spacing:.06em;opacity:0;transition:.2s}.faceEngineStatus.show{opacity:1}
+.faceTrackingOverlay{position:absolute;inset:0;pointer-events:none;z-index:6;overflow:hidden}.faceTrackBox{position:absolute;box-sizing:border-box;aspect-ratio:1/1;border:2px solid #7ee59a;border-radius:8px;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 15px rgba(126,229,154,.30);background:rgba(126,229,154,.05);transition:left .07s linear,top .07s linear,width .07s linear;height .07s linear}.faceTrackBox.target{border-color:#69d8cf;box-shadow:0 0 0 1px rgba(9,13,21,.35),0 0 18px rgba(105,216,207,.4)}.faceTrackLabel{position:absolute;left:-2px;top:-27px;max-width:min(210px,48vw);padding:4px 8px;border-radius:6px;background:rgba(9,13,21,.94);color:#fff;font-size:9px;font-weight:800;line-height:1.1;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 2px 8px rgba(0,0,0,.25)}.faceTrackBox.labelBelow .faceTrackLabel{top:calc(100% + 4px)}.faceTrackBox.unknown .faceTrackLabel{opacity:.88}.faceTrackBox.lost{opacity:.4;border-style:dashed}.faceEngineStatus{position:absolute;left:50%;transform:translateX(-50%);top:7px;z-index:9;padding:4px 7px;border-radius:999px;background:rgba(9,13,21,.72);color:#fff;font-size:6px;letter-spacing:.06em;opacity:0;transition:.2s}.faceEngineStatus.show{opacity:1}
 .camera /* Module 6 social-awareness status badge */
 .socialAwareness{position:absolute;left:10px;bottom:10px;z-index:8;padding:5px 8px;border:1px solid rgba(95,212,208,.35);border-radius:999px;background:rgba(9,13,21,.72);backdrop-filter:blur(8px);font-size:9px;letter-spacing:.08em;color:#dffefa;opacity:0;transform:translateY(5px);transition:opacity .2s ease,transform .2s ease}
 .socialAwareness.show{opacity:1;transform:translateY(0)}
@@ -79,7 +79,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 .memoryIdentity[data-state="known"]{border-color:rgba(85,197,140,.55)}
 .memoryIdentity[data-state="unknown"]{border-color:rgba(240,180,91,.45)}
 .perceptionFusion{position:absolute;left:50%;bottom:10px;transform:translateX(-50%) translateY(5px);z-index:8;padding:5px 9px;border:1px solid rgba(95,212,208,.35);border-radius:999px;background:rgba(9,13,21,.76);backdrop-filter:blur(8px);font-size:8px;letter-spacing:.07em;color:#e8ffff;opacity:0;transition:.2s;white-space:nowrap;max-width:82%;overflow:hidden;text-overflow:ellipsis}.perceptionFusion.show{opacity:1;transform:translateX(-50%)}.perceptionFusion[data-state="known"]{border-color:rgba(85,197,140,.62)}.perceptionFusion[data-state="tracking"]{border-color:rgba(105,216,207,.58)}.perceptionFusion[data-state="unknown"]{border-color:rgba(240,180,91,.45)}
-.visionSummary{position:absolute;left:7px;right:7px;top:7px;padding:5px 6px;border-radius:7px;background:rgba(9,13,21,.72);color:#fff;font-size:6px;line-height:1.25;letter-spacing:.04em;opacity:0;transform:translateY(-3px);transition:.2s}
+.visionSummary{position:absolute;left:7px;right:7px;top:7px;max-height:23%;padding:7px 9px;border-radius:8px;background:rgba(9,13,21,.84);color:#fff;font-size:8px;line-height:1.35;letter-spacing:.03em;opacity:0;transform:translateY(-3px);transition:.2s;overflow:auto;overflow-wrap:anywhere;word-break:break-word;box-sizing:border-box;z-index:7;pointer-events:none}.camera .visionSummary::-webkit-scrollbar{width:3px}.camera .visionSummary::-webkit-scrollbar-thumb{background:rgba(255,255,255,.28);border-radius:3px}
 .camera .visionSummary.show{opacity:1;transform:none}
 
 /* Avatar zone */
@@ -222,11 +222,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.43 · MODULES 6+7+8 PERCEPTION FUSION</div>
+      <div id="roboBuildMarker">ROBO v2.44 · MODULES 6+7+8 PERCEPTION FUSION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.43 PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
+          <div class="brand">ROBO <small>v2.44 PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -295,7 +295,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.43 MODULE 6+7+8 · PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.44 MODULE 6+7+8 · PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -871,11 +871,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       const left=Math.max(0,Math.min(100-squarePct,centerX-squarePct/2));
       const top=Math.max(0,Math.min(100-squarePct,centerY-squarePct/2));
       const el=document.createElement('div');
-      el.className='faceTrackBox '+(isTarget?'target ':'')+(labelText==='UNKNOWN'?'unknown':'known');
+      const resolvedLabel=(labelText&&labelText!=='FACE') ? labelText : (isTarget ? (getActivePerson()?.displayName||faceRecognitionIdentity||'UNKNOWN') : 'UNKNOWN');
+      el.className='faceTrackBox '+(isTarget?'target ':'')+(resolvedLabel==='UNKNOWN'?'unknown':'known');
       el.style.left=left+'%'; el.style.top=top+'%'; el.style.width=squarePct+'%'; el.style.height=squarePct+'%';
       const label=document.createElement('span');
       label.className='faceTrackLabel';
-      label.textContent=String(labelText||'UNKNOWN')+(isTarget?' · TARGET':'');
+      label.textContent=String(resolvedLabel||'UNKNOWN')+(isTarget?' · TARGET':'');
       el.appendChild(label); overlay.appendChild(el);
     };
 
@@ -915,6 +916,17 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       }
     }
     return best;
+  }
+
+  function boxIoU(a,b){
+    if(!isValidFaceBox(a) || !isValidFaceBox(b)) return 0;
+    const ax1=Number(a.x), ay1=Number(a.y), ax2=ax1+Number(a.width), ay2=ay1+Number(a.height);
+    const bx1=Number(b.x), by1=Number(b.y), bx2=bx1+Number(b.width), by2=by1+Number(b.height);
+    const ix1=Math.max(ax1,bx1), iy1=Math.max(ay1,by1), ix2=Math.min(ax2,bx2), iy2=Math.min(ay2,by2);
+    const iw=Math.max(0,ix2-ix1), ih=Math.max(0,iy2-iy1);
+    const inter=iw*ih;
+    const union=Math.max(1,Number(a.width)*Number(a.height)+Number(b.width)*Number(b.height)-inter);
+    return inter/union;
   }
 
   async function recognizeAllVisibleFaces(){
@@ -982,15 +994,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       // between a real name and UNKNOWN while the next descriptor pass is running.
       const now=Date.now();
       for(const live of liveFaces){
-        if(live.identity==='UNKNOWN' && live.lastKnownIdentity && (now-live.lastKnownAt)<4500){
-          live.identity=live.lastKnownIdentity;
-          live.personId=live.lastKnownPersonId||null;
-          live.identityConfidence=live.lastKnownIdentityConfidence||0;
-        }else if(live.identity!=='UNKNOWN'){
+        if(live.identity!=='UNKNOWN'){
           live.lastKnownIdentity=live.identity;
           live.lastKnownPersonId=live.personId||null;
           live.lastKnownAt=now;
           live.lastKnownIdentityConfidence=live.identityConfidence||0;
+        }else{
+          const previousFace=faceDetections.find(prev=>prev?.lastKnownPersonId && boxIoU(prev.box,live.box)>=0.42);
+          if(previousFace && (now-(previousFace.lastKnownAt||0))<2200){
+            live.identity=previousFace.lastKnownIdentity||'UNKNOWN';
+            live.personId=previousFace.lastKnownPersonId||null;
+            live.identityConfidence=previousFace.lastKnownIdentityConfidence||0;
+          }
         }
       }
 
@@ -1005,13 +1020,23 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           setActivePerson(person.personId,'live-face-identity');
           faceRecognitionIdentity=person.displayName||'UNKNOWN';
           faceRecognitionStatus='recognized';
-          faceRecognitionDistance=matchedPeople.find(x=>x.live===primary)?.confidence!=null
-            ? Math.max(0,1-(Number(matchedPeople.find(x=>x.live===primary).confidence)/100))
+          const matched=matchedPeople.find(x=>x.live===primary);
+          faceRecognitionDistance=matched?.confidence!=null
+            ? Math.max(0,1-(Number(matched.confidence)/100))
             : faceRecognitionDistance;
         }
       }else if(primary){
         faceRecognitionIdentity=primary.identity||'UNKNOWN';
         faceRecognitionStatus=faceRecognitionIdentity!=='UNKNOWN'?'recognized':(profiles.length?'ready':'not-enrolled');
+        if(faceRecognitionIdentity==='UNKNOWN'){
+          setActivePerson(null,'face-identity-unknown');
+          faceRecognitionDistance=null;
+        }
+      }else{
+        faceRecognitionIdentity=null;
+        faceRecognitionStatus=profiles.length?'ready':'not-enrolled';
+        setActivePerson(null,'no-live-face-match');
+        faceRecognitionDistance=null;
       }
 
       faceLastRecognitionAt=performance.now();
@@ -1091,6 +1116,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function setActivePerson(personId, reason='identity-selected'){
     if(!roboMemory) return false;
     ensureMemoryRegistry();
+    if(personId===null || personId==='' || personId==='none'){
+      roboMemory.activePersonId=null;
+      lastMemoryChange=reason;
+      renderMemoryIdentity();
+      renderMemoryDiagnostics();
+      return true;
+    }
     const person=roboMemory.persons.find(p=>p.personId===personId);
     if(!person) return false;
     roboMemory.activePersonId=person.personId;
@@ -1195,7 +1227,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     let lastChange='none';
     if(previous && Number(previous.personCount||0)!==personCount) lastChange=Number(previous.personCount||0)===0?'person-entered':(personCount===0?'person-left':'person-count-changed');
     const primary=list[0]||null;
-    socialAwareness={...previous,presence,personCount,primaryPerson:primary?{label:primary.identity||'UNKNOWN',confidence:Number(primary.score||0)*100,box:primary.box,relativeArea:primary.box?Number(((primary.box.width*primary.box.height)/(camera.videoWidth*camera.videoHeight||1)).toFixed(4)):0}:null,people:list.map((f,i)=>({id:f.personId||('face-person-'+i),label:f.identity||'UNKNOWN',count:1,confidence:Number(f.score||0)*100,box:f.box,area:Number(f.box?.width||0)*Number(f.box?.height||0)})),interaction,confidence,lastChange,timestamp:Date.now(),session:cameraSession,source:'local-face-tracking'};
+    const activeName=getActivePerson()?.displayName || faceRecognitionIdentity || primary?.identity || 'UNKNOWN';
+    socialAwareness={...previous,presence,personCount,primaryPerson:primary?{label:activeName||'UNKNOWN',confidence:Number(primary.score||0)*100,box:primary.box,relativeArea:primary.box?Number(((primary.box.width*primary.box.height)/(camera.videoWidth*camera.videoHeight||1)).toFixed(4)):0}:null,people:list.map((f,i)=>({id:f.personId||('face-person-'+i),label:f.identity||'UNKNOWN',count:1,confidence:Number(f.score||0)*100,box:f.box,area:Number(f.box?.width||0)*Number(f.box?.height||0)})),interaction,confidence,lastChange,timestamp:Date.now(),session:cameraSession,source:'local-face-tracking'};
     previousSocialAwareness=socialAwareness; renderSocialAwarenessBadge(); renderSocialDiagnostics(); updatePerceptionFusion('live-face-social');
   }
 
@@ -1225,14 +1258,14 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           const dist=boxDistance(next.box,prev.box);
           if(dist<bestDist){ bestDist=dist; best=prev; }
         }
-        if(best && bestDist < Math.max(80, Math.max(next.box.width,next.box.height)*1.25)){
-          if(best.identity) next.identity=best.identity;
-          if(best.personId) next.personId=best.personId;
-          if(best.identityConfidence) next.identityConfidence=best.identityConfidence;
-          if(best.lastKnownIdentity) next.lastKnownIdentity=best.lastKnownIdentity;
-          if(best.lastKnownPersonId) next.lastKnownPersonId=best.lastKnownPersonId;
-          if(best.lastKnownAt) next.lastKnownAt=best.lastKnownAt;
-          if(best.lastKnownIdentityConfidence) next.lastKnownIdentityConfidence=best.lastKnownIdentityConfidence;
+        const continuityLimit=Math.max(55,Math.max(next.box.width,next.box.height)*0.62);
+        if(best && bestDist < continuityLimit && boxIoU(next.box,best.box)>=0.24){
+          if(best.lastKnownIdentity && best.lastKnownPersonId){
+            next.lastKnownIdentity=best.lastKnownIdentity;
+            next.lastKnownPersonId=best.lastKnownPersonId;
+            next.lastKnownAt=best.lastKnownAt||Date.now();
+            next.lastKnownIdentityConfidence=best.lastKnownIdentityConfidence||0;
+          }
         }
       }
 
@@ -1244,8 +1277,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       if(primary){
 
+        const previousTarget=faceTarget;
+        const targetDistance=previousTarget&&isValidFaceBox(previousTarget.box)?boxDistance(previousTarget.box,primary.box):Infinity;
+        const targetChanged=!previousTarget || targetDistance>Math.max(90,Math.max(primary.box.width,primary.box.height)*0.95) || boxIoU(previousTarget?.box,primary.box)<0.18;
         const reacquired=
-          !faceTarget ||
+          !previousTarget ||
           (
             faceTargetLostAt>0 &&
             performance.now()-faceTargetLostAt>
@@ -1254,7 +1290,20 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
         faceTarget=primary;
         faceTargetLostAt=0;
-        if(primary.identity) faceRecognitionIdentity=primary.identity;
+
+        if(targetChanged){
+          // Immediately invalidate the previous identity. The visual box remains instant,
+          // but its tag becomes UNKNOWN until the next descriptor pass confirms the person.
+          faceRecognitionIdentity=null;
+          faceRecognitionDistance=null;
+          faceRecognitionStatus=getStoredFaceProfiles().length?'ready':'not-enrolled';
+          setActivePerson(null,'face-target-changed');
+          renderMemoryIdentity();
+          renderMemoryDiagnostics();
+          faceLastRecognitionAt=0;
+        }else if(primary.identity){
+          faceRecognitionIdentity=primary.identity;
+        }
 
         if(
           reacquired ||
@@ -1273,10 +1322,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
         if(faceRecognitionAvailable && getStoredFaceProfiles().length && !faceRecognitionInFlight){
           const recognitionDue =
+            targetChanged ||
             faceLastRecognitionAt<=0 ||
             performance.now()-faceLastRecognitionAt>=FACE_RECOGNITION_INTERVAL_MS;
           if(recognitionDue){
-            recognizeAllVisibleFaces().catch(()=>{});
+            recognizeAllVisibleFaces().catch((err)=>devLog('FACE ERROR','scheduled recognition failed',{message:err?.message||String(err)}));
           }
         }
 
@@ -1302,7 +1352,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             getStoredFaceProfiles().length
               ? 'ready'
               : 'not-enrolled';
-          if(roboMemory){ roboMemory.activePersonId='primary-user'; renderMemoryIdentity(); renderMemoryDiagnostics(); }
+          if(roboMemory){ setActivePerson(null,'face-target-lost'); renderMemoryIdentity(); renderMemoryDiagnostics(); }
         }
       }
 
@@ -1643,8 +1693,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       roboMemory.persons.unshift(DEFAULT_PERSON());
     }
     roboMemory.primaryPersonId='primary-user';
-    roboMemory.activePersonId=roboMemory.persons.some(p=>p.personId===roboMemory.activePersonId)
-      ? roboMemory.activePersonId : 'primary-user';
+    const activeId=roboMemory.activePersonId;
+    roboMemory.activePersonId =
+      activeId===null || activeId==='' || activeId==='none'
+        ? null
+        : (roboMemory.persons.some(p=>p.personId===activeId) ? activeId : 'primary-user');
     const primary=roboMemory.persons.find(p=>p.personId==='primary-user');
     roboMemory.identity={
       displayName:primary.displayName||'',
@@ -3277,12 +3330,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     });
 
     const headline = objects.length
-      ? objects.slice(0,5)
-          .map(o=>String(o.name || 'object'))
-          .join(' · ')
+      ? objects.slice(0,4)
+          .map(o=>`${String(o.name||'object')} ×${Math.max(1,Number.parseInt(o.count,10)||1)}`)
+          .join('  ·  ')
       : (scene || 'No confident objects detected');
 
     summary.textContent = headline;
+    summary.title = scene || headline;
     summary.classList.add('show');
 
     if(objects.length){
@@ -3927,7 +3981,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.43 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.44 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4059,7 +4113,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.43 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.44 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · 1.8s cadence · live name tags enabled");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
