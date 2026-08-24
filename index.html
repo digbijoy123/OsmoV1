@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.49 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.52 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -222,11 +222,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.51 · MODULE 7.5 DESCRIPTOR MATCH + MODULES 6+7+8 PERCEPTION FUSION</div>
+      <div id="roboBuildMarker">ROBO v2.52 · MODULE 7.5 DESCRIPTOR MATCH + MODULES 6+7+8 PERCEPTION FUSION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.51 DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
+          <div class="brand">ROBO <small>v2.52 DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -295,7 +295,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.51 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.52 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -445,6 +445,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let faceRecognitionStatus = 'not-enrolled';
   let faceLastRecognitionAt = 0;
   let faceRecognitionInFlight = false;
+  let faceRecognitionMatchDiagnostics = null;
   let lastKnownPersonId = null;
   let lastKnownPersonAt = 0;
   let faceMisses = 0;
@@ -1133,7 +1134,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           : null,
         liveDescriptorLength:(detections[0]?.descriptor?.length||0),
         profiles:profiles.length,
-        profileDescriptors:profiles.filter(p=>Array.isArray(p.descriptor)&&p.descriptor.length===128).length
+        profileDescriptors:getStoredFaceProfiles().length,
+        matchRanked:faceRecognitionMatchDiagnostics?.ranked??0,
+        matchValidProfiles:faceRecognitionMatchDiagnostics?.validProfiles??0,
+        matchInvalidProfiles:faceRecognitionMatchDiagnostics?.invalidProfiles??0
       });
     }catch(err){
       devLog('FACE ERROR','live identity refresh failed',{message:err?.message||String(err)});
@@ -1142,67 +1146,109 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }
   }
 
+  function normalizeFaceDescriptor(value){
+    if(value instanceof Float32Array || value instanceof Float64Array || Array.isArray(value)){
+      const arr=Array.from(value,Number);
+      return arr.length===128 && arr.every(Number.isFinite) ? arr : null;
+    }
+    if(value && typeof value==='object'){
+      const keys=Object.keys(value)
+        .filter(k=>/^(0|[1-9]\d*)$/.test(k))
+        .sort((a,b)=>Number(a)-Number(b));
+      if(keys.length===128){
+        const arr=keys.map(k=>Number(value[k]));
+        return arr.every(Number.isFinite) ? arr : null;
+      }
+    }
+    return null;
+  }
+
   function getStoredFaceProfiles(){
     if(!roboMemory) return [];
     ensureMemoryRegistry();
     const profiles=[];
     for(const person of roboMemory.persons){
       for(const profile of Array.isArray(person.faceProfiles)?person.faceProfiles:[]){
-        if(Array.isArray(profile?.descriptor) && profile.descriptor.length){
-          profiles.push({
-            ...profile,
-            personId:person.personId,
-            displayName:person.displayName || profile.displayName || 'UNKNOWN'
-          });
-        }
+        const descriptor=normalizeFaceDescriptor(profile?.descriptor);
+        if(!descriptor) continue;
+        profiles.push({
+          ...profile,
+          descriptor,
+          personId:person.personId,
+          displayName:person.displayName || profile.displayName || 'UNKNOWN'
+        });
       }
     }
     return profiles;
   }
 
   function findFaceMatch(descriptor){
-    const profiles=getStoredFaceProfiles();
-    const live=Array.from(descriptor||[],Number).filter(Number.isFinite);
-    if(live.length===0){
+    const rawLive = descriptor;
+    const live = normalizeFaceDescriptor(rawLive);
+    const profiles = getStoredFaceProfiles();
+
+    if(!live){
       faceRecognitionDistance=null;
+      faceRecognitionMatchDiagnostics={
+        liveLength: rawLive?.length ?? 0,
+        validLive:false,
+        validProfiles:profiles.length,
+        invalidProfiles:0,
+        ranked:0,
+        reason:'invalid-live-descriptor'
+      };
       return null;
     }
 
     const ranked=[];
+    let invalidProfiles=0;
+
     for(const profile of profiles){
-      const arr=Array.from(profile?.descriptor||[],Number);
-      if(arr.length!==live.length || live.length!==128) continue;
+      const arr=normalizeFaceDescriptor(profile?.descriptor);
+      if(!arr){
+        invalidProfiles++;
+        continue;
+      }
 
       let sum=0;
-      let valid=true;
-      for(let i=0;i<live.length;i++){
-        const av=live[i];
-        const bv=arr[i];
-        if(!Number.isFinite(av) || !Number.isFinite(bv)){ valid=false; break; }
-        const diff=av-bv;
+      for(let i=0;i<128;i++){
+        const diff=live[i]-arr[i];
         sum+=diff*diff;
       }
-      if(!valid || !Number.isFinite(sum)) continue;
+
       const distance=Math.sqrt(sum);
-      if(Number.isFinite(distance)) ranked.push({profile,distance});
+      if(Number.isFinite(distance)){
+        ranked.push({profile,distance});
+      }
     }
 
     ranked.sort((a,b)=>a.distance-b.distance);
     const best=ranked[0]||null;
     const second=ranked[1]||null;
+
     faceRecognitionDistance=best ? best.distance : null;
+    faceRecognitionMatchDiagnostics={
+      liveLength:128,
+      validLive:true,
+      validProfiles:profiles.length,
+      invalidProfiles,
+      ranked:ranked.length,
+      bestDistance:best?.distance ?? null,
+      secondDistance:second?.distance ?? null,
+      reason:best?'computed':'no-valid-profile-comparisons'
+    };
 
     if(!best) return null;
 
-    const threshold=0.62;
-    const marginRequired=best.distance<0.50 ? 0.025 : 0.015;
+    const threshold=faceRecognitionThreshold;
+    const marginRequired=best.distance < 0.50 ? 0.025 : 0.015;
     const separation=!second || (second.distance-best.distance)>=marginRequired;
 
     if(best.distance<=threshold && separation){
       return {
         ...best.profile,
         distance:best.distance,
-        secondDistance:second?.distance??null
+        secondDistance:second?.distance ?? null
       };
     }
 
@@ -4289,7 +4335,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.49 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.52 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4421,7 +4467,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.49 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.52 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · 1.8s cadence · live name tags enabled");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
