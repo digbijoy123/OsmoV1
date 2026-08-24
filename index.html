@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.48 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.49 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -80,7 +80,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 .memoryIdentity[data-state="unknown"]{border-color:rgba(240,180,91,.45)}
 .perceptionFusion{position:absolute;left:50%;bottom:10px;transform:translateX(-50%) translateY(5px);z-index:8;padding:5px 9px;border:1px solid rgba(95,212,208,.35);border-radius:999px;background:rgba(9,13,21,.76);backdrop-filter:blur(8px);font-size:8px;letter-spacing:.07em;color:#e8ffff;opacity:0;transition:.2s;white-space:nowrap;max-width:82%;overflow:hidden;text-overflow:ellipsis}.perceptionFusion.show{opacity:1;transform:translateX(-50%)}.perceptionFusion[data-state="known"]{border-color:rgba(85,197,140,.62)}.perceptionFusion[data-state="tracking"]{border-color:rgba(105,216,207,.58)}.perceptionFusion[data-state="unknown"]{border-color:rgba(240,180,91,.45)}
 .visionSummary{position:absolute;left:7px;right:7px;top:7px;max-height:23%;padding:7px 9px;border-radius:8px;background:rgba(9,13,21,.84);color:#fff;font-size:8px;line-height:1.35;letter-spacing:.03em;opacity:0;transform:translateY(-3px);transition:.2s;overflow:auto;overflow-wrap:anywhere;word-break:break-word;box-sizing:border-box;z-index:7;pointer-events:none}.camera .visionSummary::-webkit-scrollbar{width:3px}.camera .visionSummary::-webkit-scrollbar-thumb{background:rgba(255,255,255,.28);border-radius:3px}
-.camera .visionSummary.show{opacity:1;transform:none}
+.camera .visionSummary.show{opacity:1;transform:none}.visionTargetLine{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:8px;font-weight:800;letter-spacing:.04em}.visionTargetDot{width:6px;height:6px;border-radius:50%;background:#69d8cf;box-shadow:0 0 8px rgba(105,216,207,.65);flex:none}.visionTargetLine.unknown .visionTargetDot{background:#e6b85c;box-shadow:0 0 8px rgba(230,184,92,.55)}.visionTargetName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.visionSceneLine{display:block;white-space:normal;overflow-wrap:anywhere}.visionSceneLine.empty{opacity:.7}
 
 /* Avatar zone */
 .avatarZone{position:absolute;left:12px;right:12px;top:310px;bottom:205px;display:grid;place-items:center;z-index:8}
@@ -859,6 +859,50 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }
   }
 
+  function renderLiveTargetPanel(){
+    const summary=$('#visionSummary');
+    if(!summary) return;
+
+    const target=faceTarget;
+    const active=getActivePerson();
+    const name=(target?.identity && target.identity!=='UNKNOWN')
+      ? target.identity
+      : ((target?.lastKnownIdentity && target.lastKnownIdentity!=='UNKNOWN')
+        ? target.lastKnownIdentity
+        : ((faceRecognitionIdentity && faceRecognitionIdentity!=='UNKNOWN')
+          ? faceRecognitionIdentity
+          : (active?.displayName || 'UNKNOWN')));
+
+    const known=Boolean(name && name!=='UNKNOWN');
+    const scene=String(latestVision?.scene||'').trim();
+    const objects=Array.isArray(latestVision?.objects)?latestVision.objects:[];
+    const headline=objects.length
+      ? objects.slice(0,4).map(o=>`${String(o?.name||'object')} ×${Math.max(1,Number.parseInt(o?.count,10)||1)}`).join(' · ')
+      : '';
+
+    summary.innerHTML='';
+
+    if(target){
+      const line=document.createElement('div');
+      line.className='visionTargetLine '+(known?'':'unknown');
+      const dot=document.createElement('span');
+      dot.className='visionTargetDot';
+      const label=document.createElement('span');
+      label.className='visionTargetName';
+      label.textContent='TARGET · '+(known?name:'UNKNOWN');
+      line.append(dot,label);
+      summary.appendChild(line);
+    }
+
+    const sceneLine=document.createElement('div');
+    sceneLine.className='visionSceneLine'+(!scene&&!headline?' empty':'');
+    sceneLine.textContent=scene || headline || 'No live visual description yet';
+    summary.appendChild(sceneLine);
+
+    summary.classList.toggle('show',Boolean(target || scene || headline));
+    summary.title=target ? `Target: ${known?name:'UNKNOWN'}${scene?` | ${scene}`:''}` : (scene||headline||'');
+  }
+
   function renderFaceTarget(){
     const overlay=$('#faceTrackingOverlay');
     if(!overlay) return;
@@ -894,6 +938,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       appendBox(d.box,idx,false,d.identity||d.lastKnownIdentity||'UNKNOWN');
     });
     if(faceSmoothBox && faceTarget) appendBox(faceSmoothBox,0,true,faceTarget.identity||faceTarget.lastKnownIdentity||faceRecognitionIdentity||'UNKNOWN');
+    renderLiveTargetPanel();
   }
 
   function faceDistance(a,b){
@@ -1073,6 +1118,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       renderMemoryIdentity();
       renderMemoryDiagnostics();
       renderFaceTarget();
+      renderLiveTargetPanel();
       deriveLiveSocialFromFaces(liveFaces);
       syncLiveIdentityAndSocial('identity-refresh');
       const bestDistance=safeFixedNumber(faceRecognitionDistance,4,null);
@@ -1414,8 +1460,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             primary.identity='UNKNOWN';
             primary.personId=null;
             primary.identityConfidence=0;
+            primary.lastKnownIdentity=null;
+            primary.lastKnownPersonId=null;
+            primary.lastKnownIdentityConfidence=0;
           }
           deriveLiveSocialFromFaces(mapped);
+          renderLiveTargetPanel();
           updatePerceptionFusion('target-changed');
         }else if(primary.identity){
           faceRecognitionIdentity=primary.identity;
@@ -3594,11 +3644,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           .join(' · ')
       : 'No confident objects detected';
 
-    summary.textContent = scene
-      ? `${headline} — ${scene}`
-      : headline;
-    summary.title = scene || headline;
-    summary.classList.add('show');
+    renderLiveTargetPanel();
 
     if(objects.length){
       visionBoxTimer = setTimeout(()=>{
@@ -3606,10 +3652,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           overlay.innerHTML = '';
         }
 
-        if(summary){
-          summary.textContent = '';
-          summary.classList.remove('show');
-        }
+        renderLiveTargetPanel();
 
         visionBoxTimer = null;
         devLog('VISION','object boxes cleared · 10 second timeout');
@@ -4242,7 +4285,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.48 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.49 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4374,7 +4417,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.48 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.49 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · 1.8s cadence · live name tags enabled");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
