@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.62 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.63 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -137,7 +137,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 @keyframes micPulse{50%{box-shadow:0 10px 24px rgba(217,96,61,.38),0 0 0 13px rgba(255,118,84,0)}}
 @keyframes talkPulse{to{transform:scale(1.06)}}
 #roboBuildMarker{position:absolute;left:8px;right:8px;bottom:2px;z-index:60;font:7px/1 monospace;letter-spacing:.04em;opacity:.42;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
-.modeBtn,.mediaBtn{border:1px solid rgba(44,36,64,.12);background:rgba(255,255,255,.42);color:var(--ink);border-radius:16px;padding:9px 10px;font-size:7px;cursor:pointer}.mediaBtn.active{background:var(--ink);color:#fff}
+.modeBtn,.mediaBtn{touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;border:1px solid rgba(44,36,64,.12);background:rgba(255,255,255,.42);color:var(--ink);border-radius:16px;padding:9px 10px;font-size:7px;cursor:pointer}.mediaBtn.active{background:var(--ink);color:#fff}
 .actions{display:flex;gap:7px;align-items:center;min-width:0;flex:1}
 
 /* FINAL MOBILE CONTROL LAYOUT: controls wrap inside the device and the mic stays visible. */
@@ -222,11 +222,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.62 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.63 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.62</small></div>
+          <div class="brand">ROBO <small>v2.63</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -295,7 +295,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.62 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.63 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -874,7 +874,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   function renderLiveTargetPanel(){
-    // v2.62: the camera panel is intentionally clean.
+    // v2.63: the camera panel is intentionally clean.
     // Live identity is shown on the face tracking box itself.
     const summary=$('#visionSummary');
     if(!summary) return;
@@ -3285,6 +3285,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     cameraStartState='starting';
     cameraStartQueued=true;
     window.__roboCameraStarting=true;
+    log('CAM · controller accepted user gesture · starting single-flight request');
 
     const btn=$('#cameraBtn');
     if(btn){
@@ -3379,15 +3380,22 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   const cameraButton=$('#cameraBtn');
   const cameraSwitchButton=$('#cameraSwitchBtn');
   if(cameraButton){
+    const triggerCameraFromGesture=()=>{
+      const now=performance.now();
+      if(cameraButton.__roboLastGesture && now-cameraButton.__roboLastGesture<450) return;
+      cameraButton.__roboLastGesture=now;
+      void toggleCamera();
+    };
     cameraButton.onclick=null;
-    cameraButton.addEventListener('click',toggleCamera,{passive:true});
-    cameraButton.addEventListener('pointerup',()=>{
-      // Pointerup fallback only when click is not dispatched by the browser.
-      // The state guard prevents duplicate camera starts.
-      if(!cameraEnabled && cameraStartState==='idle' && !cameraStartPromise && !window.__roboCameraStarting){
-        queueMicrotask(()=>toggleCamera());
-      }
-    },{passive:true});
+    cameraButton.addEventListener('click',triggerCameraFromGesture,{capture:true});
+    cameraButton.addEventListener('pointerdown',(event)=>{
+      if(event.isPrimary===false) return;
+      triggerCameraFromGesture();
+    },{capture:true,passive:true});
+    cameraButton.addEventListener('touchend',(event)=>{
+      if(event.cancelable) event.preventDefault();
+      triggerCameraFromGesture();
+    },{capture:true,passive:false});
   }
   if(cameraSwitchButton){
     cameraSwitchButton.onclick=null;
@@ -4772,7 +4780,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.62 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.63 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4904,7 +4912,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.62 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.63 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
