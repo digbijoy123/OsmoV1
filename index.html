@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.60 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.61 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -222,11 +222,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.60 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.61 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.60</small></div>
+          <div class="brand">ROBO <small>v2.61</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -295,7 +295,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.60 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.61 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -872,7 +872,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   function renderLiveTargetPanel(){
-    // v2.60: the camera panel is intentionally clean.
+    // v2.61: the camera panel is intentionally clean.
     // Live identity is shown on the face tracking box itself.
     const summary=$('#visionSummary');
     if(!summary) return;
@@ -1150,7 +1150,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
               0.48,
               faceRecognitionThreshold
             ) &&
-            (Date.now()-(person.faceSamplesUpdatedAt||0))>10000
+            (Date.now()-(person.faceSamplesUpdatedAt||0))>30000
           ){
             addRecognitionSample(person.personId, matched.match.descriptor, 'adaptive-face-sample');
             person.faceSamplesUpdatedAt=Date.now();
@@ -1469,7 +1469,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     ensureMemoryRegistry();
     const person=roboMemory.persons.find(p=>p.personId===personId);
     if(!person) return false;
-    if(!Array.isArray(person.faceProfiles)) person.faceProfiles=[];
+    normalizePersonFaceProfileBank(person);
 
     const now=Date.now();
     const nearest=person.faceProfiles
@@ -1478,7 +1478,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       .sort((a,b)=>a.d-b.d)[0];
 
     /* Do not add near-duplicate frames every recognition cycle. */
-    if(nearest && nearest.d<0.045){
+    if(nearest && nearest.d<0.08){
       nearest.p.lastUsedAt=now;
       nearest.p.updatedAt=now;
       person.updatedAt=now;
@@ -2097,6 +2097,31 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
   function cloneDefaultMemory(){ return JSON.parse(JSON.stringify(DEFAULT_MEMORY)); }
 
+  function normalizePersonFaceProfileBank(person){
+    if(!person) return 0;
+    if(!Array.isArray(person.faceProfiles)) person.faceProfiles=[];
+
+    const seen=[];
+    const cleaned=[];
+    for(const raw of person.faceProfiles){
+      const descriptor=normalizeFaceDescriptor(raw?.descriptor);
+      if(!descriptor) continue;
+      let duplicate=false;
+      for(const kept of seen){
+        const d=faceDistance(descriptor,kept);
+        if(Number.isFinite(d) && d<0.055){ duplicate=true; break; }
+      }
+      if(duplicate) continue;
+      const record={...raw, descriptor:Array.from(descriptor), personId:person.personId, displayName:person.displayName||raw?.displayName||'UNKNOWN'};
+      cleaned.push(record);
+      seen.push(descriptor);
+    }
+
+    cleaned.sort((a,b)=>Number(b?.updatedAt||b?.createdAt||0)-Number(a?.updatedAt||a?.createdAt||0));
+    person.faceProfiles=cleaned.slice(0,6);
+    return person.faceProfiles.length;
+  }
+
   function ensureMemoryRegistry(){
     if(!roboMemory) return null;
 
@@ -2114,6 +2139,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       memories:Array.isArray(p?.memories)?p.memories:[],
       faceProfiles:Array.isArray(p?.faceProfiles)?p.faceProfiles:[]
     }));
+    roboMemory.persons.forEach(normalizePersonFaceProfileBank);
 
     if(!roboMemory.persons.some(p=>p.personId==='primary-user')){
       roboMemory.persons.unshift(DEFAULT_PERSON());
@@ -4719,7 +4745,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.60 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.61 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4851,7 +4877,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.60 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.61 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
