@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.38 MODULE 8.2 SMOOTH FACE TRACKING · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.39 MODULE 6+7+8 SMOOTH FACE TRACKING · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -78,6 +78,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 .memoryIdentity.show{opacity:1;transform:none}
 .memoryIdentity[data-state="known"]{border-color:rgba(85,197,140,.55)}
 .memoryIdentity[data-state="unknown"]{border-color:rgba(240,180,91,.45)}
+.perceptionFusion{position:absolute;left:50%;bottom:10px;transform:translateX(-50%) translateY(5px);z-index:8;padding:5px 9px;border:1px solid rgba(95,212,208,.35);border-radius:999px;background:rgba(9,13,21,.76);backdrop-filter:blur(8px);font-size:8px;letter-spacing:.07em;color:#e8ffff;opacity:0;transition:.2s;white-space:nowrap;max-width:82%;overflow:hidden;text-overflow:ellipsis}.perceptionFusion.show{opacity:1;transform:translateX(-50%)}.perceptionFusion[data-state="known"]{border-color:rgba(85,197,140,.62)}.perceptionFusion[data-state="tracking"]{border-color:rgba(105,216,207,.58)}.perceptionFusion[data-state="unknown"]{border-color:rgba(240,180,91,.45)}
 .visionSummary{position:absolute;left:7px;right:7px;top:7px;padding:5px 6px;border-radius:7px;background:rgba(9,13,21,.72);color:#fff;font-size:6px;line-height:1.25;letter-spacing:.04em;opacity:0;transform:translateY(-3px);transition:.2s}
 .camera .visionSummary.show{opacity:1;transform:none}
 
@@ -240,7 +241,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         <div class="visionOverlay" id="visionOverlay"></div><div class="faceTrackingOverlay" id="faceTrackingOverlay"></div>
         <div class="visionSummary" id="visionSummary"></div>
         <div class="socialAwareness" id="socialAwareness" data-state="unknown">SOCIAL · UNKNOWN</div>
-        <div class="memoryIdentity" id="memoryIdentity" data-state="unknown">MEMORY · NO PROFILE</div><div class="faceEngineStatus" id="faceEngineStatus">FACE ENGINE</div>
+        <div class="memoryIdentity" id="memoryIdentity" data-state="unknown">MEMORY · NO PROFILE</div><div class="faceEngineStatus" id="faceEngineStatus">FACE ENGINE</div><div class="perceptionFusion" id="perceptionFusion" data-state="unknown">ROBO · PERCEPTION INITIALIZING</div>
         <span class="camRec"></span>
         <span class="camLabel">what I see</span>
       </div>
@@ -294,7 +295,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.38 MODULE 8.2 · SMOOTH FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.39 MODULE 6+7+8 · SMOOTH FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -326,6 +327,16 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       <div class="devRow"><span>Interaction state</span><b id="devSocialInteraction">IDLE</b></div>
       <div class="devRow"><span>Perception confidence</span><b id="devSocialConfidence">0%</b></div>
       <div class="devRow"><span>Last social change</span><b id="devSocialChange">none</b></div>
+    </section>
+    <section class="devCard">
+      <div class="devTitle">PERCEPTION FUSION · MODULES 6 + 7 + 8</div>
+      <div class="devRow"><span>Unified state</span><b id="devFusionState">UNKNOWN</b></div>
+      <div class="devRow"><span>Tracked target</span><b id="devFusionTarget">NONE</b></div>
+      <div class="devRow"><span>Identity</span><b id="devFusionIdentity">UNKNOWN</b></div>
+      <div class="devRow"><span>Identity confidence</span><b id="devFusionIdentityConfidence">0%</b></div>
+      <div class="devRow"><span>Position</span><b id="devFusionPosition">NONE</b></div>
+      <div class="devRow"><span>Movement</span><b id="devFusionMovement">STATIONARY</b></div>
+      <div class="devRow"><span>Fusion confidence</span><b id="devFusionConfidence">0%</b></div>
     </section>
     <section class="devCard">
       <div class="devTitle">SYSTEM CHECK</div>
@@ -1342,6 +1353,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       renderFaceTarget();
       faceDiag();
+      updatePerceptionFusion('face-update');
 
     }catch(err){
 
@@ -1360,6 +1372,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       renderFaceTarget();
       faceDiag();
+      updatePerceptionFusion('face-idle');
     }
   }
 
@@ -1439,6 +1452,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     renderFaceTarget();
     faceDiag();
+    updatePerceptionFusion('face-stopped');
   }
 
   /* ---------- User Perception & Social Awareness v1 (Module 6) ----------
@@ -1451,6 +1465,152 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     interaction: 'idle', confidence: 0, lastChange: 'none', timestamp: 0, session: 0
   };
   let previousSocialAwareness = null;
+
+  /* ---------- Perception Fusion v1 (Modules 6 + 7 + 8) ----------
+     This layer does not replace the modules. It creates one authoritative
+     local perception state from social presence, active face tracking, and
+     persistent identity so downstream behavior sees one coherent person.
+  */
+  let perceptionFusion = {
+    state: 'unknown',
+    target: null,
+    identity: { known: false, name: '', confidence: 0, status: 'unknown' },
+    position: { x: null, y: null, horizontal: 'none', vertical: 'none' },
+    movement: 'stationary',
+    confidence: 0,
+    timestamp: 0,
+    session: 0
+  };
+  let previousFusionPosition = null;
+  let previousFusionAt = 0;
+
+  function fusionHorizontal(x){
+    if(!Number.isFinite(x)) return 'none';
+    if(x < 0.35) return 'left';
+    if(x > 0.65) return 'right';
+    return 'center';
+  }
+
+  function fusionVertical(y){
+    if(!Number.isFinite(y)) return 'none';
+    if(y < 0.35) return 'upper';
+    if(y > 0.65) return 'lower';
+    return 'center';
+  }
+
+  function getTrackedFaceCenter(){
+    const box = isValidFaceBox(faceSmoothBox)
+      ? faceSmoothBox
+      : (isValidFaceBox(faceTarget?.box) ? faceTarget.box : null);
+    if(!box || !camera.videoWidth || !camera.videoHeight) return null;
+    return {
+      x: Math.max(0, Math.min(1, (box.x + box.width/2) / camera.videoWidth)),
+      y: Math.max(0, Math.min(1, (box.y + box.height/2) / camera.videoHeight))
+    };
+  }
+
+  function updatePerceptionFusion(reason='update'){
+    const social = socialAwareness || {};
+    const center = getTrackedFaceCenter();
+    const hasTrackedFace = Boolean(faceTarget && center);
+    const knownName = String(faceRecognitionIdentity || roboMemory?.identity?.displayName || '').trim();
+    const known = faceRecognitionStatus === 'recognized' && Boolean(knownName);
+    const identityConfidence = known
+      ? Math.max(0, Math.min(100, Math.round(faceRecognitionDistance != null
+          ? Math.max(0, Math.min(1, 1 - Number(faceRecognitionDistance))) * 100
+          : 90)))
+      : 0;
+
+    let movement='stationary';
+    const now=performance.now();
+    if(center && previousFusionPosition && previousFusionAt){
+      const dx=center.x-previousFusionPosition.x;
+      const dy=center.y-previousFusionPosition.y;
+      const speed=Math.sqrt(dx*dx+dy*dy) / Math.max(0.05,(now-previousFusionAt)/1000);
+      if(speed > 0.055) movement = 'moving';
+      else if(speed > 0.018) movement = 'shifting';
+    }
+    if(!center) movement='searching';
+
+    if(center){
+      previousFusionPosition=center;
+      previousFusionAt=now;
+    }
+
+    let state='unknown';
+    if(hasTrackedFace && known) state='known';
+    else if(hasTrackedFace) state='tracking';
+    else if(Number(social.personCount||0)>0) state='person-present';
+    else if(social.presence==='no-person') state='no-person';
+
+    const trackingConfidence = hasTrackedFace
+      ? Math.round(Math.max(0, Math.min(100, Number(faceTarget?.score||0)*100)))
+      : 0;
+    const socialConfidence = Math.max(0, Math.min(100, Number(social.confidence||0)));
+    const fusionConfidence = hasTrackedFace
+      ? Math.round(0.55*trackingConfidence + 0.25*socialConfidence + 0.20*(known ? identityConfidence : 55))
+      : Math.round(socialConfidence * 0.65);
+
+    perceptionFusion={
+      state,
+      target: hasTrackedFace ? { trackingId:'face-01', confidence:trackingConfidence } : null,
+      identity:{ known, name:knownName, confidence:identityConfidence, status:faceRecognitionStatus },
+      position:center ? { ...center, horizontal:fusionHorizontal(center.x), vertical:fusionVertical(center.y) } : { x:null,y:null,horizontal:'none',vertical:'none' },
+      movement,
+      confidence:Math.max(0,Math.min(100,fusionConfidence)),
+      timestamp:Date.now(),
+      session:cameraSession,
+      reason
+    };
+
+    renderPerceptionFusion();
+    renderFusionDiagnostics();
+    return perceptionFusion;
+  }
+
+  function renderPerceptionFusion(){
+    const badge=$('#perceptionFusion');
+    if(!badge) return;
+    const f=perceptionFusion;
+    let text='ROBO · ';
+    if(f.state==='known') text += `${f.identity.name} · TRACKED`;
+    else if(f.state==='tracking') text += `FACE TRACKED · ${f.position.horizontal.toUpperCase()}`;
+    else if(f.state==='person-present') text += 'PERSON PRESENT';
+    else if(f.state==='no-person') text += 'NO PERSON';
+    else text += 'PERCEPTION INITIALIZING';
+    badge.textContent=text;
+    badge.dataset.state=f.state==='known'?'known':(f.state==='tracking'?'tracking':(f.state==='no-person'?'unknown':'unknown'));
+    badge.classList.toggle('show', Boolean(f.timestamp));
+  }
+
+  function renderFusionDiagnostics(){
+    const f=perceptionFusion||{};
+    if(typeof devFusionState!=='undefined' && devFusionState) devFusionState.textContent=String(f.state||'unknown').toUpperCase();
+    if(typeof devFusionTarget!=='undefined' && devFusionTarget) devFusionTarget.textContent=f.target?'PRIMARY':'NONE';
+    if(typeof devFusionIdentity!=='undefined' && devFusionIdentity) devFusionIdentity.textContent=f.identity?.known ? String(f.identity.name).toUpperCase() : 'UNKNOWN';
+    if(typeof devFusionIdentityConfidence!=='undefined' && devFusionIdentityConfidence) devFusionIdentityConfidence.textContent=Math.round(Number(f.identity?.confidence||0))+'%';
+    if(typeof devFusionPosition!=='undefined' && devFusionPosition) devFusionPosition.textContent=f.position?.x==null?'NONE':`${f.position.horizontal.toUpperCase()} / ${f.position.vertical.toUpperCase()}`;
+    if(typeof devFusionMovement!=='undefined' && devFusionMovement) devFusionMovement.textContent=String(f.movement||'stationary').toUpperCase();
+    if(typeof devFusionConfidence!=='undefined' && devFusionConfidence) devFusionConfidence.textContent=Math.round(Number(f.confidence||0))+'%';
+  }
+
+  function buildPerceptionFusionMessage(){
+    const f=perceptionFusion;
+    if(!f || !f.timestamp) return null;
+    return [
+      'UNIFIED PERCEPTION CONTEXT — local fusion of Modules 6, 7, and 8.',
+      `State: ${f.state}.`,
+      `Tracked target: ${f.target ? 'primary face acquired' : 'none'}.`,
+      `Identity: ${f.identity?.known ? f.identity.name : 'unknown'}.`,
+      `Identity confidence: ${Math.round(Number(f.identity?.confidence||0))}/100.`,
+      `Position: ${f.position?.horizontal||'none'} / ${f.position?.vertical||'none'}.`,
+      `Movement: ${f.movement||'stationary'}.`,
+      `Fusion confidence: ${Math.round(Number(f.confidence||0))}/100.`,
+      'Treat local face tracking and local identity as current perception signals. Do not invent identity or movement that is not provided here.'
+    ].join('\n');
+  }
+
+  updatePerceptionFusion('boot');
 
   /* ---------- Memory & Identity v1 (Module 7) ----------
      Persistent browser-local memory for the primary Robo user. The schema is
@@ -2961,6 +3121,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     };
     previousSocialAwareness=snapshot;
     socialAwareness=snapshot;
+    updatePerceptionFusion('social-update');
     return snapshot;
   }
 
@@ -3359,6 +3520,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
        */
       if(visualContext) contextMessages.push({role:'assistant',content:visualContext});
 
+      const fusionContext=buildPerceptionFusionMessage();
+      if(fusionContext) contextMessages.push({role:'assistant',content:fusionContext});
+
       if(requestUsedVision){
         contextMessages.push({
           role:'assistant',
@@ -3640,6 +3804,7 @@ const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscr
   loadRoboMemory();
 const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
 const devSocialPresence=$("#devSocialPresence"), devSocialCount=$("#devSocialCount"), devSocialInteraction=$("#devSocialInteraction"), devSocialConfidence=$("#devSocialConfidence"), devSocialChange=$("#devSocialChange");
+const devFusionState=$("#devFusionState"), devFusionTarget=$("#devFusionTarget"), devFusionIdentity=$("#devFusionIdentity"), devFusionIdentityConfidence=$("#devFusionIdentityConfidence"), devFusionPosition=$("#devFusionPosition"), devFusionMovement=$("#devFusionMovement"), devFusionConfidence=$("#devFusionConfidence");
 window.__roboStructuredVisionReady=false;
 let devLogLines=["[BOOT] Developer diagnostics ready."];
 
@@ -3731,6 +3896,8 @@ function runDevChecks(){
     ["Module 7 memory engine",typeof handleMemoryCommand==="function"],
     ["Persistent memory storage",typeof localStorage!=="undefined"],
     ["Memory identity UI",!!$("#memoryIdentity")],
+    ["Perception fusion",typeof updatePerceptionFusion==="function"],
+    ["Fusion diagnostics",!!$("#devFusionState")],
     ["AI API key",null]
   ];
   $("#devChecks").innerHTML=list.map(x=>{
@@ -3764,7 +3931,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.38 MODULE 8.2 SMOOTH FACE TRACKING DIAGNOSTICS",
+    "ROBO AIOS v2.39 MODULE 6+7+8 SMOOTH FACE TRACKING DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -3780,6 +3947,13 @@ $("#copyLogs").addEventListener("click",async()=>{
     "Social interaction: "+devSocialInteraction.textContent,
     "Social confidence: "+devSocialConfidence.textContent,
     "Social change: "+devSocialChange.textContent,
+    "Fusion state: "+devFusionState.textContent,
+    "Fusion target: "+devFusionTarget.textContent,
+    "Fusion identity: "+devFusionIdentity.textContent,
+    "Fusion identity confidence: "+devFusionIdentityConfidence.textContent,
+    "Fusion position: "+devFusionPosition.textContent,
+    "Fusion movement: "+devFusionMovement.textContent,
+    "Fusion confidence: "+devFusionConfidence.textContent,
     "Memory status: "+devMemoryStatus.textContent,
     "Memory identity: "+devMemoryIdentity.textContent,
     "Persistent memories: "+devMemoryCount.textContent,
@@ -3889,7 +4063,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.38 MODULE 8.2 SMOOTH FACE TRACKING · Gemini AI brain");
+  log("ROBO AIOS v2.39 MODULE 6+7+8 SMOOTH FACE TRACKING · Gemini AI brain");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
   log("AI provider adapter online · Gemini structured vision enabled");
