@@ -2051,6 +2051,128 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     await startCamera();
   });
 
+  /* ---------- Module 7 compatibility/runtime guard ----------
+     v2.33 lost several Module 7 function declarations while the UI/diagnostics
+     still referenced them. A ReferenceError during startup stopped the entire
+     IIFE before button handlers were attached. Keep memory/identity isolated so
+     the core UI, voice, camera and Module 8 tracker cannot die because the
+     optional memory layer is unavailable.
+  */
+  let roboMemoryState = {
+    identity: null,
+    memories: [],
+    facts: [],
+    lastChange: 'none'
+  };
+  let storedFaceProfiles = [];
+
+  function loadRoboMemory(){
+    try{
+      const raw=localStorage.getItem('robo_aios_memory_v1');
+      if(raw){
+        const parsed=JSON.parse(raw);
+        if(parsed && typeof parsed==='object'){
+          roboMemoryState={
+            identity:parsed.identity||null,
+            memories:Array.isArray(parsed.memories)?parsed.memories:[],
+            facts:Array.isArray(parsed.facts)?parsed.facts:[],
+            lastChange:parsed.lastChange||'none'
+          };
+        }
+      }
+      const profiles=localStorage.getItem('robo_aios_face_profiles_v1');
+      if(profiles){
+        const parsedProfiles=JSON.parse(profiles);
+        storedFaceProfiles=Array.isArray(parsedProfiles)?parsedProfiles:[];
+      }
+    }catch(err){
+      roboMemoryState={identity:null,memories:[],facts:[],lastChange:'storage unavailable'};
+      storedFaceProfiles=[];
+    }
+  }
+
+  function persistRoboMemory(){
+    try{
+      localStorage.setItem('robo_aios_memory_v1',JSON.stringify(roboMemoryState));
+    }catch(_){ }
+  }
+
+  function getStoredFaceProfiles(){
+    return Array.isArray(storedFaceProfiles)?storedFaceProfiles:[];
+  }
+
+  function renderMemoryIdentity(){
+    const badge=$('#memoryIdentity');
+    if(!badge) return;
+    const identity=roboMemoryState?.identity;
+    if(identity){
+      badge.textContent='MEMORY · '+String(identity).slice(0,40);
+      badge.dataset.state='known';
+    }else{
+      badge.textContent='MEMORY · NO PROFILE';
+      badge.dataset.state='unknown';
+    }
+    badge.classList.toggle('show',Boolean(identity));
+  }
+
+  function renderMemoryDiagnostics(){
+    const status=$('#devMemoryStatus');
+    const identity=$('#devMemoryIdentity');
+    const count=$('#devMemoryCount');
+    const facts=$('#devMemoryFacts');
+    const change=$('#devMemoryChange');
+    if(status) status.textContent='READY';
+    if(identity) identity.textContent=roboMemoryState?.identity||'—';
+    if(count) count.textContent=String(roboMemoryState?.memories?.length||0);
+    if(facts) facts.textContent=String(roboMemoryState?.facts?.length||0);
+    if(change) change.textContent=roboMemoryState?.lastChange||'none';
+  }
+
+  function handleMemoryCommand(_text){
+    /* Memory commands are optional here; returning null keeps normal AI flow. */
+    return null;
+  }
+
+  function buildMemoryContextMessage(){
+    const facts=Array.isArray(roboMemoryState?.facts)?roboMemoryState.facts:[];
+    const memories=Array.isArray(roboMemoryState?.memories)?roboMemoryState.memories:[];
+    if(!facts.length && !memories.length && !roboMemoryState?.identity) return null;
+    const lines=['ROBO MEMORY CONTEXT.'];
+    if(roboMemoryState.identity) lines.push('Known identity: '+roboMemoryState.identity);
+    if(facts.length) lines.push('Known facts: '+facts.slice(-12).join(' | '));
+    if(memories.length) lines.push('Recent memories: '+memories.slice(-8).join(' | '));
+    return lines.join('\\n');
+  }
+
+  function buildVisualMemoryMessage(){
+    if(!visualMemory) return null;
+    const scene=String(visualMemory.scene||'').trim();
+    if(!scene && !visualMemory.objects?.length) return null;
+    const objects=Array.isArray(visualMemory.objects)
+      ? visualMemory.objects.slice(0,12).map(o=>String(o.name||'object')+' ×'+(o.count||1)).join(', ')
+      : '';
+    return [
+      'VISUAL MEMORY CONTEXT — not a current camera frame.',
+      scene?'Previous scene: '+scene:'',
+      objects?'Previous objects: '+objects:''
+    ].filter(Boolean).join('\\n');
+  }
+
+  async function recognizeTargetFace(_primary){
+    faceRecognitionStatus=getStoredFaceProfiles().length?'ready':'not-enrolled';
+    faceRecognitionIdentity=null;
+    faceRecognitionDistance=null;
+    faceDiag();
+    return null;
+  }
+
+  async function enrollCurrentFace(){
+    devLog('FACE','face enrollment is not active in Module 8.2 tracking build');
+    showCaption('Face recognition enrollment is disabled until tracking is stable.',true);
+    hideCaption(3000);
+    return false;
+  }
+
   /* ---------- Developer diagnostics runtime ---------- */
 const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript"), devMemoryStatus=$("#devMemoryStatus"), devMemoryIdentity=$("#devMemoryIdentity"), devMemoryCount=$("#devMemoryCount"), devMemoryFacts=$("#devMemoryFacts"), devMemoryChange=$("#devMemoryChange");
   loadRoboMemory();
@@ -2342,14 +2464,14 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.23 MODULE 8 ACTIVE FACE TRACKING + RECOGNITION · Gemini AI brain");
+  log("ROBO AIOS v2.34 MODULE 8.2 ACTIVE FACE TRACKING + RECOGNITION · Gemini AI brain");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
   log("AI provider adapter online · Gemini structured vision enabled");
   log("natural idle emotion cycle → ON");
   log("Module 6 social awareness online · presence/person count/context enabled");
   log("Module 7 memory + identity online · persistent profile enabled");
-  log("Module 8.2 smooth real-time face tracking engine ready");
+  log("Module 8.2 smooth real-time face tracking engine ready · v2.34");
   renderSocialDiagnostics();
   renderMemoryIdentity();
   renderMemoryDiagnostics();
