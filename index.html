@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.69 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.70 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -223,11 +223,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.69 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.70 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.69</small></div>
+          <div class="brand">ROBO <small>v2.70</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -296,7 +296,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.69 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.70 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -873,7 +873,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   function renderLiveTargetPanel(){
-    // v2.69: the camera panel is intentionally clean.
+    // v2.70: the camera panel is intentionally clean.
     // Live identity is shown on the face tracking box itself.
     const summary=$('#visionSummary');
     if(!summary) return;
@@ -1071,7 +1071,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         matchedPeople.push({
           live,
           match,
-          confidence
+          confidence,
+          recognitionMode:match.recognitionMode||'standard'
         });
       }
 
@@ -1174,24 +1175,59 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             : (profiles.length?'ready':'not-enrolled');
 
         if(!faceRecognitionIdentity){
-          /* Stable-track hysteresis: a failed verifier pass is NOT a new
-             person. Keep the confirmed identity while the same face track
-             remains visible. */
-          const keepStable=Boolean(
-            primary.lastKnownPersonId &&
+          /*
+           * v2.70: the tracked face is the authority during a recognition
+           * refresh. If the same live target is still present, NEVER clear its
+           * name because one descriptor pass failed. Recognition gets another
+           * chance on the next cycle.
+           */
+          const trackedPersonId =
+            primary.lastKnownPersonId ||
+            stableTargetPersonId ||
+            lastKnownPersonId ||
+            null;
+
+          const holdAge =
+            performance.now() - (stableTargetLastSeenAt || 0);
+
+          const sameTrackedTarget =
+            !!trackedPersonId &&
             (
-              stableTargetPersonId===primary.lastKnownPersonId ||
-              (performance.now()-stableTargetLastSeenAt)<5000
-            ) &&
-            isValidFaceBox(primary.box) &&
-            (!stableTargetLastBox || boxIoU(stableTargetLastBox,primary.box)>=0.08)
+              stableTargetPersonId===trackedPersonId ||
+              lastKnownPersonId===trackedPersonId ||
+              primary.personId===trackedPersonId
+            );
+
+          const keepStable=Boolean(
+            sameTrackedTarget &&
+            stableTargetIdentity &&
+            holdAge < 8000
           );
+
           if(keepStable){
-            faceRecognitionIdentity=primary.lastKnownIdentity||stableTargetIdentity||null;
+            faceRecognitionIdentity=
+              primary.lastKnownIdentity ||
+              stableTargetIdentity ||
+              null;
             faceRecognitionStatus='recognized-hold';
             primary.identity=faceRecognitionIdentity||'UNKNOWN';
-            primary.personId=primary.lastKnownPersonId||stableTargetPersonId||null;
-            primary.identityConfidence=primary.lastKnownIdentityConfidence||0;
+            primary.personId=trackedPersonId;
+            primary.lastKnownIdentity=faceRecognitionIdentity||primary.lastKnownIdentity||null;
+            primary.lastKnownPersonId=trackedPersonId;
+            primary.lastKnownAt=Date.now();
+            primary.identityConfidence=
+              Math.max(
+                primary.lastKnownIdentityConfidence||0,
+                60
+              );
+            stableTargetLastSeenAt=performance.now();
+
+            const heldPerson=roboMemory?.persons?.find(
+              p=>p.personId===trackedPersonId
+            );
+            if(heldPerson){
+              setActivePerson(heldPerson.personId,'face-identity-hold');
+            }
           }else{
             setActivePerson(null,'face-identity-unknown');
             primary.identity='UNKNOWN';
@@ -1275,7 +1311,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           matchRanked:diag.ranked||0,
           matchValidProfiles:diag.validProfiles||0,
           matchInvalidProfiles:diag.invalidProfiles||0,
-          matchReason:diag.reason||'unknown'
+          matchReason:diag.reason||'unknown',
+          recognitionMode:matchedPeople[0]?.recognitionMode||'hold-or-standard'
         }
       );
     }catch(err){
@@ -1395,23 +1432,46 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(!best) return null;
 
     const threshold=faceRecognitionThreshold;
-    const samePersonAlreadyActive=best.profile.personId===stableTargetPersonId;
-    const marginRequired=samePersonAlreadyActive ? 0.004 : 0.018;
-    const separation=!second || (second.distance-best.distance)>=marginRequired;
-    const strongExistingMatch=samePersonAlreadyActive && best.distance<=0.28;
 
-    /* Once a person is already the active target, a strong close match wins
-       even when another template is temporarily almost as close. */
-    if(
-      best.distance<=threshold &&
-      (separation || strongExistingMatch)
-    ){
+    /*
+     * LIVE IDENTITY HYSTERESIS (v2.70)
+     *
+     * Once Robo has a confirmed person attached to the current tracked face,
+     * recognition is a verifier. A single descriptor wobble must not turn a
+     * known person into UNKNOWN, nor should a temporarily close second person
+     * steal the target.
+     */
+    const activeKnownPersonId =
+      stableTargetPersonId ||
+      lastKnownPersonId ||
+      faceTarget?.lastKnownPersonId ||
+      faceTarget?.personId ||
+      null;
+
+    const samePersonAlreadyActive =
+      !!activeKnownPersonId &&
+      String(best.profile.personId)===String(activeKnownPersonId);
+
+    // Known target: accept substantially weaker but still credible matches
+    // without a separation requirement. This is the key anti-flicker rule.
+    const knownTargetAccept =
+      samePersonAlreadyActive &&
+      best.distance <= Math.min(0.62, threshold + 0.02);
+
+    // New target: require a meaningfully better distance and separation so a
+    // second person cannot steal the current target during pose/lighting wobble.
+    const newTargetAccept =
+      best.distance <= Math.min(0.46, threshold) &&
+      (!second || (second.distance-best.distance) >= 0.06);
+
+    if(knownTargetAccept || newTargetAccept){
       return {
         ...best.profile,
         descriptor:Array.from(live),
         distance:best.distance,
         secondDistance:second?.distance ?? null,
-        rankedByPerson:ranked.length
+        rankedByPerson:ranked.length,
+        recognitionMode:knownTargetAccept ? 'known-target-hysteresis' : 'new-target-confirmed'
       };
     }
 
@@ -4780,7 +4840,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.69 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.70 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4912,7 +4972,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.69 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.70 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
