@@ -212,6 +212,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 @media(max-width:700px){.devGrid{grid-template-columns:1fr}.devLogCard{grid-column:auto}.devHeader h2{font-size:17px}}
 
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.20.0/dist/tf-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.20.0/dist/tf-converter.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.20.0/dist/tf-backend-webgl.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js" defer></script>
 </head>
 <body>
@@ -427,6 +431,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let faceSmoothedBox = null;
   let faceTrackingInitialized = false;
   let faceDetectionModel = null;
+  let blazeFaceModel = null;
+  let blazeFaceReady = false;
   let faceRecognitionAvailable = false;
   let faceRecognitionThreshold = 0.52;
   let faceRecognitionDistance = null;
@@ -457,7 +463,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             i=$('#devFaceIdentity'),
             f=$('#devFaceFps');
 
-      if(e) e.textContent=faceEngineReady?'ONLINE':(faceEngineLoading?'LOADING':'OFFLINE');
+      if(e) e.textContent=faceEngineReady?(blazeFaceReady?'ONLINE · BLAZEFACE':'ONLINE'):(faceEngineLoading?'LOADING':'OFFLINE');
       if(c) c.textContent=String(faceDetections.length);
       if(t) t.textContent=faceTarget?'PRIMARY':'NONE';
       if(tr){
@@ -668,52 +674,101 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return faceEngineReady;
     }
 
-    if(!window.faceapi){
-      faceRecognitionStatus='library-missing';
-      faceBadge('FACE ENGINE UNAVAILABLE');
-      faceDiag();
-      return false;
-    }
-
     faceEngineLoading=true;
     faceDiag();
-    faceBadge('LOADING FACE ENGINE');
+    faceBadge('LOADING LIVE FACE ENGINE');
 
     try{
-      await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URI);
-      await faceapi.nets.faceLandmark68TinyNet.loadFromUri(FACE_MODEL_URI);
-      await faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URI);
+      // Primary tracker: BlazeFace is optimized for fast browser/mobile face boxes.
+      if(!blazeFaceModel){
+        if(!window.blazeface){
+          throw new Error('BlazeFace library unavailable');
+        }
+        try{
+          await tf.setBackend('webgl');
+        }catch(_){
+          try{ await tf.setBackend('cpu'); }catch(__){}
+        }
+        await tf.ready();
+        blazeFaceModel=await blazeface.load({maxFaces:10});
+      }
+
+      blazeFaceReady=!!blazeFaceModel;
+
+      if(!blazeFaceReady){
+        throw new Error('BlazeFace model failed to initialize');
+      }
+
+      // Recognition is optional. Tracking must remain usable if face-api
+      // recognition assets are slow or unavailable on the device.
+      faceRecognitionAvailable=false;
+      faceRecognitionStatus='unavailable';
+
+      if(window.faceapi){
+        try{
+          await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URI);
+          await faceapi.nets.faceLandmark68TinyNet.loadFromUri(FACE_MODEL_URI);
+          await faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URI);
+          faceRecognitionAvailable=true;
+          faceRecognitionStatus='ready';
+        }catch(err){
+          devLog('FACE','recognition models unavailable; tracking remains active',{
+            message:err?.message||String(err)
+          });
+        }
+      }
 
       faceDetectionModel={
         inputSize:320,
-        scoreThreshold:.40
+        scoreThreshold:.25
       };
 
-      faceRecognitionAvailable=true;
       faceEngineReady=true;
-      faceRecognitionStatus='ready';
-
-      faceBadge('FACE ENGINE ONLINE');
-      setTimeout(()=>faceBadge('',false),1600);
+      faceBadge('LIVE FACE TRACKER ONLINE');
+      setTimeout(()=>faceBadge('',false),1800);
       faceDiag();
-
       return true;
+
     }catch(err){
       faceEngineReady=false;
+      blazeFaceReady=false;
       faceRecognitionAvailable=false;
       faceRecognitionStatus='load-failed';
 
-      devLog('FACE ERROR','face engine load failed',{
+      devLog('FACE ERROR','live face engine load failed',{
         message:err?.message||String(err)
       });
 
       faceBadge('FACE ENGINE LOAD FAILED');
       faceDiag();
-
       return false;
     }finally{
       faceEngineLoading=false;
     }
+  }
+
+  async function detectLocalFaceBoxes(){
+    if(!camera.videoWidth || !camera.videoHeight || camera.readyState < 2) return [];
+
+    // BlazeFace is the primary real-time detector.
+    if(blazeFaceReady && blazeFaceModel){
+      const predictions=await blazeFaceModel.estimateFaces(camera,false);
+      return predictions.map(p=>{
+        const tl=p.topLeft || p.topLeft;
+        const br=p.bottomRight || p.bottomRight;
+        if(!Array.isArray(tl) || !Array.isArray(br) || tl.length<2 || br.length<2) return null;
+        const x=Number(tl[0]);
+        const y=Number(tl[1]);
+        const width=Number(br[0])-x;
+        const height=Number(br[1])-y;
+        if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(width)||!Number.isFinite(height)) return null;
+        if(width<8 || height<8) return null;
+        const probability=Array.isArray(p.probability) ? Number(p.probability[0]||0) : Number(p.probability||0);
+        return {box:{x,y,width,height},score:probability};
+      }).filter(d=>isValidFaceBox(d?.box));
+    }
+
+    return [];
   }
 
   function getStoredFaceProfiles(){
@@ -776,7 +831,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         await faceapi
           .detectSingleFace(
             camera,
-            new faceapi.TinyFaceDetectorOptions(faceDetectionModel)
+            new faceapi.TinyFaceDetectorOptions({inputSize:224,scoreThreshold:.30})
           )
           .withFaceLandmarks(true)
           .withFaceDescriptor();
@@ -837,7 +892,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         await faceapi
           .detectAllFaces(
             camera,
-            new faceapi.TinyFaceDetectorOptions(faceDetectionModel)
+            new faceapi.TinyFaceDetectorOptions({inputSize:224,scoreThreshold:.30})
           )
           .withFaceLandmarks(true)
           .withFaceDescriptors();
@@ -918,15 +973,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }
 
     try{
-      const detections=
-        await faceapi.detectAllFaces(
-          camera,
-          new faceapi.TinyFaceDetectorOptions(faceDetectionModel)
-        );
-
-      const mapped=detections
-        .map(d=>({box:d?.box||null,score:Number(d?.score||0)}))
-        .filter(d=>isValidFaceBox(d.box));
+      const mapped=await detectLocalFaceBoxes();
 
       faceDetections=mapped;
 
