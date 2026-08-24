@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.35 MODULE 8.2 LIVE FACE TRACKING SSD PRIMARY</title>
+<title>ROBO AIOS v2.36 MODULE 8.2 LIVE FACE TRACKING SSD PRIMARY</title>
 <style>
 :root{
   --void:#090d15;
@@ -99,7 +99,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 /* 3D floating emoji avatar. Canvas draws the face so every emotion is programmable. */
 #face{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:6;filter:drop-shadow(0 22px 25px rgba(44,36,64,.16));animation:float 4s ease-in-out infinite;pointer-events:none}
-.emojiFallback{position:absolute;inset:0;display:grid;place-items:center;z-index:5;font-size:clamp(120px,30vw,210px);line-height:1;opacity:1;filter:drop-shadow(0 18px 22px rgba(15,22,35,.20));pointer-events:none;transition:opacity .25s ease}
+.emojiFallback{position:absolute;inset:0;display:grid;place-items:center;z-index:5;font-size:clamp(120px,30vw,210px);line-height:1;opacity:0;filter:drop-shadow(0 18px 22px rgba(15,22,35,.20));pointer-events:none;transition:opacity .25s ease}
 .emojiFallback.hidden{opacity:0}
 .avatarHint{position:absolute;left:50%;bottom:3%;transform:translateX(-50%);z-index:7;font-size:7px;letter-spacing:.14em;text-transform:uppercase;color:rgba(44,36,64,.32);white-space:nowrap;pointer-events:none}
 @keyframes float{50%{transform:translateY(-7px)}}
@@ -221,7 +221,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.35 · MODULE 8.2 LIVE FACE TRACKING</div>
+      <div id="roboBuildMarker">ROBO v2.36 · MODULE 8.2 LIVE FACE TRACKING</div>
 
       <header class="hud">
         <div class="hudTop">
@@ -571,6 +571,168 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let autoIdleEnabled=true;
   let idleTimer=null;
   let lastAutoState="curious";
+
+  /* ---------- Animated avatar renderer v2.36 ---------- */
+  let avatarFrame=null;
+  let avatarLastTime=performance.now();
+  let avatarDpr=1;
+  let avatarW=0;
+  let avatarH=0;
+
+  function resizeAvatarCanvas(){
+    if(!canvas || !ctx) return;
+    const rect=canvas.getBoundingClientRect();
+    const w=Math.max(1,Math.round(rect.width));
+    const h=Math.max(1,Math.round(rect.height));
+    avatarDpr=Math.min(window.devicePixelRatio||1,2);
+    const targetW=Math.round(w*avatarDpr);
+    const targetH=Math.round(h*avatarDpr);
+    if(canvas.width!==targetW || canvas.height!==targetH){
+      canvas.width=targetW;
+      canvas.height=targetH;
+    }
+    avatarW=w;
+    avatarH=h;
+  }
+
+  function drawAvatar(time){
+    if(!ctx || !canvas) return;
+    resizeAvatarCanvas();
+
+    const dt=Math.min(0.05,Math.max(0,(time-avatarLastTime)/1000));
+    avatarLastTime=time;
+    t += dt;
+
+    const dpr=avatarDpr;
+    const w=avatarW||canvas.clientWidth||700;
+    const h=avatarH||canvas.clientHeight||700;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,w,h);
+
+    const data=stateData[state]||stateData.curious;
+    const blend=Math.min(1,stateBlend);
+    stateBlend=Math.min(1,stateBlend+dt*3.5);
+
+    const cx=w/2;
+    const cy=h/2 + Math.sin(t*1.6)*3;
+    const radius=Math.min(w,h)*0.31*(lerp(1,data.scale,blend));
+    const glow=0.18+data.glow*0.22;
+
+    const bg=ctx.createRadialGradient(cx,cy,radius*0.2,cx,cy,radius*1.7);
+    bg.addColorStop(0,`rgba(95,212,208,${glow})`);
+    bg.addColorStop(0.55,`rgba(119,168,255,${glow*0.45})`);
+    bg.addColorStop(1,'rgba(119,168,255,0)');
+    ctx.fillStyle=bg;
+    ctx.beginPath();
+    ctx.arc(cx,cy,radius*1.75,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(data.tilt||0);
+
+    const faceGrad=ctx.createLinearGradient(-radius,-radius,radius,radius);
+    faceGrad.addColorStop(0,'#fff5e5');
+    faceGrad.addColorStop(0.58,'#ffe3c4');
+    faceGrad.addColorStop(1,'#ffc58f');
+    ctx.fillStyle=faceGrad;
+    ctx.shadowColor='rgba(44,36,64,.22)';
+    ctx.shadowBlur=22;
+    ctx.shadowOffsetY=10;
+    ctx.beginPath();
+    ctx.arc(0,0,radius,0,Math.PI*2);
+    ctx.fill();
+    ctx.shadowColor='transparent';
+
+    const eyeY=-radius*0.08;
+    const eyeDX=radius*0.36;
+    const eyeH=Math.max(3,radius*0.11*Math.max(.2,data.eye));
+    const eyeW=radius*0.18;
+    const blinkNow=blink>0.88 ? Math.max(.05,1-(blink-0.88)/0.12) : 1;
+
+    ctx.strokeStyle='#29233c';
+    ctx.fillStyle='#29233c';
+    ctx.lineWidth=Math.max(2,radius*0.035);
+    ctx.lineCap='round';
+
+    if(blinkNow<0.25){
+      ctx.beginPath();
+      ctx.moveTo(-eyeDX-eyeW*0.65,eyeY);
+      ctx.lineTo(-eyeDX+eyeW*0.65,eyeY);
+      ctx.moveTo(eyeDX-eyeW*0.65,eyeY);
+      ctx.lineTo(eyeDX+eyeW*0.65,eyeY);
+      ctx.stroke();
+    }else{
+      for(const ex of [-eyeDX,eyeDX]){
+        ctx.beginPath();
+        ctx.ellipse(ex,eyeY,eyeW,eyeH*blinkNow,0,0,Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle='#ffffff';
+        ctx.beginPath();
+        ctx.arc(ex-eyeW*0.28,eyeY-eyeH*0.25,eyeH*0.22,0,Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle='#29233c';
+      }
+    }
+
+    const browY=eyeY-radius*0.30;
+    const browTilt=data.brow*radius*0.25;
+    ctx.beginPath();
+    ctx.moveTo(-eyeDX-eyeW,browY+browTilt);
+    ctx.quadraticCurveTo(-eyeDX,browY-eyeH*0.8,-eyeDX+eyeW,browY-browTilt);
+    ctx.moveTo(eyeDX-eyeW,browY-browTilt);
+    ctx.quadraticCurveTo(eyeDX,browY-eyeH*0.8,eyeDX+eyeW,browY+browTilt);
+    ctx.stroke();
+
+    ctx.strokeStyle='rgba(44,36,64,.58)';
+    ctx.lineWidth=Math.max(1.5,radius*0.018);
+    ctx.beginPath();
+    ctx.moveTo(0,eyeY+radius*0.08);
+    ctx.quadraticCurveTo(-radius*0.03,0,radius*0.025,radius*0.13);
+    ctx.stroke();
+
+    const mouthY=radius*0.34;
+    const mouthOpen=Math.max(0,data.mouth)*radius*(talking?0.75:0.42);
+    ctx.strokeStyle='#29233c';
+    ctx.fillStyle='rgba(41,35,60,.12)';
+    ctx.lineWidth=Math.max(2,radius*0.022);
+    ctx.beginPath();
+    if(data.mouth>=0){
+      ctx.arc(0,mouthY,radius*0.22,0.08*Math.PI,0.92*Math.PI);
+    }else{
+      ctx.arc(0,mouthY+radius*0.06,radius*0.22,1.08*Math.PI,1.92*Math.PI);
+    }
+    ctx.stroke();
+    if(mouthOpen>2){
+      ctx.beginPath();
+      ctx.ellipse(0,mouthY+mouthOpen*0.35,radius*0.12,mouthOpen,0,0,Math.PI*2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    if(time >= blinkTimer){
+      blink=1;
+      blinkTimer=time + 120 + Math.random()*100;
+    }
+    if(blink>0){
+      blink=Math.max(0,blink-dt*7.5);
+    }
+
+    const fallback=$('#emojiFallback');
+    if(fallback) fallback.classList.add('hidden');
+
+    avatarFrame=requestAnimationFrame(drawAvatar);
+  }
+
+  function startAvatarRenderer(){
+    if(avatarFrame) return;
+    resizeAvatarCanvas();
+    avatarFrame=requestAnimationFrame(drawAvatar);
+  }
+
+  startAvatarRenderer();
+  window.addEventListener("resize",()=>{resizeAvatarCanvas();},{passive:true});
 
   function scheduleIdleCycle(delay=6500){
     clearTimeout(idleTimer);
@@ -1038,8 +1200,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
      Lower alpha = smoother / slower.
      We adapt slightly by movement magnitude so large movements still catch up.
   */
-  const FACE_SMOOTH_ALPHA = 0.28;
-  const FACE_SMOOTH_FAST_ALPHA = 0.48;
+  const FACE_SMOOTH_ALPHA = 0.34;
+  const FACE_SMOOTH_FAST_ALPHA = 0.56;
   const FACE_SMOOTH_FAST_DISTANCE = 0.18;
   const FACE_TARGET_HOLD_MS = 850;
 
@@ -1061,7 +1223,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           ? (faceTrackingInitialized ? 'SMOOTH' : 'ACQUIRING')
           : (faceSmoothedBox ? 'HOLD' : 'IDLE');
       }
-      if(r) r.textContent=faceRecognitionAvailable?faceRecognitionStatus.toUpperCase():'UNAVAILABLE';
+      if(r) r.textContent=faceRecognitionAvailable?String(faceRecognitionStatus||'unavailable').toUpperCase():'UNAVAILABLE';
       if(i) i.textContent=faceRecognitionIdentity||'UNKNOWN';
       if(f) f.textContent=String(faceFps);
     }catch(_){}
@@ -1340,10 +1502,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       }
 
       /* One detector inference at a time; keep the phone UI responsive. */
-      faceLoopTimer=setTimeout(loop,220);
+      faceLoopTimer=setTimeout(loop,160);
 
       if(faceTickInFlight) return;
-      if(performance.now()-faceLastRun<180) return;
+      if(performance.now()-faceLastRun<130) return;
 
       faceLastRun=performance.now();
       faceTickInFlight=true;
@@ -1852,9 +2014,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function renderSocialDiagnostics(){
     if(typeof devSocialPresence==='undefined' || !devSocialPresence) return;
     const s=socialAwareness;
-    devSocialPresence.textContent=s.presence.toUpperCase();
+    devSocialPresence.textContent=String(s?.presence||'unknown').toUpperCase();
     devSocialCount.textContent=String(s.personCount);
-    devSocialInteraction.textContent=s.interaction.toUpperCase();
+    devSocialInteraction.textContent=String(s?.interaction||'idle').toUpperCase();
     devSocialConfidence.textContent=s.confidence+'%';
     devSocialChange.textContent=s.lastChange;
   }
@@ -2036,6 +2198,9 @@ function startSTT(isRetry=false){
       sttSession++;
       if(!isRetry) sttRetryUsed=false;
       recognition=buildRecognition();
+      if(!recognition || typeof recognition.start!=='function'){
+        throw new Error('SpeechRecognition runtime unavailable');
+      }
       sttStarting=true;
 
       // Stop TTS and every getUserMedia audio resource before asking Google
@@ -2483,7 +2648,7 @@ function startSTT(isRetry=false){
       const reply=String(data.text).trim();
       conversation.push({role:'assistant',content:reply});
       while(conversation.length>MAX_HISTORY) conversation.shift();
-      if(devAI) devAI.textContent=(data.provider||'GEMINI').toUpperCase()+' · CONNECTED';
+      if(devAI) devAI.textContent=String(data?.provider||'GEMINI').toUpperCase()+' · CONNECTED';
       if(devStage) devStage.textContent='AI RESPONSE RECEIVED';
       setState(emotion,emotion+' · AI response',{intensity:emotionResult.intensity,confidence:emotionResult.confidence});
       speak(reply,languageHint);
@@ -2692,7 +2857,13 @@ function startSTT(isRetry=false){
 
   micBtn.addEventListener('click',async()=>{
     lastActivity=performance.now();
-    if(listening){try{recognition.stop();}catch(_){ }return;}
+    devLog('MIC','tap',{speechRecognitionAvailable:typeof SR==='function',secureContext:Boolean(window.isSecureContext)});
+    if(!SR){
+      setVoiceStatus('MIC UNAVAILABLE · SpeechRecognition API is not exposed by this browser');
+      if(devStt)devStt.textContent='UNAVAILABLE';
+      return;
+    }
+    if(listening){try{recognition?.stop();}catch(_){ }return;}
     if('speechSynthesis' in window) speechSynthesis.cancel();
     await startSTT(false);
   });
@@ -3002,11 +3173,18 @@ function devLog(type,msg,data){
 function devStageSet(s){if(devStage)devStage.textContent=s;devLog("STAGE",s)}
 if(devBrowser)devBrowser.textContent=navigator.userAgent.includes("Chrome")?"Chrome":"Other";
 if(devAI)devAI.textContent="CHECKING · PROVIDER ADAPTER";
-if(devStt)devStt.textContent=(window.SpeechRecognition||window.webkitSpeechRecognition)?"SUPPORTED":"UNSUPPORTED";
+if(devStt){
+  const srAvailable=typeof SR==='function';
+  devStt.textContent=srAvailable?'READY · USER GESTURE REQUIRED':'UNAVAILABLE';
+  devStt.dataset.runtime=srAvailable?'ready':'unavailable';
+}
 if(devCamera)devCamera.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
 if(devMic)devMic.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
 if(devMicPermission)devMicPermission.textContent="UNKNOWN · tap CAMERA or MIC";
-if(devLocalStt)devLocalStt.textContent=(window.SpeechRecognition&&"processLocally" in SpeechRecognition.prototype)?"SUPPORTED API":"NOT EXPOSED";
+if(devLocalStt){
+  const proto=SR&&SR.prototype;
+  devLocalStt.textContent=(proto && "processLocally" in proto)?"SUPPORTED API":"NOT EXPOSED";
+}
 async function refreshMicPermissionDiagnostic(){
   if(!devMicPermission)return;
   try{
@@ -3062,12 +3240,12 @@ function runDevChecks(){
   const list=[
     ["HTTPS / localhost",location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"],
     ["getUserMedia",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
-    ["SpeechRecognition",!!(window.SpeechRecognition||window.webkitSpeechRecognition)],
+    ["SpeechRecognition",typeof SR==='function'],
     ["Speech synthesis","speechSynthesis" in window],
     ["Camera",!!$("#camera") && !!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
     ["3D emoji canvas",!!$("#face")],
     ["Media permission API",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
-    ["On-device STT API",!!(window.SpeechRecognition&&"processLocally" in SpeechRecognition.prototype)],
+    ["On-device STT API",!!(SR&&SR.prototype&&"processLocally" in SR.prototype)],
     ["AI adapter route",true],
     ["Camera vision capture",!!(cameraEnabled && cameraStream && $("#camera")?.videoWidth>1 && $("#camera")?.videoHeight>1)],
     ["Camera state",cameraEnabled && !!cameraStream],
@@ -3113,7 +3291,7 @@ $("#clearLogs").addEventListener("click",()=>{
 $("#copyLogs").addEventListener("click",async()=>{
   const text=id=>$(id)?.textContent||'—';
   const payload=[
-    "ROBO AIOS v2.35 MODULE 8.2 SMOOTH FACE TRACKING DIAGNOSTICS",
+    "ROBO AIOS v2.36 MODULE 8.2 SMOOTH FACE TRACKING DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -3275,7 +3453,7 @@ function hookRecognitionDiagnostics(r){
   setState("curious","curious · standing by");
   setAutoIdle(true);
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.35 MODULE 8.2 ACTIVE FACE TRACKING + RECOGNITION · Gemini AI brain");
+  log("ROBO AIOS v2.36 MODULE 8.2 ACTIVE FACE TRACKING + RECOGNITION · Gemini AI brain");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
   log("AI provider adapter online · Gemini structured vision enabled");
