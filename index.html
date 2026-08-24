@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.54 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.55 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -55,7 +55,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 @keyframes blinkDot{50%{opacity:.35}}
 
 /* Camera */
-.camera{position:absolute;left:50%;right:auto;top:108px;width:min(92%,420px);height:auto;aspect-ratio:16/9;transform:translateX(-50%);border-radius:18px;overflow:hidden;background:#080b11;border:2px solid rgba(255,255,255,.75);box-shadow:0 12px 28px rgba(44,36,64,.22);z-index:25}
+.camera{position:absolute;left:50%;right:auto;top:92px;width:min(92%,420px);height:auto;aspect-ratio:16/9;transform:translateX(-50%);border-radius:18px;overflow:hidden;background:#080b11;border:2px solid rgba(255,255,255,.75);box-shadow:0 12px 28px rgba(44,36,64,.22);z-index:25}
 .camera video{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1)}
 .camera.rear video{transform:none}
 #cameraSwitchBtn:disabled{opacity:.45;cursor:not-allowed}
@@ -80,7 +80,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 .memoryIdentity[data-state="unknown"]{border-color:rgba(240,180,91,.45)}
 .perceptionFusion{position:absolute;left:50%;bottom:10px;transform:translateX(-50%) translateY(5px);z-index:8;padding:5px 9px;border:1px solid rgba(95,212,208,.35);border-radius:999px;background:rgba(9,13,21,.76);backdrop-filter:blur(8px);font-size:8px;letter-spacing:.07em;color:#e8ffff;opacity:0;transition:.2s;white-space:nowrap;max-width:82%;overflow:hidden;text-overflow:ellipsis}.perceptionFusion.show{opacity:1;transform:translateX(-50%)}.perceptionFusion[data-state="known"]{border-color:rgba(85,197,140,.62)}.perceptionFusion[data-state="tracking"]{border-color:rgba(105,216,207,.58)}.perceptionFusion[data-state="unknown"]{border-color:rgba(240,180,91,.45)}
 .visionSummary{position:absolute;left:7px;right:7px;top:7px;max-height:23%;padding:7px 9px;border-radius:8px;background:rgba(9,13,21,.84);color:#fff;font-size:8px;line-height:1.35;letter-spacing:.03em;opacity:0;transform:translateY(-3px);transition:.2s;overflow:auto;overflow-wrap:anywhere;word-break:break-word;box-sizing:border-box;z-index:7;pointer-events:none}.camera .visionSummary::-webkit-scrollbar{width:3px}.camera .visionSummary::-webkit-scrollbar-thumb{background:rgba(255,255,255,.28);border-radius:3px}
-.camera .visionSummary.show{opacity:1;transform:none}.visionTargetLine{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:8px;font-weight:800;letter-spacing:.04em}.visionTargetDot{width:6px;height:6px;border-radius:50%;background:#69d8cf;box-shadow:0 0 8px rgba(105,216,207,.65);flex:none}.visionTargetLine.unknown .visionTargetDot{background:#e6b85c;box-shadow:0 0 8px rgba(230,184,92,.55)}.visionTargetName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.visionSceneLine{display:none!important;white-space:normal;overflow-wrap:anywhere}.visionSceneLine.empty{opacity:.7}
+.camera .visionSummary.show{opacity:0;transform:none}.visionTargetLine{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:8px;font-weight:800;letter-spacing:.04em}.visionTargetDot{width:6px;height:6px;border-radius:50%;background:#69d8cf;box-shadow:0 0 8px rgba(105,216,207,.65);flex:none}.visionTargetLine.unknown .visionTargetDot{background:#e6b85c;box-shadow:0 0 8px rgba(230,184,92,.55)}.visionTargetName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.visionSceneLine{display:none!important;white-space:normal;overflow-wrap:anywhere}.visionSceneLine.empty{opacity:.7}.camera .visionSummary{display:none!important}
 
 /* Avatar zone */
 .avatarZone{position:absolute;left:12px;right:12px;top:310px;bottom:205px;display:grid;place-items:center;z-index:8}
@@ -222,11 +222,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.54 · MODULE 7.5 DESCRIPTOR MATCH + MODULES 6+7+8 PERCEPTION FUSION</div>
+      <div id="roboBuildMarker">ROBO v2.55 · MODULE 7.5 DESCRIPTOR MATCH + MODULES 6+7+8 PERCEPTION FUSION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.54 DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
+          <div class="brand">ROBO <small>v2.55</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -295,7 +295,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.54 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.55 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -861,53 +861,14 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   function renderLiveTargetPanel(){
+    // v2.55: the camera panel is intentionally clean.
+    // Live identity is shown on the face tracking box itself.
     const summary=$('#visionSummary');
     if(!summary) return;
-
-    const target=faceTarget;
-    const active=getActivePerson();
-    const name=(target?.identity && target.identity!=='UNKNOWN')
-      ? target.identity
-      : ((target?.lastKnownIdentity && target.lastKnownIdentity!=='UNKNOWN')
-        ? target.lastKnownIdentity
-        : ((faceRecognitionIdentity && faceRecognitionIdentity!=='UNKNOWN')
-          ? faceRecognitionIdentity
-          : (active?.displayName || 'UNKNOWN')));
-
-    const known=Boolean(name && name!=='UNKNOWN');
     summary.innerHTML='';
-
-    if(target){
-      const line=document.createElement('div');
-      line.className='visionTargetLine '+(known?'':'unknown');
-      const dot=document.createElement('span');
-      dot.className='visionTargetDot';
-      const label=document.createElement('span');
-      label.className='visionTargetName';
-      label.textContent='TARGET · '+(known?name:'UNKNOWN');
-      line.append(dot,label);
-      summary.appendChild(line);
-    }
-
-    // The live target panel is intentionally identity-only.
-    // Gemini scene/object descriptions stay in diagnostics/AI context and never
-    // overwrite or visually compete with the real-time face target.
-    const cameraLive=Boolean(cameraEnabled && cameraStream && camera.videoWidth>1 && camera.videoHeight>1);
-    summary.classList.toggle('show',cameraLive);
-    if(cameraLive && !target){
-      summary.innerHTML='';
-      const line=document.createElement('div');
-      line.className='visionTargetLine unknown';
-      const dot=document.createElement('span');
-      dot.className='visionTargetDot';
-      const label=document.createElement('span');
-      label.className='visionTargetName';
-      label.textContent='TARGET · SEARCHING';
-      line.append(dot,label);
-      summary.appendChild(line);
-    }
-    summary.title=target ? `Target: ${known?name:'UNKNOWN'}` : (cameraLive?'Target: SEARCHING':'');
-  }
+    summary.classList.remove('show');
+    summary.setAttribute('aria-hidden','true');
+}
 
   function renderFaceTarget(){
     const overlay=$('#faceTrackingOverlay');
@@ -927,8 +888,20 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       const top=Math.max(0,Math.min(100-squarePct,centerY-squarePct/2));
       const el=document.createElement('div');
       const activePerson=getActivePerson();
-      const targetIdentity=(faceTarget===null ? null : (isTarget ? (faceTarget.identity||faceTarget.lastKnownIdentity||null) : null));
-      const resolvedLabel=(labelText&&labelText!=='FACE') ? labelText : (targetIdentity && targetIdentity!=='UNKNOWN' ? targetIdentity : (isTarget && faceRecognitionIdentity ? faceRecognitionIdentity : 'UNKNOWN'));
+      const targetIdentity=(
+        isTarget
+          ? (
+              faceTarget?.identity||
+              faceTarget?.lastKnownIdentity||
+              faceRecognitionIdentity||
+              getActivePerson()?.displayName||
+              null
+            )
+          : (labelText&&labelText!=='FACE'?labelText:null)
+      );
+      const resolvedLabel=targetIdentity && targetIdentity!=='UNKNOWN'
+        ? targetIdentity
+        : 'UNKNOWN';
       el.className='faceTrackBox '+(isTarget?'target ':'')+(resolvedLabel==='UNKNOWN'?'unknown':'known');
       el.style.left=left+'%'; el.style.top=top+'%'; el.style.width=squarePct+'%'; el.style.height=squarePct+'%';
       const label=document.createElement('span');
@@ -1005,7 +978,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     ) return;
 
     const profiles=getStoredFaceProfiles();
-    if(!profiles.length) return;
+    if(!profiles.length){
+      faceRecognitionMatchDiagnostics={
+        liveLength:0,validLive:false,validProfiles:0,invalidProfiles:0,ranked:0,
+        reason:'no-stored-face-profiles'
+      };
+      return;
+    }
 
     faceRecognitionInFlight=true;
     try{
@@ -1023,13 +1002,16 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       const liveFaces=Array.isArray(faceDetections)?faceDetections:[];
       const matchedPeople=[];
 
-      // Start each visible face as unknown for this recognition pass.
+      // Start each tracked face as unknown for this pass.
       for(const live of liveFaces){
         live.identity='UNKNOWN';
         live.personId=null;
         live.identityConfidence=0;
       }
 
+      // Always map a descriptor to the closest tracked face. With one visible
+      // face, use that face as a hard fallback so identity cannot fail merely
+      // because two detector calls produced slightly different boxes.
       for(const detection of detections){
         const box={
           x:Number(detection.detection.box.x),
@@ -1037,28 +1019,51 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           width:Number(detection.detection.box.width),
           height:Number(detection.detection.box.height)
         };
-        const live=matchFaceDetectionToLiveFace(box,liveFaces);
+
+        let live=matchFaceDetectionToLiveFace(box,liveFaces);
+
+        if(!live && liveFaces.length===1){
+          live=liveFaces[0];
+        }
+
         if(!live) continue;
 
         const match=findFaceMatch(detection.descriptor);
+
         if(!match) continue;
 
         const identity=String(match.displayName||'UNKNOWN').trim()||'UNKNOWN';
-        const matchDistance=Number.isFinite(Number(match?.distance)) ? Number(match.distance) : Number(faceRecognitionDistance);
+        const matchDistance=Number.isFinite(Number(match?.distance))
+          ? Number(match.distance)
+          : Number(faceRecognitionDistance);
+
         const confidence=Number.isFinite(matchDistance)
-          ? Math.round(Math.max(0,Math.min(100,(1-Math.min(1,matchDistance))*100)))
+          ? Math.round(
+              Math.max(
+                0,
+                Math.min(
+                  100,
+                  (1-Math.min(1,matchDistance))*100
+                )
+              )
+            )
           : 0;
 
         live.identity=identity;
         live.personId=match.personId||null;
         live.identityConfidence=confidence;
         live.lastRecognizedAt=Date.now();
-        matchedPeople.push({live,match,confidence});
+
+        matchedPeople.push({
+          live,
+          match,
+          confidence
+        });
       }
 
-      // Preserve the last confirmed identity briefly so the label does not flicker
-      // between a real name and UNKNOWN while the next descriptor pass is running.
       const now=Date.now();
+
+      // Preserve a confirmed identity briefly during recognition refresh.
       for(const live of liveFaces){
         if(live.identity!=='UNKNOWN'){
           live.lastKnownIdentity=live.identity;
@@ -1066,8 +1071,16 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           live.lastKnownAt=now;
           live.lastKnownIdentityConfidence=live.identityConfidence||0;
         }else{
-          const previousFace=faceDetections.find(prev=>prev?.lastKnownPersonId && boxIoU(prev.box,live.box)>=0.42);
-          if(previousFace && (now-(previousFace.lastKnownAt||0))<2200){
+          const previousFace=faceDetections.find(
+            prev=>prev!==live &&
+              prev?.lastKnownPersonId &&
+              isValidFaceBox(prev.box) &&
+              isValidFaceBox(live.box) &&
+              boxIoU(prev.box,live.box)>=0.30 &&
+              (now-(prev.lastKnownAt||0))<2200
+          );
+
+          if(previousFace){
             live.identity=previousFace.lastKnownIdentity||'UNKNOWN';
             live.personId=previousFace.lastKnownPersonId||null;
             live.identityConfidence=previousFace.lastKnownIdentityConfidence||0;
@@ -1075,40 +1088,73 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         }
       }
 
-      // The primary tracked face is the authoritative active identity.
       const primary=faceTarget
-        ? matchFaceDetectionToLiveFace(faceTarget.box,liveFaces)
+        ? (matchFaceDetectionToLiveFace(faceTarget.box,liveFaces)||(
+            liveFaces.length===1 ? liveFaces[0] : null
+          ))
         : choosePrimaryFace(liveFaces);
 
       if(primary && primary.personId){
-        const person=roboMemory?.persons?.find(p=>p.personId===primary.personId);
+        const person=roboMemory?.persons?.find(
+          p=>p.personId===primary.personId
+        );
+
         if(person){
           setActivePerson(person.personId,'live-face-identity');
           lastKnownPersonId=person.personId;
           lastKnownPersonAt=Date.now();
+
           faceRecognitionIdentity=person.displayName||'UNKNOWN';
           faceRecognitionStatus='recognized';
-          const matched=matchedPeople.find(x=>x.live===primary);
-          faceRecognitionDistance=Number.isFinite(Number(matched?.match?.distance))
-            ? Number(matched.match.distance)
-            : faceRecognitionDistance;
+
+          const matched=matchedPeople.find(
+            x=>x.live===primary
+          );
+
+          faceRecognitionDistance=
+            Number.isFinite(Number(matched?.match?.distance))
+              ? Number(matched.match.distance)
+              : faceRecognitionDistance;
+
           primary.identity=person.displayName||'UNKNOWN';
           primary.personId=person.personId;
-          primary.identityConfidence=matched?.confidence||0;
+          primary.identityConfidence=matched?.confidence||primary.identityConfidence||0;
           primary.lastKnownIdentity=primary.identity;
           primary.lastKnownPersonId=primary.personId;
           primary.lastKnownAt=Date.now();
           primary.lastKnownIdentityConfidence=primary.identityConfidence;
+
+          // Add only confident samples to the person's adaptive template bank.
+          if(
+            matched &&
+            Number(matched.match?.distance) <= Math.min(
+              0.56,
+              faceRecognitionThreshold
+            )
+          ){
+            addRecognitionSample(
+              person.personId,
+              matched.match.descriptor,
+              'adaptive-face-sample'
+            );
+          }
         }
       }else if(primary){
-        faceRecognitionIdentity=primary.identity||'UNKNOWN';
-        faceRecognitionStatus=faceRecognitionIdentity!=='UNKNOWN'?'recognized':(profiles.length?'ready':'not-enrolled');
-        if(faceRecognitionIdentity==='UNKNOWN'){
+        const identity=primary.identity||primary.lastKnownIdentity||'UNKNOWN';
+        faceRecognitionIdentity=
+          identity!=='UNKNOWN'
+            ? identity
+            : null;
+
+        faceRecognitionStatus=
+          faceRecognitionIdentity
+            ? 'recognized'
+            : (profiles.length?'ready':'not-enrolled');
+
+        if(!faceRecognitionIdentity){
           setActivePerson(null,'face-identity-unknown');
           primary.identity='UNKNOWN';
           primary.personId=null;
-          primary.lastKnownIdentity=null;
-          primary.lastKnownPersonId=null;
           primary.identityConfidence=0;
           faceRecognitionDistance=null;
         }
@@ -1120,36 +1166,57 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       }
 
       faceLastRecognitionAt=performance.now();
+
       faceDiag();
       renderMemoryIdentity();
       renderMemoryDiagnostics();
       renderFaceTarget();
-      renderLiveTargetPanel();
       deriveLiveSocialFromFaces(liveFaces);
       syncLiveIdentityAndSocial('identity-refresh');
-      const bestDistance=safeFixedNumber(faceRecognitionDistance,4,null);
-      devLog('IDENTITY','live face identity refresh',{
-        faces:liveFaces.length,
-        matched:matchedPeople.length,
-        active:getActivePerson()?.displayName||'UNKNOWN',
-        bestDistance,
-        threshold:faceRecognitionThreshold,
-        margin:matchedPeople[0]?.match?.secondDistance!=null && matchedPeople[0]?.match?.distance!=null
-          ? safeFixedNumber(matchedPeople[0].match.secondDistance-matchedPeople[0].match.distance,4,null)
-          : null,
-        liveDescriptorLength:(detections[0]?.descriptor?.length||0),
-        profiles:profiles.length,
-        profileDescriptors:getStoredFaceProfiles().length,
-        matchRanked:faceRecognitionMatchDiagnostics?.ranked??0,
-        matchValidProfiles:faceRecognitionMatchDiagnostics?.validProfiles??0,
-        matchInvalidProfiles:faceRecognitionMatchDiagnostics?.invalidProfiles??0
-      });
+
+      const diag=faceRecognitionMatchDiagnostics||{};
+      const bestDistance=safeFixedNumber(diag.bestDistance ?? faceRecognitionDistance,4,null);
+      const secondDistance=safeFixedNumber(diag.secondDistance,4,null);
+
+      devLog(
+        'IDENTITY',
+        'live face identity refresh',
+        {
+          faces:liveFaces.length,
+          matched:matchedPeople.length,
+          active:getActivePerson()?.displayName||'UNKNOWN',
+          bestDistance,
+          secondDistance,
+          threshold:faceRecognitionThreshold,
+          margin:(
+            Number.isFinite(Number(diag.secondDistance)) &&
+            Number.isFinite(Number(diag.bestDistance))
+          )
+            ? safeFixedNumber(
+                Number(diag.secondDistance)-Number(diag.bestDistance),
+                4,
+                null
+              )
+            : null,
+          liveDescriptorLength:diag.liveLength||detections[0]?.descriptor?.length||0,
+          profiles:profiles.length,
+          profileDescriptors:profiles.length,
+          matchRanked:diag.ranked||0,
+          matchValidProfiles:diag.validProfiles||0,
+          matchInvalidProfiles:diag.invalidProfiles||0,
+          matchReason:diag.reason||'unknown'
+        }
+      );
     }catch(err){
-      devLog('FACE ERROR','live identity refresh failed',{message:err?.message||String(err)});
+      devLog(
+        'FACE ERROR',
+        'live identity refresh failed',
+        {message:err?.message||String(err)}
+      );
     }finally{
       faceRecognitionInFlight=false;
     }
-  }
+}
 
   function normalizeFaceDescriptor(value){
     if(value instanceof Float32Array || value instanceof Float64Array || Array.isArray(value)){
@@ -3015,22 +3082,64 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       hideCaption(1800);
       return;
     }
+
     if(window.__roboCameraStarting) return;
     window.__roboCameraStarting=true;
+
+    const btn=$('#cameraBtn');
+    if(btn){
+      btn.disabled=true;
+      btn.textContent='STARTING…';
+      btn.classList.add('active');
+      btn.setAttribute('aria-pressed','true');
+    }
+
+    $('#cameraBox')?.classList.remove('empty');
+    $('#mediaText').textContent='CAMERA STARTING';
+    $('#mediaDot').className='dot live';
+
     try{
       setVoiceStatus('CAMERA STARTING · requesting permission…');
       await startCamera(cameraFacingMode);
+
       log('CAM · ON · '+cameraFacingMode+' · independent camera control');
-      setVoiceStatus(cameraFacingMode==='environment'?'REAR CAMERA ON · microphone remains independent':'CAMERA ON · microphone remains independent');
-      hideCaption(2500);
+      setVoiceStatus(
+        cameraFacingMode==='environment'
+          ? 'REAR CAMERA ON · microphone remains independent'
+          : 'CAMERA ON · microphone remains independent'
+      );
+      hideCaption(2200);
     }catch(err){
       stopCamera('startup failed');
       $('#mediaDot').className='dot';
       $('#mediaText').textContent='CAMERA ERROR';
-      log('CAM · start failed · '+(err?.name||'unknown')+' · '+(err?.message||''));
-      setVoiceStatus('CAMERA ERROR · '+(err?.message||err?.name||'camera unavailable'));
-      hideCaption(6000);
-    }finally{ window.__roboCameraStarting=false; }
+      log(
+        'CAM · start failed · '+
+        (err?.name||'unknown')+
+        ' · '+
+        (err?.message||'')
+      );
+      setVoiceStatus(
+        'CAMERA ERROR · '+
+        (err?.message||err?.name||'camera unavailable')
+      );
+      hideCaption(5000);
+    }finally{
+      window.__roboCameraStarting=false;
+
+      if(btn){
+        btn.disabled=false;
+        if(cameraEnabled){
+          btn.textContent='CAMERA ON';
+          btn.classList.add('active');
+          btn.setAttribute('aria-pressed','true');
+        }else{
+          btn.textContent='CAMERA OFF';
+          btn.classList.remove('active');
+          btn.setAttribute('aria-pressed','false');
+        }
+      }
+    }
   }
 
   async function switchCamera(){
@@ -3059,6 +3168,21 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
   $('#cameraBtn').addEventListener('click',toggleCamera);
   $('#cameraSwitchBtn').addEventListener('click',switchCamera);
+  window.addEventListener('pageshow',()=>{
+    window.__roboCameraStarting=false;
+    const btn=$('#cameraBtn');
+    if(btn && !cameraEnabled && !cameraStream){
+      btn.disabled=false;
+      btn.textContent='CAMERA OFF';
+      btn.classList.remove('active');
+      btn.setAttribute('aria-pressed','false');
+    }
+  });
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible'){
+      window.__roboCameraStarting=false;
+    }
+  });
 
     /* ---------- Speech recognition (v2.12 hardened pipeline) ---------- */
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -4429,7 +4553,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.54 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.55 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4561,10 +4685,10 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.54 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
-  log("Module 7.5 multi-person identity refresh online · 1.8s cadence · live name tags enabled");
+  log("ROBO AIOS v2.55 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
-  log("camera OFF by default · microphone/STT independent · object detection ready");
+  log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
   log("AI provider adapter online · Gemini structured vision enabled");
   log("natural idle emotion cycle → ON");
   log("Module 6 social awareness online · presence/person count/context enabled");
