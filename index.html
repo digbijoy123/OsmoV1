@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.42 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.43 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -222,11 +222,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.42 · MODULES 6+7+8 PERCEPTION FUSION</div>
+      <div id="roboBuildMarker">ROBO v2.43 · MODULES 6+7+8 PERCEPTION FUSION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.42 PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
+          <div class="brand">ROBO <small>v2.43 PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -295,7 +295,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.42 MODULE 6+7+8 · PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.43 MODULE 6+7+8 · PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -444,6 +444,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let faceRecognitionIdentity = null;
   let faceRecognitionStatus = 'not-enrolled';
   let faceLastRecognitionAt = 0;
+  let faceRecognitionInFlight = false;
   let faceMisses = 0;
   let faceLastAdaptiveAt = 0;
 
@@ -451,6 +452,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   const FACE_TARGET_HOLD_MS = 850;
   const FACE_DETECT_INTERVAL_MS = 105;
   const FACE_SMOOTH_ALPHA = 0.42;
+  const FACE_RECOGNITION_INTERVAL_MS = 1800;
+  const FACE_RECOGNITION_INPUT_SIZE = 224;
+  const FACE_RECOGNITION_SCORE_THRESHOLD = 0.06;
 
   function faceDiag(){
     try{
@@ -877,9 +881,152 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     faceDetections.forEach((d,idx)=>{
       if(faceTarget && d===faceTarget) return;
-      appendBox(d.box,idx,false,d.identity||'UNKNOWN');
+      appendBox(d.box,idx,false,d.identity||d.lastKnownIdentity||'UNKNOWN');
     });
-    if(faceSmoothBox && faceTarget) appendBox(faceSmoothBox,0,true,faceTarget.identity||faceRecognitionIdentity||'UNKNOWN');
+    if(faceSmoothBox && faceTarget) appendBox(faceSmoothBox,0,true,faceTarget.identity||faceTarget.lastKnownIdentity||faceRecognitionIdentity||'UNKNOWN');
+  }
+
+  function faceDistance(a,b){
+    const aa=Array.isArray(a)?a:[];
+    const bb=Array.isArray(b)?b:[];
+    if(!aa.length || aa.length!==bb.length) return Infinity;
+    let sum=0;
+    for(let i=0;i<aa.length;i++){
+      const av=Number(aa[i]);
+      const bv=Number(bb[i]);
+      if(!Number.isFinite(av) || !Number.isFinite(bv)) return Infinity;
+      const diff=av-bv;
+      sum+=diff*diff;
+    }
+    return Math.sqrt(sum);
+  }
+
+  function matchFaceDetectionToLiveFace(box, liveFaces){
+    if(!Array.isArray(liveFaces) || !liveFaces.length) return null;
+    let best=null;
+    let bestDist=Infinity;
+    const maxDistance=Math.max(90, Math.max(Number(box?.width)||0, Number(box?.height)||0)*1.5);
+    for(const face of liveFaces){
+      if(!isValidFaceBox(face?.box)) continue;
+      const dist=boxDistance(box,face.box);
+      if(dist<bestDist && dist<=maxDistance){
+        bestDist=dist;
+        best=face;
+      }
+    }
+    return best;
+  }
+
+  async function recognizeAllVisibleFaces(){
+    if(
+      faceRecognitionInFlight ||
+      !faceRecognitionAvailable ||
+      !cameraEnabled ||
+      !cameraStream ||
+      !camera.videoWidth ||
+      camera.readyState<2
+    ) return;
+
+    const profiles=getStoredFaceProfiles();
+    if(!profiles.length) return;
+
+    faceRecognitionInFlight=true;
+    try{
+      const detections=await faceapi
+        .detectAllFaces(
+          camera,
+          new faceapi.TinyFaceDetectorOptions({
+            inputSize:FACE_RECOGNITION_INPUT_SIZE,
+            scoreThreshold:FACE_RECOGNITION_SCORE_THRESHOLD
+          })
+        )
+        .withFaceLandmarks(true)
+        .withFaceDescriptors();
+
+      const liveFaces=Array.isArray(faceDetections)?faceDetections:[];
+      const matchedPeople=[];
+
+      // Start each visible face as unknown for this recognition pass.
+      for(const live of liveFaces){
+        live.identity='UNKNOWN';
+        live.personId=null;
+        live.identityConfidence=0;
+      }
+
+      for(const detection of detections){
+        const box={
+          x:Number(detection.detection.box.x),
+          y:Number(detection.detection.box.y),
+          width:Number(detection.detection.box.width),
+          height:Number(detection.detection.box.height)
+        };
+        const live=matchFaceDetectionToLiveFace(box,liveFaces);
+        if(!live) continue;
+
+        const match=findFaceMatch(detection.descriptor);
+        if(!match) continue;
+
+        const identity=String(match.displayName||'UNKNOWN').trim()||'UNKNOWN';
+        const confidence=faceRecognitionDistance!=null
+          ? Math.round(Math.max(0,Math.min(100,(1-Math.min(1,Number(faceRecognitionDistance)))*100)))
+          : 0;
+
+        live.identity=identity;
+        live.personId=match.personId||null;
+        live.identityConfidence=confidence;
+        live.lastRecognizedAt=Date.now();
+        matchedPeople.push({live,match,confidence});
+      }
+
+      // Preserve the last confirmed identity briefly so the label does not flicker
+      // between a real name and UNKNOWN while the next descriptor pass is running.
+      const now=Date.now();
+      for(const live of liveFaces){
+        if(live.identity==='UNKNOWN' && live.lastKnownIdentity && (now-live.lastKnownAt)<4500){
+          live.identity=live.lastKnownIdentity;
+          live.personId=live.lastKnownPersonId||null;
+          live.identityConfidence=live.lastKnownIdentityConfidence||0;
+        }else if(live.identity!=='UNKNOWN'){
+          live.lastKnownIdentity=live.identity;
+          live.lastKnownPersonId=live.personId||null;
+          live.lastKnownAt=now;
+          live.lastKnownIdentityConfidence=live.identityConfidence||0;
+        }
+      }
+
+      // The primary tracked face is the authoritative active identity.
+      const primary=faceTarget
+        ? matchFaceDetectionToLiveFace(faceTarget.box,liveFaces)
+        : choosePrimaryFace(liveFaces);
+
+      if(primary && primary.personId){
+        const person=roboMemory?.persons?.find(p=>p.personId===primary.personId);
+        if(person){
+          setActivePerson(person.personId,'live-face-identity');
+          faceRecognitionIdentity=person.displayName||'UNKNOWN';
+          faceRecognitionStatus='recognized';
+          faceRecognitionDistance=matchedPeople.find(x=>x.live===primary)?.confidence!=null
+            ? Math.max(0,1-(Number(matchedPeople.find(x=>x.live===primary).confidence)/100))
+            : faceRecognitionDistance;
+        }
+      }else if(primary){
+        faceRecognitionIdentity=primary.identity||'UNKNOWN';
+        faceRecognitionStatus=faceRecognitionIdentity!=='UNKNOWN'?'recognized':(profiles.length?'ready':'not-enrolled');
+      }
+
+      faceLastRecognitionAt=performance.now();
+      faceDiag();
+      renderMemoryIdentity();
+      renderMemoryDiagnostics();
+      renderFaceTarget();
+      deriveLiveSocialFromFaces(liveFaces);
+      updatePerceptionFusion('identity-refresh');
+      devLog('IDENTITY','live face identity refresh',{faces:liveFaces.length,matched:matchedPeople.length,active:getActivePerson()?.displayName||'UNKNOWN'});
+    }catch(err){
+      devLog('FACE ERROR','live identity refresh failed',{message:err?.message||String(err)});
+    }finally{
+      faceRecognitionInFlight=false;
+    }
   }
 
   function getStoredFaceProfiles(){
@@ -1082,6 +1229,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           if(best.identity) next.identity=best.identity;
           if(best.personId) next.personId=best.personId;
           if(best.identityConfidence) next.identityConfidence=best.identityConfidence;
+          if(best.lastKnownIdentity) next.lastKnownIdentity=best.lastKnownIdentity;
+          if(best.lastKnownPersonId) next.lastKnownPersonId=best.lastKnownPersonId;
+          if(best.lastKnownAt) next.lastKnownAt=best.lastKnownAt;
+          if(best.lastKnownIdentityConfidence) next.lastKnownIdentityConfidence=best.lastKnownIdentityConfidence;
         }
       }
 
@@ -1103,6 +1254,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
         faceTarget=primary;
         faceTargetLostAt=0;
+        if(primary.identity) faceRecognitionIdentity=primary.identity;
 
         if(
           reacquired ||
@@ -1119,9 +1271,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             );
         }
 
-        if(faceRecognitionAvailable && getStoredFaceProfiles().length && performance.now()-faceLastRecognitionAt>1500){
-          faceLastRecognitionAt=performance.now();
-          recognizeAllVisibleFaces().catch(()=>{});
+        if(faceRecognitionAvailable && getStoredFaceProfiles().length && !faceRecognitionInFlight){
+          const recognitionDue =
+            faceLastRecognitionAt<=0 ||
+            performance.now()-faceLastRecognitionAt>=FACE_RECOGNITION_INTERVAL_MS;
+          if(recognitionDue){
+            recognizeAllVisibleFaces().catch(()=>{});
+          }
         }
 
       }else if(faceTarget){
@@ -3771,7 +3927,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.42 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.43 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -3903,7 +4059,8 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.42 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.43 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("Module 7.5 multi-person identity refresh online · 1.8s cadence · live name tags enabled");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
   log("AI provider adapter online · Gemini structured vision enabled");
