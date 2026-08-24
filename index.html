@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.53 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.54 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -222,11 +222,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.53 · MODULE 7.5 DESCRIPTOR MATCH + MODULES 6+7+8 PERCEPTION FUSION</div>
+      <div id="roboBuildMarker">ROBO v2.54 · MODULE 7.5 DESCRIPTOR MATCH + MODULES 6+7+8 PERCEPTION FUSION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.53 DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
+          <div class="brand">ROBO <small>v2.54 DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -295,7 +295,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.53 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.54 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -892,8 +892,21 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     // The live target panel is intentionally identity-only.
     // Gemini scene/object descriptions stay in diagnostics/AI context and never
     // overwrite or visually compete with the real-time face target.
-    summary.classList.toggle('show',Boolean(target));
-    summary.title=target ? `Target: ${known?name:'UNKNOWN'}` : '';
+    const cameraLive=Boolean(cameraEnabled && cameraStream && camera.videoWidth>1 && camera.videoHeight>1);
+    summary.classList.toggle('show',cameraLive);
+    if(cameraLive && !target){
+      summary.innerHTML='';
+      const line=document.createElement('div');
+      line.className='visionTargetLine unknown';
+      const dot=document.createElement('span');
+      dot.className='visionTargetDot';
+      const label=document.createElement('span');
+      label.className='visionTargetName';
+      label.textContent='TARGET · SEARCHING';
+      line.append(dot,label);
+      summary.appendChild(line);
+    }
+    summary.title=target ? `Target: ${known?name:'UNKNOWN'}` : (cameraLive?'Target: SEARCHING':'');
   }
 
   function renderFaceTarget(){
@@ -1508,6 +1521,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       }
 
       faceDetections=mapped;
+      renderLiveTargetPanel();
       deriveLiveSocialFromFaces(mapped);
 
       const primary=
@@ -1925,45 +1939,77 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
   function ensureMemoryRegistry(){
     if(!roboMemory) return null;
+
     if(!Array.isArray(roboMemory.persons) || !roboMemory.persons.length){
-      const primary=DEFAULT_PERSON();
-      primary.displayName=String(roboMemory.identity?.displayName||'');
-      primary.aliases=Array.isArray(roboMemory.identity?.aliases)?roboMemory.identity.aliases.slice():[];
-      primary.facts=Array.isArray(roboMemory.facts)?roboMemory.facts.map(x=>({...x,personId:'primary-user'})):[];
-      primary.preferences={...(roboMemory.preferences||{})};
-      primary.memories=Array.isArray(roboMemory.memories)?roboMemory.memories.map(x=>({...x,personId:'primary-user'})):[];
-      primary.faceProfiles=Array.isArray(roboMemory.faceProfiles)?roboMemory.faceProfiles.map(x=>({...x,personId:'primary-user'})):[];
-      roboMemory.persons=[primary];
+      roboMemory.persons=[DEFAULT_PERSON()];
     }
+
+    // Normalize existing people first.
     roboMemory.persons=roboMemory.persons.map(p=>({
       ...DEFAULT_PERSON(),
       ...p,
-      aliases:Array.isArray(p.aliases)?p.aliases:[],
-      facts:Array.isArray(p.facts)?p.facts:[],
-      preferences:{...(p.preferences||{})},
-      memories:Array.isArray(p.memories)?p.memories:[],
-      faceProfiles:Array.isArray(p.faceProfiles)?p.faceProfiles:[]
+      aliases:Array.isArray(p?.aliases)?p.aliases:[],
+      facts:Array.isArray(p?.facts)?p.facts:[],
+      preferences:{...(p?.preferences||{})},
+      memories:Array.isArray(p?.memories)?p.memories:[],
+      faceProfiles:Array.isArray(p?.faceProfiles)?p.faceProfiles:[]
     }));
+
     if(!roboMemory.persons.some(p=>p.personId==='primary-user')){
       roboMemory.persons.unshift(DEFAULT_PERSON());
     }
+
+    // Migrate legacy top-level faceProfiles into their matching person records.
+    // Older builds stored these outside persons, which made Module 7.5 report
+    // profiles but gave the live matcher no usable person-owned templates.
+    const legacy=Array.isArray(roboMemory.faceProfiles)?roboMemory.faceProfiles:[];
+    if(legacy.length){
+      for(const raw of legacy){
+        const descriptor=normalizeFaceDescriptor(raw?.descriptor ?? raw?.faceDescriptor ?? raw);
+        if(!descriptor) continue;
+        const personId=String(raw?.personId||'primary-user');
+        let person=roboMemory.persons.find(p=>p.personId===personId);
+        if(!person){
+          person={...DEFAULT_PERSON(),personId,displayName:String(raw?.displayName||'').trim()||'Unknown Person',relationship:'',createdAt:raw?.createdAt||Date.now(),updatedAt:Date.now()};
+          roboMemory.persons.push(person);
+        }
+        if(!Array.isArray(person.faceProfiles)) person.faceProfiles=[];
+        const duplicate=person.faceProfiles.some(fp=>{
+          const d=normalizeFaceDescriptor(fp?.descriptor);
+          return d && faceDistance(d,descriptor)<0.08;
+        });
+        if(!duplicate){
+          person.faceProfiles.push({
+            id:raw?.id||('face-migrated-'+Date.now()+'-'+Math.random().toString(36).slice(2,7)),
+            descriptor:Array.from(descriptor),
+            createdAt:raw?.createdAt||Date.now(),
+            updatedAt:Date.now(),
+            lastUsedAt:raw?.lastUsedAt||0,
+            source:'legacy-migrated'
+          });
+        }
+      }
+      roboMemory.faceProfiles=[];
+    }
+
     roboMemory.primaryPersonId='primary-user';
     const activeId=roboMemory.activePersonId;
-    roboMemory.activePersonId =
-      activeId===null || activeId==='' || activeId==='none'
-        ? null
-        : (roboMemory.persons.some(p=>p.personId===activeId) ? activeId : 'primary-user');
-    const primary=roboMemory.persons.find(p=>p.personId==='primary-user');
+    roboMemory.activePersonId=(activeId===null||activeId===''||activeId==='none')
+      ? null
+      : (roboMemory.persons.some(p=>p.personId===activeId)?activeId:'primary-user');
+
+    const primary=roboMemory.persons.find(p=>p.personId==='primary-user') || roboMemory.persons[0];
     roboMemory.identity={
-      displayName:primary.displayName||'',
-      aliases:Array.isArray(primary.aliases)?primary.aliases.slice():[],
+      displayName:primary?.displayName||'',
+      aliases:Array.isArray(primary?.aliases)?primary.aliases.slice():[],
       personId:'primary-user',
-      recognitionReady:Boolean(primary.faceProfiles.length)
+      recognitionReady:Boolean(primary?.faceProfiles?.length)
     };
-    roboMemory.facts=primary.facts;
-    roboMemory.preferences=primary.preferences;
-    roboMemory.memories=primary.memories;
-    roboMemory.faceProfiles=primary.faceProfiles;
+    roboMemory.facts=primary?.facts||[];
+    roboMemory.preferences=primary?.preferences||{};
+    roboMemory.memories=primary?.memories||[];
+    // Keep a compatibility mirror for older UI/diagnostics only.
+    roboMemory.faceProfiles=(primary?.faceProfiles||[]).map(fp=>({...fp,personId:'primary-user',displayName:primary?.displayName||''}));
     return roboMemory;
   }
 
@@ -2293,6 +2339,15 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(/^(forget everything|forget all memories|clear all memory|erase all memory|delete all memories)$/.test(l)){
       clearAllRoboMemory();
       return {handled:true,reply:'I cleared my persistent multi-person memory.',emotion:'neutral'};
+    }
+
+    const directFaceName=raw.match(/^remember\s+(?:this\s+face|this\s+person)\s+(?:is|as)\s+([A-Za-z][A-Za-z .'-]{1,40})[.!?]?$/i);
+    if(directFaceName){
+      const result=await rememberCurrentFaceAs(directFaceName[1]).catch(()=>({ok:false,reason:'error'}));
+      if(!result.ok){
+        return {handled:true,reply:result.reason==='no-face'?'I need the person\'s face visible in the camera first.':'I could not save that face yet.',emotion:'confused'};
+      }
+      return {handled:true,reply:`I remember ${result.person.displayName}. I linked this live face to their profile.`,emotion:'happy'};
     }
 
     const introduced=raw.match(/^(?:this is|this person is|this face is|remember this person as|remember this face as|add this person as|save this person as|his name is|her name is|their name is)\s+([A-Za-z][A-Za-z .\'-]{1,40})(?:\s+and\s+(?:he|she|they)\s+is\s+my\s+(.+))?[.!?]?$/i);
@@ -2748,6 +2803,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     $('#cameraBox')?.classList.remove('rear');
     clearVisionOverlay();
     latestVision=null;
+    renderLiveTargetPanel();
     const btn=$('#cameraBtn');
     if(btn){ btn.textContent='CAMERA OFF'; btn.classList.remove('active'); btn.setAttribute('aria-pressed','false'); }
     const switchBtn=$('#cameraSwitchBtn');
@@ -2811,6 +2867,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         $('#cameraBox').classList.toggle('rear',facingMode==='environment');
         $('#mediaDot').className='dot ok';
         $('#mediaText').textContent=facingMode==='environment'?'REAR CAMERA ON':'CAMERA ON';
+        renderLiveTargetPanel();
         log('CAM · existing live stream reused · '+facingMode+' · '+video.videoWidth+'x'+video.videoHeight);
         return cameraStream;
       }
@@ -2915,6 +2972,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       $('#cameraBox').classList.toggle('rear',facingMode==='environment');
       $('#mediaDot').className='dot ok';
       $('#mediaText').textContent=facingMode==='environment'?'REAR CAMERA ON':'CAMERA ON';
+      renderLiveTargetPanel();
       log('CAM · LIVE · '+facingMode+' · '+video.videoWidth+'x'+video.videoHeight);
       return stream;
     }catch(err){
@@ -4371,7 +4429,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.53 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.54 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4503,7 +4561,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.53 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.54 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · 1.8s cadence · live name tags enabled");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
