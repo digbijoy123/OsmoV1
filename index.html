@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.45 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.47 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -222,11 +222,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.45 · MODULES 6+7+8 PERCEPTION FUSION</div>
+      <div id="roboBuildMarker">ROBO v2.47 · MODULES 6+7+8 PERCEPTION FUSION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.45 PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
+          <div class="brand">ROBO <small>v2.47 PERCEPTION FUSION + FACE TRACKING + MEM + IDENTITY + VISION</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -295,7 +295,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.45 MODULE 6+7+8 · PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.47 MODULE 6+7+8 · PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -439,12 +439,14 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let faceSmoothBox = null;
   let faceRecognitionAvailable = false;
   let faceRecognitionLoading = false;
-  let faceRecognitionThreshold = 0.52;
+  let faceRecognitionThreshold = 0.62;
   let faceRecognitionDistance = null;
   let faceRecognitionIdentity = null;
   let faceRecognitionStatus = 'not-enrolled';
   let faceLastRecognitionAt = 0;
   let faceRecognitionInFlight = false;
+  let lastKnownPersonId = null;
+  let lastKnownPersonAt = 0;
   let faceMisses = 0;
   let faceLastAdaptiveAt = 0;
 
@@ -1026,6 +1028,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         const person=roboMemory?.persons?.find(p=>p.personId===primary.personId);
         if(person){
           setActivePerson(person.personId,'live-face-identity');
+          lastKnownPersonId=person.personId;
+          lastKnownPersonAt=Date.now();
           faceRecognitionIdentity=person.displayName||'UNKNOWN';
           faceRecognitionStatus='recognized';
           const matched=matchedPeople.find(x=>x.live===primary);
@@ -1066,7 +1070,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       renderFaceTarget();
       deriveLiveSocialFromFaces(liveFaces);
       syncLiveIdentityAndSocial('identity-refresh');
-      devLog('IDENTITY','live face identity refresh',{faces:liveFaces.length,matched:matchedPeople.length,active:getActivePerson()?.displayName||'UNKNOWN'});
+      const bestDistance=Number.isFinite(Number(faceRecognitionDistance)) ? Number(faceRecognitionDistance.toFixed(4)) : null;
+      devLog('IDENTITY','live face identity refresh',{faces:liveFaces.length,matched:matchedPeople.length,active:getActivePerson()?.displayName||'UNKNOWN',bestDistance,threshold:0.62,profiles:profiles.length,profileDescriptors:profiles.filter(p=>Array.isArray(p.descriptor)&&p.descriptor.length).length});
     }catch(err){
       devLog('FACE ERROR','live identity refresh failed',{message:err?.message||String(err)});
     }finally{
@@ -1098,21 +1103,46 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       faceRecognitionDistance=null;
       return null;
     }
-    let best=null;
-    let bestDist=Infinity;
+
+    const ranked=[];
     for(const profile of profiles){
       const arr=Array.isArray(profile?.descriptor)?profile.descriptor:[];
-      if(arr.length!==descriptor.length) continue;
+      if(arr.length!==descriptor.length || descriptor.length===0) continue;
       let sum=0;
+      let valid=true;
       for(let i=0;i<descriptor.length;i++){
-        const diff=Number(descriptor[i])-Number(arr[i]||0);
+        const av=Number(descriptor[i]);
+        const bv=Number(arr[i]);
+        if(!Number.isFinite(av) || !Number.isFinite(bv)){ valid=false; break; }
+        const diff=av-bv;
         sum+=diff*diff;
       }
-      const dist=Math.sqrt(sum);
-      if(dist<bestDist){bestDist=dist;best=profile;}
+      if(!valid) continue;
+      ranked.push({profile,distance:Math.sqrt(sum)});
     }
-    faceRecognitionDistance=Number.isFinite(bestDist)?bestDist:null;
-    if(best && bestDist<=faceRecognitionThreshold) return {...best,distance:bestDist};
+
+    ranked.sort((a,b)=>a.distance-b.distance);
+    const best=ranked[0]||null;
+    const second=ranked[1]||null;
+    faceRecognitionDistance=best ? best.distance : null;
+
+    if(!best) return null;
+
+    // Mobile-camera face-api matching should tolerate normal changes in
+    // lighting, pose, distance, and compression. Keep a standard-ish
+    // threshold while requiring a separation from the next-best person.
+    const threshold=0.62;
+    const marginRequired=best.distance<0.50 ? 0.025 : 0.015;
+    const marginOk=!second || (second.distance-best.distance)>=marginRequired;
+
+    if(best.distance<=threshold && marginOk){
+      return {
+        ...best.profile,
+        distance:best.distance,
+        secondDistance:second?.distance??null
+      };
+    }
+
     return null;
   }
 
@@ -1879,11 +1909,25 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const value=normalizeMemoryText(name).replace(/[.?!]+$/,'').trim();
     if(!value || !roboMemory) return false;
     ensureMemoryRegistry();
-    const primary=roboMemory.persons.find(p=>p.personId==='primary-user');
-    primary.displayName=value;
-    addFact('name',value,'identity','primary-user');
-    setActivePerson('primary-user','primary-identity-updated');
-    saveRoboMemory('identity-saved');
+    const target=getActivePerson() || roboMemory.persons.find(p=>p.personId==='primary-user');
+    if(!target) return false;
+    target.displayName=value;
+    if(!Array.isArray(target.facts)) target.facts=[];
+    target.facts=target.facts.filter(f=>String(f.key||'').toLowerCase()!=='name');
+    target.facts.unshift({key:'name',value,source:'identity',personId:target.personId,createdAt:Date.now(),updatedAt:Date.now()});
+    savePersonProfile(target,'identity-saved');
+    setActivePerson(target.personId,'identity-saved');
+    faceRecognitionIdentity=value;
+    faceRecognitionStatus='recognized';
+    if(faceTarget){
+      faceTarget.identity=value;
+      faceTarget.personId=target.personId;
+      faceTarget.lastKnownIdentity=value;
+      faceTarget.lastKnownPersonId=target.personId;
+      faceTarget.lastKnownAt=Date.now();
+    }
+    renderFaceTarget();
+    updatePerceptionFusion('identity-saved');
     return true;
   }
 
@@ -1970,6 +2014,114 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     devMemoryChange.textContent=lastMemoryChange;
   }
 
+  async function rememberCurrentFaceAs(name, relation=''){
+    const cleanName=normalizeMemoryText(name).replace(/[.?!]+$/,'').trim();
+    if(!cleanName || !roboMemory) return {ok:false,reason:'invalid-name'};
+    ensureMemoryRegistry();
+
+    const descriptor=await captureCurrentFaceDescriptor().catch(()=>null);
+    if(!descriptor){
+      return {ok:false,reason:'no-face'};
+    }
+
+    let person=findPersonByName(cleanName);
+    const wasExisting=Boolean(person);
+    const now=Date.now();
+
+    if(!person){
+      person={
+        personId:'person-'+now+'-'+Math.random().toString(36).slice(2,8),
+        displayName:cleanName,
+        aliases:[],
+        relationship:normalizeMemoryText(relation),
+        facts:[],
+        preferences:{},
+        memories:[],
+        faceProfiles:[],
+        createdAt:now,
+        updatedAt:now
+      };
+      roboMemory.persons.push(person);
+    }else if(relation){
+      person.relationship=normalizeMemoryText(relation);
+    }
+
+    if(!Array.isArray(person.faceProfiles)) person.faceProfiles=[];
+
+    // Store the current face descriptor. Keep a small set of samples so
+    // recognition is more tolerant of mobile-camera angle/lighting changes.
+    const duplicate=person.faceProfiles.some(fp=>faceDistance(descriptor,fp?.descriptor)<0.42);
+    if(!duplicate){
+      person.faceProfiles.unshift(descriptorFaceProfile(person,descriptor));
+      if(person.faceProfiles.length>6) person.faceProfiles=person.faceProfiles.slice(0,6);
+    }
+
+    person.facts=Array.isArray(person.facts)?person.facts:[];
+    person.facts=person.facts.filter(f=>String(f.key||'').toLowerCase()!=='name');
+    person.facts.unshift({
+      key:'name',
+      value:cleanName,
+      source:'identity',
+      personId:person.personId,
+      createdAt:now,
+      updatedAt:now
+    });
+    person.updatedAt=now;
+
+    setActivePerson(person.personId,'voice-face-identity');
+    savePersonProfile(person,'voice-face-identity');
+
+    faceRecognitionIdentity=person.displayName;
+    faceRecognitionStatus='recognized';
+    faceRecognitionDistance=0;
+    lastKnownPersonId=person.personId;
+    lastKnownPersonAt=now;
+    if(faceTarget){
+      faceTarget.identity=person.displayName;
+      faceTarget.personId=person.personId;
+      faceTarget.identityConfidence=100;
+      faceTarget.lastKnownIdentity=person.displayName;
+      faceTarget.lastKnownPersonId=person.personId;
+      faceTarget.lastKnownIdentityConfidence=100;
+      faceTarget.lastKnownAt=now;
+    }
+
+    renderFaceTarget();
+    renderMemoryIdentity();
+    renderMemoryDiagnostics();
+    deriveLiveSocialFromFaces(faceDetections);
+    updatePerceptionFusion('voice-face-identity');
+
+    devLog('IDENTITY','voice face memory bound',{
+      name:person.displayName,
+      personId:person.personId,
+      profiles:person.faceProfiles.length,
+      totalPeople:roboMemory.persons.length
+    });
+
+    return {ok:true,person,created:!wasExisting};
+  }
+
+  async function enrollCurrentFace(){
+    const active=getActivePerson();
+    const name=active?.displayName || roboMemory?.identity?.displayName || '';
+    if(!name){
+      showCaption('Tell Robo your name first, for example: remember me as Max.',true);
+      hideCaption(3000);
+      return {ok:false,reason:'no-name'};
+    }
+    const result=await rememberCurrentFaceAs(name);
+    if(result.ok){
+      faceBadge('FACE ENROLLED · '+result.person.displayName);
+      showCaption('Face enrolled for '+result.person.displayName+'.',true);
+      hideCaption(2200);
+    }else{
+      showCaption('Face enrollment needs your face clearly visible.',true);
+      hideCaption(2500);
+    }
+    return result;
+  }
+
   async function handleMemoryCommand(text){
     const raw=normalizeMemoryText(text), l=raw.toLowerCase();
     if(!raw || !roboMemory) return null;
@@ -1979,9 +2131,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return {handled:true,reply:getMemorySummary(),emotion:'happy'};
     }
 
-    const who=l.match(/^(?:who is|who's|what do you remember about|do you remember)\s+(.+?)\??$/i);
+    const who=l.match(/^(?:who is|who's|what do you remember about|do you remember)\s+(.+?)\s?$/i);
     if(who){
-      const person=findPersonByName(who[1].trim());
+      const subject=normalizeMemoryText(who[1].trim()).replace(/[?!.]+$/,'').trim();
+      const pronoun=/^(her|him|them|that person|this person)$/i.test(subject);
+      const person=pronoun
+        ? (lastKnownPersonId ? roboMemory.persons.find(p=>p.personId===lastKnownPersonId)||null : null)
+        : findPersonByName(subject);
       return {handled:true,reply:personSummary(person),emotion:person?'happy':'confused'};
     }
 
@@ -2007,8 +2163,22 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return {handled:true,reply:had?'Okay. I forgot your name.':'I do not currently have your name stored.',emotion:'neutral'};
     }
 
+    const rememberMeAs=raw.match(/^remember\s+me\s+as\s+([A-Za-z][A-Za-z .\'-]{1,40})[.!?]?$/i);
+    if(rememberMeAs){
+      const result=await rememberCurrentFaceAs(rememberMeAs[1]);
+      if(result.ok){
+        return {handled:true,reply:result.created?`Got it. I am ${result.person.displayName}. I saved my face and created a persistent identity profile.`:`Got it. I am ${result.person.displayName}. I updated my face profile and memory.`,emotion:'happy'};
+      }
+      return {handled:true,reply:'I can remember that name, but I need your face clearly visible in the camera first.',emotion:'confused'};
+    }
+
     const rememberedName=raw.match(/^remember(?: that)?\s+(?:my name is|i am|i\'m)\s+([A-Za-z][A-Za-z .\'-]{1,40})[.!?]?$/i);
-    if(rememberedName){ const value=rememberedName[1].trim(); if(setIdentityName(value)) return {handled:true,reply:`I will remember your name as ${value}.`,emotion:'happy'}; }
+    if(rememberedName){
+      const result=await rememberCurrentFaceAs(rememberedName[1]);
+      if(result.ok) return {handled:true,reply:`I will remember you as ${result.person.displayName} and store this face with your identity.`,emotion:'happy'};
+      const value=rememberedName[1].trim();
+      if(setIdentityName(value)) return {handled:true,reply:`I will remember your name as ${value}.`,emotion:'happy'};
+    }
 
     const forget=l.match(/^(?:forget|remove from memory|delete from memory)\s+(.+)$/);
     if(forget){ const ok=forgetMemoryByText(forget[1]); return {handled:true,reply:ok?'Okay. I removed that from the active person memory.':'I could not find that memory to remove.',emotion:ok?'neutral':'confused'}; }
@@ -4059,7 +4229,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.45 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.47 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -4191,7 +4361,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.45 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.47 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · 1.8s cadence · live name tags enabled");
   log("3D floating emoji renderer online");
   log("camera OFF by default · microphone/STT independent · object detection ready");
