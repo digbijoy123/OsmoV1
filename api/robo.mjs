@@ -2,7 +2,7 @@
  * ROBO AIOS — Gemini AI + vision adapter
  * Vercel serverless function: /api/robo
  *
- * v2.32 backend
+ * v2.37 backend
  *
  * FIXES:
  * - Explicitly accepts cameraEnabled from client.
@@ -84,10 +84,13 @@ const VISION_SCHEMA = {
 
           box: {
             type: 'ARRAY',
+
             description:
               'Bounding box as [ymin, xmin, ymax, xmax], normalized to 0-1000.',
+
             minItems: 4,
             maxItems: 4,
+
             items: {
               type: 'INTEGER',
             },
@@ -113,8 +116,10 @@ const VISION_SCHEMA = {
 
 function makeError(message, code, status) {
   const err = new Error(message);
+
   err.code = code;
   err.status = status;
+
   return err;
 }
 
@@ -529,6 +534,11 @@ const PROVIDERS = {
     },
   },
 };
+
+
+/* =====================================================
+ * ElevenLabs TTS
+ * =================================================== */
 
 function detectTTSLanguage(text) {
   const value =
