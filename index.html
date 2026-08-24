@@ -222,11 +222,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.55 · MODULE 7.5 DESCRIPTOR MATCH + MODULES 6+7+8 PERCEPTION FUSION</div>
+      <div id="roboBuildMarker">ROBO v2.56 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.55</small></div>
+          <div class="brand">ROBO <small>v2.56</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -1002,11 +1002,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       const liveFaces=Array.isArray(faceDetections)?faceDetections:[];
       const matchedPeople=[];
 
-      // Start each tracked face as unknown for this pass.
+      // Keep the live track identity between recognition passes. Recognition
+      // is a verifier, not the tracker itself. A failed comparison must not
+      // make a continuously tracked person flicker to UNKNOWN.
       for(const live of liveFaces){
-        live.identity='UNKNOWN';
-        live.personId=null;
-        live.identityConfidence=0;
+        live.identity=live.lastKnownIdentity||live.identity||'UNKNOWN';
+        live.personId=live.lastKnownPersonId||live.personId||null;
+        live.identityConfidence=live.lastKnownIdentityConfidence||live.identityConfidence||0;
       }
 
       // Always map a descriptor to the closest tracked face. With one visible
@@ -1123,6 +1125,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           primary.lastKnownPersonId=primary.personId;
           primary.lastKnownAt=Date.now();
           primary.lastKnownIdentityConfidence=primary.identityConfidence;
+          stableTargetPersonId=person.personId;
+          stableTargetIdentity=person.displayName||'UNKNOWN';
+          stableTargetSince=stableTargetSince||Date.now();
 
           // Add only confident samples to the person's adaptive template bank.
           if(
@@ -1152,11 +1157,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             : (profiles.length?'ready':'not-enrolled');
 
         if(!faceRecognitionIdentity){
-          setActivePerson(null,'face-identity-unknown');
-          primary.identity='UNKNOWN';
-          primary.personId=null;
-          primary.identityConfidence=0;
-          faceRecognitionDistance=null;
+          /* Keep a previously confirmed identity until the face track is
+             actually lost or a different person is confidently confirmed. */
+          const keepStable=Boolean(
+            primary.lastKnownPersonId &&
+            stableTargetPersonId===primary.lastKnownPersonId
+          );
+          if(!keepStable){
+            setActivePerson(null,'face-identity-unknown');
+            primary.identity='UNKNOWN';
+            primary.personId=null;
+            primary.identityConfidence=0;
+          }
         }
       }else{
         faceRecognitionIdentity=null;
@@ -1255,46 +1267,55 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   }
 
   function findFaceMatch(descriptor){
-    const rawLive = descriptor;
-    const live = normalizeFaceDescriptor(rawLive);
-    const profiles = getStoredFaceProfiles();
+    const rawLive=descriptor;
+    const live=normalizeFaceDescriptor(rawLive);
+    const profiles=getStoredFaceProfiles();
 
     if(!live){
       faceRecognitionDistance=null;
       faceRecognitionMatchDiagnostics={
-        liveLength: rawLive?.length ?? 0,
+        liveLength:rawLive?.length ?? 0,
         validLive:false,
-        validProfiles:profiles.length,
-        invalidProfiles:0,
+        validProfiles:0,
+        invalidProfiles:profiles.length,
         ranked:0,
+        bestDistance:null,
+        secondDistance:null,
         reason:'invalid-live-descriptor'
       };
       return null;
     }
 
-    const ranked=[];
+    /*
+     * IMPORTANT: rank PEOPLE, not individual face templates.
+     * A person can have several adaptive descriptors. Comparing the best
+     * template against the second-best template of the same person makes the
+     * old margin test reject the correct identity almost every time.
+     */
+    const byPerson=new Map();
     let invalidProfiles=0;
 
     for(const profile of profiles){
       const arr=normalizeFaceDescriptor(profile?.descriptor);
-      if(!arr){
-        invalidProfiles++;
-        continue;
-      }
+      if(!arr){ invalidProfiles++; continue; }
 
       let sum=0;
       for(let i=0;i<128;i++){
         const diff=live[i]-arr[i];
         sum+=diff*diff;
       }
-
       const distance=Math.sqrt(sum);
-      if(Number.isFinite(distance)){
-        ranked.push({profile,distance});
+      if(!Number.isFinite(distance)) continue;
+
+      const personId=String(profile.personId||'').trim();
+      if(!personId) continue;
+      const current=byPerson.get(personId);
+      if(!current || distance<current.distance){
+        byPerson.set(personId,{profile,distance});
       }
     }
 
-    ranked.sort((a,b)=>a.distance-b.distance);
+    const ranked=Array.from(byPerson.values()).sort((a,b)=>a.distance-b.distance);
     const best=ranked[0]||null;
     const second=ranked[1]||null;
 
@@ -1302,26 +1323,35 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     faceRecognitionMatchDiagnostics={
       liveLength:128,
       validLive:true,
-      validProfiles:profiles.length,
+      validProfiles:profiles.length-invalidProfiles,
       invalidProfiles,
       ranked:ranked.length,
       bestDistance:best?.distance ?? null,
       secondDistance:second?.distance ?? null,
-      reason:best?'computed':'no-valid-profile-comparisons'
+      bestPersonId:best?.profile?.personId||null,
+      secondPersonId:second?.profile?.personId||null,
+      reason:best?'computed-by-person':'no-valid-profile-comparisons'
     };
 
     if(!best) return null;
 
     const threshold=faceRecognitionThreshold;
-    const marginRequired=best.distance < 0.50 ? 0.025 : 0.015;
+    const samePersonAlreadyActive=best.profile.personId===stableTargetPersonId;
+    const marginRequired=samePersonAlreadyActive ? 0.008 : 0.018;
     const separation=!second || (second.distance-best.distance)>=marginRequired;
 
-    if(best.distance<=threshold && separation){
+    /* Once a person is already the active target, do not flap to UNKNOWN just
+       because two of that person's samples are temporarily close. */
+    if(
+      best.distance<=threshold &&
+      (separation || samePersonAlreadyActive)
+    ){
       return {
         ...best.profile,
         descriptor:Array.from(live),
         distance:best.distance,
-        secondDistance:second?.distance ?? null
+        secondDistance:second?.distance ?? null,
+        rankedByPerson:ranked.length
       };
     }
 
@@ -1411,36 +1441,45 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const person=roboMemory.persons.find(p=>p.personId===personId);
     if(!person) return false;
     if(!Array.isArray(person.faceProfiles)) person.faceProfiles=[];
+
     const now=Date.now();
-    const existing=person.faceProfiles.find(p=>Array.isArray(p?.descriptor) && p.descriptor.length===128);
-    if(existing){
-      existing.updatedAt=now;
-      existing.lastUsedAt=now;
+    const nearest=person.faceProfiles
+      .map(p=>({p,d:faceDistance(vector,p?.descriptor)}))
+      .filter(x=>Number.isFinite(x.d))
+      .sort((a,b)=>a.d-b.d)[0];
+
+    /* Do not add near-duplicate frames every recognition cycle. */
+    if(nearest && nearest.d<0.045){
+      nearest.p.lastUsedAt=now;
+      nearest.p.updatedAt=now;
+      person.updatedAt=now;
+      savePersonProfile(person,reason+'-existing-template');
+      return true;
     }
-    // Keep a small template bank so ordinary pose/lighting changes do not
-    // make a previously recognized person suddenly become UNKNOWN.
+
     const maxSamples=6;
+    const record={
+      id:'face-'+now+'-'+Math.random().toString(36).slice(2,7),
+      personId:person.personId,
+      displayName:person.displayName,
+      descriptor:Array.from(vector),
+      createdAt:now,
+      updatedAt:now,
+      lastUsedAt:now,
+      source:reason
+    };
+
     if(person.faceProfiles.length<maxSamples){
-      person.faceProfiles.push({
-        id:'face-'+now+'-'+Math.random().toString(36).slice(2,7),
-        descriptor:Array.from(vector),
-        createdAt:now,
-        updatedAt:now,
-        lastUsedAt:now
-      });
+      person.faceProfiles.push(record);
     }else{
       const oldestIndex=person.faceProfiles.reduce((idx,p,i,arr)=>{
         const a=Number(arr[idx]?.lastUsedAt||arr[idx]?.updatedAt||0);
         const b=Number(p?.lastUsedAt||p?.updatedAt||0);
         return b<a?i:idx;
       },0);
-      person.faceProfiles[oldestIndex]={
-        ...person.faceProfiles[oldestIndex],
-        descriptor:Array.from(vector),
-        updatedAt:now,
-        lastUsedAt:now
-      };
+      person.faceProfiles[oldestIndex]=record;
     }
+
     person.updatedAt=now;
     savePersonProfile(person,reason);
     return true;
@@ -1597,45 +1636,66 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       if(primary){
 
         const previousTarget=faceTarget;
-        const targetDistance=previousTarget&&isValidFaceBox(previousTarget.box)?boxDistance(previousTarget.box,primary.box):Infinity;
-        const targetChanged=!previousTarget || targetDistance>Math.max(90,Math.max(primary.box.width,primary.box.height)*0.95) || boxIoU(previousTarget?.box,primary.box)<0.18;
+        const targetDistance=previousTarget&&isValidFaceBox(previousTarget.box)
+          ? boxDistance(previousTarget.box,primary.box)
+          : Infinity;
+        const targetIoU=previousTarget&&isValidFaceBox(previousTarget.box)
+          ? boxIoU(previousTarget.box,primary.box)
+          : 0;
+        const sameTrack=Boolean(
+          previousTarget &&
+          isValidFaceBox(previousTarget.box) &&
+          (
+            targetIoU>=0.08 ||
+            targetDistance<=Math.max(140,Math.min(camera.videoWidth||720,camera.videoHeight||1280)*0.24)
+          )
+        );
         const reacquired=
           !previousTarget ||
-          (
-            faceTargetLostAt>0 &&
-            performance.now()-faceTargetLostAt>
-              FACE_TARGET_HOLD_MS
-          );
+          (faceTargetLostAt>0 && performance.now()-faceTargetLostAt>FACE_TARGET_HOLD_MS);
+        const targetChanged=!sameTrack || reacquired;
 
         faceTarget=primary;
         faceTargetLostAt=0;
 
         if(targetChanged){
-          // Immediately invalidate the previous identity. The visual box remains instant,
-          // but its tag becomes UNKNOWN until the next descriptor pass confirms the person.
-          faceRecognitionIdentity=null;
-          faceRecognitionDistance=null;
-          faceRecognitionStatus=getStoredFaceProfiles().length?'ready':'not-enrolled';
-          setActivePerson(null,'face-target-changed');
-          renderMemoryIdentity();
-          renderMemoryDiagnostics();
-          faceLastRecognitionAt=0;
-          lastLiveIdentitySyncAt=0;
-          liveIdentityGeneration++;
-          // Immediately publish the new target as UNKNOWN so Modules 6/7/8 cannot retain stale identity.
-          if(primary){
+          /* A detector box moving is NOT a new person. Keep the confirmed
+             identity attached to the continuous track. Only clear identity
+             when the previous target was genuinely lost/replaced. */
+          const wasReacquired=Boolean(reacquired || !previousTarget);
+          if(wasReacquired){
+            stableTargetGeneration++;
+            stableTargetSince=Date.now();
+            stableTargetPersonId=primary.lastKnownPersonId||null;
+            stableTargetIdentity=primary.lastKnownIdentity||null;
+            faceLastRecognitionAt=0;
+            lastLiveIdentitySyncAt=0;
+          }
+
+          if(primary.lastKnownIdentity){
+            primary.identity=primary.lastKnownIdentity;
+            primary.personId=primary.lastKnownPersonId||null;
+            primary.identityConfidence=primary.lastKnownIdentityConfidence||0;
+            faceRecognitionIdentity=primary.lastKnownIdentity;
+            faceRecognitionStatus='recognized';
+          }else if(wasReacquired){
             primary.identity='UNKNOWN';
             primary.personId=null;
             primary.identityConfidence=0;
-            primary.lastKnownIdentity=null;
-            primary.lastKnownPersonId=null;
-            primary.lastKnownIdentityConfidence=0;
           }
+
           deriveLiveSocialFromFaces(mapped);
           renderLiveTargetPanel();
-          updatePerceptionFusion('target-changed');
-        }else if(primary.identity){
+          updatePerceptionFusion('target-continuity');
+        }else if(primary.identity && primary.identity!=='UNKNOWN'){
           faceRecognitionIdentity=primary.identity;
+          stableTargetPersonId=primary.personId||stableTargetPersonId;
+          stableTargetIdentity=primary.identity;
+        }else if(primary.lastKnownIdentity){
+          primary.identity=primary.lastKnownIdentity;
+          primary.personId=primary.lastKnownPersonId||null;
+          primary.identityConfidence=primary.lastKnownIdentityConfidence||0;
+          faceRecognitionIdentity=primary.lastKnownIdentity;
         }
 
         if(
@@ -1684,6 +1744,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           faceTarget=null;
           faceSmoothBox=null;
           faceRecognitionIdentity=null;
+          stableTargetPersonId=null;
+          stableTargetIdentity=null;
+          stableTargetSince=0;
+          stableTargetGeneration++;
           faceRecognitionStatus=
             getStoredFaceProfiles().length
               ? 'ready'
@@ -2858,6 +2922,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
   function stopCamera(reason='manual'){
     cameraSession += 1;
+    cameraStartAbortToken++;
     if(visionRequestController){ try{ visionRequestController.abort(); }catch(_){ } visionRequestController=null; }
     const stream=cameraStream;
     cameraStream=null;
@@ -2889,6 +2954,26 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(micAnalyser){try{micAnalyser.disconnect();}catch(_){} micAnalyser=null;}
     if(micAudioContext){micAudioContext.close().catch(()=>{});micAudioContext=null;}
     micVoiceLevel=0;
+  }
+
+  function getUserMediaTimedOutPromise(constraints, timeoutMs, sessionToken){
+    let settled=false;
+    let timedOut=false;
+    const gumPromise=navigator.mediaDevices.getUserMedia(constraints);
+    gumPromise.then(stream=>{
+      if(timedOut || sessionToken!==cameraSession){
+        stream.getTracks().forEach(t=>{try{t.stop();}catch(_){} });
+      }
+    }).catch(()=>{});
+    const timeoutPromise=new Promise((_,reject)=>{
+      setTimeout(()=>{
+        if(settled) return;
+        timedOut=true;
+        const err=new Error('Camera permission request timed out'); err.code='CAMERA_PERMISSION_TIMEOUT'; reject(err);
+      },timeoutMs);
+    });
+    gumPromise.then(()=>{settled=true;}).catch(()=>{settled=true;});
+    return Promise.race([gumPromise,timeoutPromise]);
   }
 
   async function startCamera(facingMode=cameraFacingMode){
@@ -2943,19 +3028,31 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     log('CAM · requesting camera permission');
 
     let stream;
+    const requestSession=startSession;
     try{
-      stream=await navigator.mediaDevices.getUserMedia({
+      /* Keep exactly one permission request in flight. Android Chrome can
+         otherwise leave overlapping camera requests in a pending state. */
+      const preferred={
         video:{
-          facingMode:{exact:facingMode},
+          facingMode:{ideal:facingMode},
           width:{ideal:1280},
           height:{ideal:720},
           frameRate:{ideal:30,max:30}
         },
         audio:false
-      });
+      };
+      stream=await getUserMediaTimedOutPromise(preferred,9000,requestSession);
     }catch(firstErr){
-      log('CAM · preferred constraints failed · '+(firstErr?.name||'unknown'));
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facingMode}},audio:false});
+      log('CAM · preferred request failed/timeout · '+(firstErr?.code||firstErr?.name||'unknown'));
+      if(requestSession!==cameraSession) throw new DOMException('Camera start was cancelled','AbortError');
+      if(firstErr?.code==='CAMERA_PERMISSION_TIMEOUT'){
+        /* Do not stack a second getUserMedia() call while Android Chrome may
+           still have the first permission request pending. Reset cleanly and
+           let the user retry from the same button. */
+        throw firstErr;
+      }
+      /* One conservative fallback after a genuine constraints/device failure. */
+      stream=await getUserMediaTimedOutPromise({video:true,audio:false},7000,requestSession);
     }
 
     if(startSession!==cameraSession){
@@ -3083,7 +3180,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return;
     }
 
-    if(window.__roboCameraStarting) return;
+    if(window.__roboCameraStarting){
+      if(cameraStartPromise) await cameraStartPromise.catch(()=>{});
+      return;
+    }
     window.__roboCameraStarting=true;
 
     const btn=$('#cameraBtn');
@@ -3100,7 +3200,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     try{
       setVoiceStatus('CAMERA STARTING · requesting permission…');
-      await startCamera(cameraFacingMode);
+      cameraStartAbortToken++;
+      const token=cameraStartAbortToken;
+      cameraStartPromise=startCamera(cameraFacingMode);
+      await cameraStartPromise;
+      if(token!==cameraStartAbortToken) throw new DOMException('Camera start superseded','AbortError');
 
       log('CAM · ON · '+cameraFacingMode+' · independent camera control');
       setVoiceStatus(
@@ -3126,6 +3230,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       hideCaption(5000);
     }finally{
       window.__roboCameraStarting=false;
+      cameraStartPromise=null;
 
       if(btn){
         btn.disabled=false;
