@@ -435,6 +435,7 @@ async function elevenLabsTTS(text, languageHint='en') {
   }
 
   const detectedLanguage = detectTTSLanguage(text);
+
   const languageCode =
     languageHint === 'hi' || languageHint === 'bn'
       ? languageHint
@@ -572,9 +573,6 @@ export default async function handler(req, res) {
     process.env.AI_PROVIDER || 'gemini',
   ).toLowerCase();
 
-  /*
-   * GET = diagnostics
-   */
   if (req.method === 'GET') {
     const configured =
       providerName === 'gemini'
@@ -632,12 +630,6 @@ export default async function handler(req, res) {
       typeof req.body === 'string'
         ? JSON.parse(req.body)
         : req.body || {};
-
-    /*
-     * ---------------------------------------------------
-     * ELEVENLABS TTS REQUEST
-     * ---------------------------------------------------
-     */
 
     if (body.tts === true) {
       const text =
@@ -708,12 +700,11 @@ export default async function handler(req, res) {
 
         const maskedVoice =
           result.voiceId.length > 8
-            ? result.voiceId.slice(0, 4) + '...' + result.voiceId.slice(-4)
+            ? result.voiceId.slice(0, 4) +
+              '...' +
+              result.voiceId.slice(-4)
             : result.voiceId;
 
-        // HTTP header values must remain ASCII-safe.
-        // Do not use a Unicode ellipsis here; it causes Node/Vercel
-        // to throw ERR_INVALID_CHAR and breaks successful ElevenLabs TTS.
         res.setHeader(
           'X-Robo-TTS-Voice',
           maskedVoice,
@@ -757,12 +748,6 @@ export default async function handler(req, res) {
         );
       }
     }
-
-    /*
-     * ---------------------------------------------------
-     * GEMINI REQUEST
-     * ---------------------------------------------------
-     */
 
     const provider =
       PROVIDERS[providerName];
