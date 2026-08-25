@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.87 · TARGET AUTHORITY + FACE IDENTITY · v2.81 BASELINE</title>
+<title>ROBO AIOS v2.88 · TARGET AUTHORITY + FACE IDENTITY · v2.81 BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -223,11 +223,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.87 · TARGET AUTHORITY + FACE IDENTITY · MODULES 6+7.5+8</div>
+      <div id="roboBuildMarker">ROBO v2.88 · TARGET AUTHORITY + FACE IDENTITY · MODULES 6+7.5+8</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.87</small></div>
+          <div class="brand">ROBO <small>v2.88</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -296,7 +296,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.87 TARGET AUTHORITY + FACE IDENTITY · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">TARGET AUTHORITY EXPERIMENT · v2.81 perception baseline + stabilized face identity. Copy the log after testing.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.88 TARGET AUTHORITY + FACE IDENTITY · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">TARGET AUTHORITY EXPERIMENT · v2.81 perception baseline + stabilized face identity. Copy the log after testing.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -500,12 +500,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
   const FACE_MODEL_URI = 'https://justadudewhohacks.github.io/face-api.js/models';
   const FACE_TARGET_HOLD_MS = 2800;
-  const FACE_VISUAL_LOSS_MS = 700;
+  const FACE_VISUAL_LOSS_MS = 900;
   const FACE_TARGET_REACQUIRE_WINDOW_MS = 5000;
   const FACE_IDENTITY_RELEASE_MS = FACE_TARGET_REACQUIRE_WINDOW_MS;
-  const FACE_DETECT_INTERVAL_MS = 115;
-  const FACE_SMOOTH_ALPHA = 0.42;
-  const FACE_RECOGNITION_INTERVAL_MS = 1800;
+  const FACE_DETECT_INTERVAL_MS = 90;
+  const FACE_SMOOTH_ALPHA = 0.58;
+  const FACE_RECOGNITION_INTERVAL_MS = 1600;
   const LIVE_IDENTITY_REFRESH_MS = 1600;
   // Module 7.5 active-target identity refresh cadence.
   // Keep this faster than new-target recognition without running on every render frame.
@@ -845,8 +845,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const detectorInput =
       faceapi.TinyFaceDetectorOptions
         ? new faceapi.TinyFaceDetectorOptions({
-            inputSize:320,
-            scoreThreshold:.045
+            inputSize:224,
+            scoreThreshold:.055
           })
         : null;
 
@@ -883,7 +883,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         const best=mapped.slice().sort((a,b)=>Number(b.score||0)-Number(a.score||0))[0];
         if(performance.now()-(window.__roboLastFaceDetectLog||0)>1200){
           window.__roboLastFaceDetectLog=performance.now();
-          devLog('FACE','detector pass',{faces:mapped.length,bestScore:Number(best?.score||0).toFixed(3),bestBox:best?.box||null,inputSize:320,threshold:0.045});
+          devLog('FACE','detector pass',{faces:mapped.length,bestScore:Number(best?.score||0).toFixed(3),bestBox:best?.box||null,inputSize:224,threshold:0.055});
         }
         return mapped;
       }
@@ -905,8 +905,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
         const adaptiveOptions =
           new faceapi.TinyFaceDetectorOptions({
-            inputSize:416,
-            scoreThreshold:.028
+            inputSize:320,
+            scoreThreshold:.04
           });
 
         const retry =
@@ -2182,12 +2182,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           // Gentle prediction from the last detector movement, capped tightly
           // so the box follows the real face without drifting.
           const predicted={
-            x:targetBox.x + faceVisualVelocity.x * dt * 0.9,
-            y:targetBox.y + faceVisualVelocity.y * dt * 0.9,
-            width:targetBox.width + faceVisualVelocity.width * dt * 0.45,
-            height:targetBox.height + faceVisualVelocity.height * dt * 0.45
+            x:targetBox.x + faceVisualVelocity.x * dt * 0.55,
+            y:targetBox.y + faceVisualVelocity.y * dt * 0.55,
+            width:targetBox.width + faceVisualVelocity.width * dt * 0.25,
+            height:targetBox.height + faceVisualVelocity.height * dt * 0.25
           };
-          const frameAlpha=0.34;
+          const frameAlpha=0.62;
           faceSmoothBox=lerpBox(faceSmoothBox,predicted,frameAlpha);
         }else{
           faceSmoothBox=targetBox;
@@ -2282,7 +2282,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             height:(primary.box.height-previousTarget.box.height)/dt
           };
           // Hard cap prevents a bad detector jump from creating visual drift.
-          const cap=1800;
+          const cap=2200;
           for(const k of ['x','y','width','height']){
             faceVisualVelocity[k]=Math.max(-cap,Math.min(cap,faceVisualVelocity[k]));
           }
@@ -3188,6 +3188,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(typeof devMemoryProfiles!=='undefined' && devMemoryProfiles) devMemoryProfiles.textContent=String(roboMemory.persons.length);
     if(typeof devMemoryActive!=='undefined' && devMemoryActive) devMemoryActive.textContent=active?.displayName || 'UNKNOWN';
     devMemoryChange.textContent=lastMemoryChange;
+    const templateCount=roboMemory.persons.reduce((n,p)=>n+(Array.isArray(p.faceProfiles)?p.faceProfiles.length:0),0);
+    if(typeof devMemoryStatus!=='undefined' && devMemoryStatus && memoryReady && templateCount===0){
+      devMemoryStatus.textContent='ONLINE · NO FACE TEMPLATE';
+    }
   }
 
   async function rememberCurrentFaceAs(name, relation=''){
@@ -5395,7 +5399,7 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
         (!cameraEnabled && baseVisionQuestion)
       );
 
-      /* v2.85: camera may stay live for face tracking, but Gemini gets a frame
+      /* v2.88: camera may stay live for face tracking, but Gemini gets a frame
        * only for an explicit vision command or visual-memory follow-up. */
       const shouldAttachLiveVision=Boolean(wantsVision || (useVisualMemory && !freshVision));
       if(cameraEnabled && requestCameraSession===cameraSession && shouldAttachLiveVision){
@@ -5885,7 +5889,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.87 TARGET AUTHORITY · v2.81 PERCEPTION BASELINE",
+    "ROBO AIOS v2.88 ACTIVE FACE TRACKING · v2.81 PERCEPTION BASELINE",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -6017,7 +6021,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.87 TARGET AUTHORITY · v2.81 PERCEPTION BASELINE · Gemini AI brain");
+  log("ROBO AIOS v2.88 ACTIVE FACE TRACKING · v2.81 PERCEPTION BASELINE · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
