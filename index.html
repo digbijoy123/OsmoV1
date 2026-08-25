@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.85 · WAKE ENGINE + RESTORED HIGH-FREQUENCY FACE TRACKING · v2.81 BASELINE</title>
+<title>ROBO AIOS v2.86 · WAKE ENGINE + RESTORED HIGH-FREQUENCY FACE TRACKING · v2.81 BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -647,6 +647,42 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
         return (ab-aa)*0.01 + da-db;
       })[0] || null;
+  }
+
+  function stabilizePrimaryFace(primary){
+    if(!primary || !isValidFaceBox(primary.box)) return null;
+    if(!isValidFaceBox(faceSmoothBox)) return primary;
+
+    const current=faceSmoothBox;
+    const next=primary.box;
+    const cc=boxCenter(current);
+    const nc=boxCenter(next);
+    if(!cc || !nc) return primary;
+
+    const base=Math.max(80,Math.min(camera.videoWidth||720,camera.videoHeight||1280)*0.18);
+    const centerShift=Math.hypot(nc.x-cc.x,nc.y-cc.y);
+    const areaCurrent=Math.max(1,current.width*current.height);
+    const areaNext=Math.max(1,next.width*next.height);
+    const areaRatio=areaNext/areaCurrent;
+
+    // Reject detector outliers instead of letting one bad TinyFaceDetector
+    // pass throw the live target across the screen. The next good frame will
+    // recover naturally.
+    if(centerShift>base*2.2 && (areaRatio>1.65 || areaRatio<0.60)){
+      devLog('FACE','detector outlier suppressed',{centerShift:Math.round(centerShift),areaRatio:Number(areaRatio.toFixed(2))});
+      return {
+        ...primary,
+        box:cloneBox(current),
+        trackerSuppressed:true
+      };
+    }
+
+    const alpha=centerShift>base ? 0.52 : 0.36;
+    return {
+      ...primary,
+      box:lerpBox(current,next,alpha),
+      trackerSuppressed:false
+    };
   }
 
   async function waitForFaceApi(timeoutMs=6000){
@@ -2135,8 +2171,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       renderLiveTargetPanel();
       deriveLiveSocialFromFaces(mapped);
 
-      const primary=
-        choosePrimaryFace(mapped);
+      let primary=choosePrimaryFace(mapped);
+      primary=stabilizePrimaryFace(primary);
 
       if(primary){
         const detectionNow=performance.now();
@@ -2257,7 +2293,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             lerpBox(
               faceSmoothBox,
               primary.box,
-              FACE_SMOOTH_ALPHA
+              Math.min(0.62,FACE_SMOOTH_ALPHA+0.10)
             );
         }
 
@@ -3133,6 +3169,23 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       faceTarget.lastKnownPersonId=person.personId;
       faceTarget.lastKnownIdentityConfidence=100;
       faceTarget.lastKnownAt=now;
+    }else{
+      const current=choosePrimaryFace(faceDetections);
+      if(current){
+        faceTarget=current;
+        faceTarget.trackId=faceTarget.trackId||`track-${++stableTargetGeneration}`;
+        faceTarget.identity=person.displayName;
+        faceTarget.personId=person.personId;
+        faceTarget.identityConfidence=100;
+        faceTarget.lastKnownIdentity=person.displayName;
+        faceTarget.lastKnownPersonId=person.personId;
+        faceTarget.lastKnownIdentityConfidence=100;
+        faceTarget.lastKnownAt=now;
+        faceSmoothBox=cloneBox(current.box);
+        stableTargetLastSeenAt=performance.now();
+        stableTargetLastBox=cloneBox(current.box);
+        activeFaceTarget={trackId:faceTarget.trackId,personId:person.personId,name:person.displayName,confidence:100,establishedAt:performance.now(),lastSeenAt:performance.now(),box:cloneBox(current.box)};
+      }
     }
 
     renderFaceTarget();
@@ -3193,6 +3246,15 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(/^(forget everything|forget all memories|clear all memory|erase all memory|delete all memories)$/.test(l)){
       clearAllRoboMemory();
       return {handled:true,reply:'I cleared my persistent multi-person memory.',emotion:'neutral'};
+    }
+
+    const directSaveFace=raw.match(/^save\s+(?:my\s+)?face\s+(?:as|under\s+the\s+name)\s+([A-Za-z][A-Za-z .'-]{1,40})[.!?]?$/i);
+    if(directSaveFace){
+      const result=await rememberCurrentFaceAs(directSaveFace[1]).catch(()=>({ok:false,reason:'error'}));
+      if(!result.ok){
+        return {handled:true,reply:result.reason==='no-face'?'I need your face clearly visible in the camera first.':'I could not save that face yet.',emotion:'confused'};
+      }
+      return {handled:true,reply:`Done. I saved this face as ${result.person.displayName} and linked it to memory.`,emotion:'happy'};
     }
 
     const flexibleName=raw.match(/^(?:my name is|remember me as|remember my name as|save my name as|remember that my name is|i am|i'm)\s+([A-Za-z][A-Za-z .'-]{1,40})(?:\s+(?:in|to)\s+(?:your\s+)?memory)?[.!?]?$/i);
@@ -5096,6 +5158,21 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
     return (score>=2 || (score>=1 && tokens.length<=5)) ? 'hi' : 'en';
   }
 
+  function buildLiveIdentityContextMessage(){
+    const target=activeFaceTarget?.personId && activeFaceTarget?.name
+      ? activeFaceTarget
+      : null;
+    if(!target) return null;
+    return [
+      'LIVE FACE IDENTITY CONTEXT — generated by Robo local face tracking, not by visual guessing.',
+      `Current tracked person: ${target.name}.`,
+      `Identity confidence: ${Math.round(Number(target.confidence)||0)}%.`,
+      'This identity belongs to the currently tracked physical face target in Module 8.2.',
+      'Use this identity as the current person context when relevant to the conversation, but do not claim a different visible person unless the latest local tracker state changes.',
+      'This context is not a camera image and must not be used to invent visual details.'
+    ].join('\n');
+  }
+
   async function callRoboBrain(
     messages,
     image=null,
@@ -5273,6 +5350,9 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
       const visualContext=useVisualMemory ? buildVisualMemoryMessage() : null;
       const memoryContext=buildMemoryContextMessage();
       if(memoryContext) contextMessages.push({role:'assistant',content:memoryContext});
+
+      const liveIdentityContext=buildLiveIdentityContextMessage();
+      if(liveIdentityContext) contextMessages.push({role:'assistant',content:liveIdentityContext});
 
       /*
        * LIVE-VISION AUTHORITY FIX (v2.18):
@@ -5711,7 +5791,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.85 WAKE ENGINE EXPERIMENT · v2.81 PERCEPTION BASELINE",
+    "ROBO AIOS v2.86 FACE IDENTITY + GEMINI CONTEXT · v2.81 PERCEPTION BASELINE",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
