@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.89 · TARGET AUTHORITY + FACE IDENTITY · v2.81 BASELINE</title>
+<title>ROBO AIOS v2.90 · CLEAN MEMORY TEST · v2.81 BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -223,11 +223,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.89 · TARGET AUTHORITY + FACE IDENTITY · MODULES 6+7.5+8</div>
+      <div id="roboBuildMarker">ROBO v2.90 · TARGET AUTHORITY + FACE IDENTITY · MODULES 6+7.5+8</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.88</small></div>
+          <div class="brand">ROBO <small>v2.90</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -296,7 +296,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.88 TARGET AUTHORITY + FACE IDENTITY · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">TARGET AUTHORITY EXPERIMENT · v2.81 perception baseline + stabilized face identity. Copy the log after testing.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.90 CLEAN MEMORY TEST · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">TARGET AUTHORITY EXPERIMENT · v2.81 perception baseline + stabilized face identity. Copy the log after testing.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -2731,6 +2731,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
      can create/update the currently visible person's identity without UI enrollment.
   */
   const MEMORY_STORAGE_KEY = 'robo_aios_memory_v2';
+  const FACTORY_RESET_V2_90_KEY = 'robo_aios_v2_90_factory_reset_done';
   const MEMORY_SCHEMA_VERSION = 2;
   const DEFAULT_PERSON = () => ({
     personId:'primary-user',
@@ -3112,12 +3113,57 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     return changed;
   }
 
+  function factoryResetMemoryForV290(){
+    try{
+      if(localStorage.getItem(FACTORY_RESET_V2_90_KEY)==='1') return false;
+      const keys=[];
+      for(let i=0;i<localStorage.length;i++){
+        const k=localStorage.key(i);
+        if(k && (k.startsWith('robo_aios_') || k.startsWith('robo_aios') || k==='roboMemory')) keys.push(k);
+      }
+      keys.forEach(k=>{try{localStorage.removeItem(k);}catch(_){}});
+      localStorage.setItem(FACTORY_RESET_V2_90_KEY,'1');
+    }catch(_){ }
+    roboMemory=cloneDefaultMemory();
+    memoryReady=true;
+    lastMemoryChange='factory-reset-v2.90';
+    faceRecognitionIdentity=null; faceRecognitionDistance=null; faceRecognitionStatus='not-enrolled';
+    lastKnownPersonId=null; lastKnownPersonAt=0;
+    stableTargetPersonId=null; stableTargetIdentity=null; stableTargetGeneration++; stableTargetSince=0; stableTargetHoldUntil=0;
+    stableTargetLastBox=null; stableTargetLastSeenAt=0;
+    activeFaceTarget={trackId:null,personId:null,name:null,confidence:0,establishedAt:0,lastSeenAt:0,box:null};
+    pendingIdentityPersonId=null; pendingIdentityName=null; pendingIdentityStreak=0; pendingIdentityStartedAt=0; pendingIdentityLastAt=0; pendingIdentityBestDistance=Infinity;
+    identityChallengerPersonId=null; identityChallengerName=null; identityChallengerStreak=0; identityChallengerStartedAt=0; identityChallengerLastAt=0; identityChallengerBestDistance=Infinity; identityChallengerLastMargin=0;
+    if(typeof faceTarget!=='undefined') faceTarget=null;
+    if(typeof faceDetections!=='undefined') faceDetections=[];
+    renderMemoryIdentity(); renderMemoryDiagnostics();
+    if(typeof renderFaceTarget==='function') renderFaceTarget();
+    devLog('MEMORY','v2.90 factory reset complete',{profiles:0,faceTemplates:0});
+    return true;
+  }
+
   function clearAllRoboMemory(){
     roboMemory=cloneDefaultMemory();
     memoryReady=true;
-    try{localStorage.removeItem(MEMORY_STORAGE_KEY);localStorage.removeItem('robo_aios_memory_v1');}catch(_){ }
+    try{
+      const keys=[];
+      for(let i=0;i<localStorage.length;i++){
+        const k=localStorage.key(i);
+        if(k && (k.startsWith('robo_aios_') || k.startsWith('robo_aios') || k==='roboMemory')) keys.push(k);
+      }
+      keys.forEach(k=>{try{localStorage.removeItem(k);}catch(_){}});
+    }catch(_){ }
     lastMemoryChange='memory-cleared';
-    renderMemoryIdentity();renderMemoryDiagnostics();devLog('MEMORY','all persistent memory cleared');
+    faceRecognitionIdentity=null; faceRecognitionDistance=null; faceRecognitionStatus='not-enrolled';
+    lastKnownPersonId=null; lastKnownPersonAt=0;
+    stableTargetPersonId=null; stableTargetIdentity=null; stableTargetGeneration++; stableTargetSince=0; stableTargetHoldUntil=0;
+    stableTargetLastBox=null; stableTargetLastSeenAt=0;
+    activeFaceTarget={trackId:null,personId:null,name:null,confidence:0,establishedAt:0,lastSeenAt:0,box:null};
+    if(typeof faceTarget!=='undefined') faceTarget=null;
+    if(typeof faceDetections!=='undefined') faceDetections=[];
+    renderMemoryIdentity(); renderMemoryDiagnostics();
+    if(typeof renderFaceTarget==='function') renderFaceTarget();
+    devLog('MEMORY','all persistent memory cleared');
   }
 
   function personSummary(person){
@@ -3326,7 +3372,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return {handled:true,reply:personSummary(person),emotion:person?'happy':'confused'};
     }
 
-    if(/^(forget everything|forget all memories|clear all memory|erase all memory|delete all memories)$/.test(l)){
+    if(/^(forget everything|forget all memories|forget all the (?:profiles?|people?|identities?) (?:you )?(?:remember|remembered)|forget all the (?:profile )?(?:ids?|id['’]?s)(?:\s+(?:is|are))?(?:\s+you)?\s+(?:remember|remembered)|clear all memory|clear all memories|erase all memory|erase all memories|delete all memories|delete all profiles|reset all memory|reset memory)$/.test(l)){
       clearAllRoboMemory();
       return {handled:true,reply:'I cleared my persistent multi-person memory.',emotion:'neutral'};
     }
@@ -5813,6 +5859,7 @@ async function refreshAIProviderDiagnostic(){
 }
 
 loadRoboMemory();
+  factoryResetMemoryForV290();
 
 function runDevChecks(){
   const list=[
@@ -5874,7 +5921,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.89 ACTIVE FACE TRACKING · v2.81 PERCEPTION BASELINE",
+    "ROBO AIOS v2.90 CLEAN MEMORY TEST · v2.81 PERCEPTION BASELINE",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -6006,7 +6053,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.89 ACTIVE FACE TRACKING · v2.81 PERCEPTION BASELINE · Gemini AI brain");
+  log("ROBO AIOS v2.90 CLEAN MEMORY TEST · v2.81 PERCEPTION BASELINE · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
