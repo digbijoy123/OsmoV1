@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.82 · WAKE ENGINE EXPERIMENT · PERCEPTION BASELINE v2.81</title>
+<title>ROBO AIOS v2.83 · WAKE ENGINE EXPERIMENT · PERCEPTION BASELINE v2.81</title>
 <style>
 :root{
   --void:#090d15;
@@ -223,11 +223,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.82 · WAKE ENGINE + MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.83 · WAKE ENGINE + MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.82</small></div>
+          <div class="brand">ROBO <small>v2.83</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -296,7 +296,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.82 WAKE ENGINE + v2.81 PERCEPTION · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">WAKE ENGINE EXPERIMENT · v2.81 perception remains the frozen baseline. Copy the log after wake testing.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.83 WAKE ENGINE + v2.81 PERCEPTION · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">WAKE ENGINE EXPERIMENT · v2.81 perception remains the frozen baseline. Copy the log after wake testing.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -2674,11 +2674,109 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     return person.faceProfiles.length;
   }
 
+  let legacyFaceStoreImported=false;
+
+  function importLegacyFaceProfileStore(){
+    if(legacyFaceStoreImported || !roboMemory) return 0;
+    let imported=0;
+    try{
+      const raw=localStorage.getItem('robo_aios_face_profiles_v1');
+      if(!raw){ legacyFaceStoreImported=true; return 0; }
+      const parsed=JSON.parse(raw);
+      const legacyProfiles=Array.isArray(parsed)
+        ? parsed
+        : (Array.isArray(parsed?.profiles) ? parsed.profiles : []);
+
+      for(const rawProfile of legacyProfiles){
+        const descriptor=normalizeFaceDescriptor(
+          rawProfile?.descriptor ?? rawProfile?.faceDescriptor ?? rawProfile?.vector ?? rawProfile
+        );
+        if(!descriptor) continue;
+
+        const explicitPersonId=String(rawProfile?.personId||'').trim();
+        const explicitName=normalizeMemoryText(
+          rawProfile?.displayName || rawProfile?.name || rawProfile?.identity || ''
+        );
+
+        let person=explicitPersonId
+          ? roboMemory.persons.find(p=>p.personId===explicitPersonId)
+          : null;
+
+        if(!person && explicitName){
+          person=roboMemory.persons.find(p=>String(p.displayName||'').trim().toLowerCase()===explicitName.toLowerCase());
+        }
+
+        if(!person && !explicitPersonId && explicitName && explicitName.toLowerCase()===(roboMemory.identity?.displayName||'').trim().toLowerCase()){
+          person=roboMemory.persons.find(p=>p.personId==='primary-user');
+        }
+
+        if(!person){
+          if(explicitPersonId && roboMemory.persons.some(p=>p.personId===explicitPersonId)){
+            person=roboMemory.persons.find(p=>p.personId===explicitPersonId);
+          }else if(explicitName){
+            person={
+              ...DEFAULT_PERSON(),
+              personId:explicitPersonId || ('person-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)),
+              displayName:explicitName,
+              relationship:'',
+              createdAt:Number(rawProfile?.createdAt)||Date.now(),
+              updatedAt:Date.now()
+            };
+            roboMemory.persons.push(person);
+          }else{
+            person=roboMemory.persons.find(p=>p.personId==='primary-user') || roboMemory.persons[0];
+          }
+        }
+
+        if(!person) continue;
+        if(!Array.isArray(person.faceProfiles)) person.faceProfiles=[];
+
+        if(!person.displayName && explicitName) person.displayName=explicitName;
+
+        const duplicate=person.faceProfiles.some(fp=>{
+          const d=normalizeFaceDescriptor(fp?.descriptor);
+          return d && faceDistance(d,descriptor)<0.08;
+        });
+
+        if(!duplicate){
+          person.faceProfiles.push({
+            id:rawProfile?.id || ('face-legacy-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)),
+            descriptor:Array.from(descriptor),
+            personId:person.personId,
+            displayName:person.displayName||explicitName||'UNKNOWN',
+            createdAt:Number(rawProfile?.createdAt)||Date.now(),
+            updatedAt:Number(rawProfile?.updatedAt)||Date.now(),
+            lastUsedAt:Number(rawProfile?.lastUsedAt)||0,
+            source:'legacy-face-store'
+          });
+          imported++;
+        }
+      }
+
+      legacyFaceStoreImported=true;
+      if(imported){
+        devLog('MEMORY','legacy face profiles recovered',{imported,people:roboMemory.persons.length,source:'robo_aios_face_profiles_v1'});
+      }
+      return imported;
+    }catch(err){
+      legacyFaceStoreImported=true;
+      devLog('MEMORY ERROR','legacy face profile recovery failed',{message:err?.message||String(err)});
+      return 0;
+    }
+  }
+
   function ensureMemoryRegistry(){
     if(!roboMemory) return null;
 
     if(!Array.isArray(roboMemory.persons) || !roboMemory.persons.length){
-      roboMemory.persons=[DEFAULT_PERSON()];
+      const primary=DEFAULT_PERSON();
+      primary.displayName=String(roboMemory.identity?.displayName||'').trim();
+      primary.aliases=Array.isArray(roboMemory.identity?.aliases)?roboMemory.identity.aliases.slice():[];
+      primary.facts=Array.isArray(roboMemory.facts)?roboMemory.facts.map(x=>({...x,personId:'primary-user'})):[];
+      primary.preferences={...(roboMemory.preferences||{})};
+      primary.memories=Array.isArray(roboMemory.memories)?roboMemory.memories.map(x=>({...x,personId:'primary-user'})):[];
+      primary.faceProfiles=Array.isArray(roboMemory.faceProfiles)?roboMemory.faceProfiles.map(x=>({...x,personId:'primary-user'})):[];
+      roboMemory.persons=[primary];
     }
 
     // Normalize existing people first.
@@ -2730,6 +2828,15 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       roboMemory.faceProfiles=[];
     }
 
+    // Recover face descriptors created by older Module 7.5 builds that used
+    // the dedicated robo_aios_face_profiles_v1 storage key. This import is
+    // intentionally additive and deduplicated; it never deletes the legacy
+    // store, so a hard refresh cannot silently lose enrollment data.
+    importLegacyFaceProfileStore();
+
+    // Re-normalize after any recovered templates/names were added.
+    roboMemory.persons.forEach(normalizePersonFaceProfileBank);
+
     roboMemory.primaryPersonId='primary-user';
     const activeId=roboMemory.activePersonId;
     roboMemory.activePersonId=(activeId===null||activeId===''||activeId==='none')
@@ -2764,6 +2871,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     ensureMemoryRegistry();
     memoryReady=true;
     saveRoboMemory('memory-loaded');
+    devLog('MEMORY','memory inventory',{
+      people:roboMemory.persons.length,
+      faceTemplates:getStoredFaceProfiles().length,
+      active:roboMemory.activePersonId
+    });
     renderMemoryIdentity();
     renderMemoryDiagnostics();
     faceDiag();
@@ -5513,7 +5625,7 @@ function runDevChecks(){
     ["HTTPS / localhost",location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"],
     ["getUserMedia",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
     ["SpeechRecognition",!!(window.SpeechRecognition||window.webkitSpeechRecognition)],
-    ["Wake engine",!!(window.SpeechRecognition||window.webkitSpeechRecognition) && (wakeArmed || !!wakeRecognition)],
+    ["Wake engine",!!(window.SpeechRecognition||window.webkitSpeechRecognition)],
     ["Speech synthesis","speechSynthesis" in window],
     ["Camera",!!$("#camera") && !!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
     ["3D emoji canvas",!!$("#face")],
@@ -5568,7 +5680,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.82 WAKE ENGINE EXPERIMENT · v2.81 PERCEPTION BASELINE",
+    "ROBO AIOS v2.83 WAKE ENGINE EXPERIMENT · v2.81 PERCEPTION BASELINE",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
