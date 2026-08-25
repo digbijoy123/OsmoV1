@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.83 · WAKE ENGINE EXPERIMENT · PERCEPTION BASELINE v2.81</title>
+<title>ROBO AIOS v2.84 · WAKE ENGINE + RESTORED HIGH-FREQUENCY FACE TRACKING · v2.81 BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -223,11 +223,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.83 · WAKE ENGINE + MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.84 · WAKE ENGINE + MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.83</small></div>
+          <div class="brand">ROBO <small>v2.84</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -296,7 +296,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.83 WAKE ENGINE + v2.81 PERCEPTION · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">WAKE ENGINE EXPERIMENT · v2.81 perception remains the frozen baseline. Copy the log after wake testing.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.84 WAKE ENGINE + RESTORED FACE TRACKING · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">WAKE ENGINE EXPERIMENT · v2.81 perception baseline + restored v2.74 high-frequency tracker. Copy the log after testing.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -2061,10 +2061,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         updateFaceVisualElement(faceTargetVisualElement,faceSmoothBox,faceTargetVisualLabel);
       }
 
-      if(!faceTarget || !stableTargetLastSeenAt){
-        enforceTargetLifecycle(now);
-        return;
-      }
+      if(!faceTarget || !stableTargetLastSeenAt){ enforceTargetLifecycle(now); return; }
       const age=now-stableTargetLastSeenAt;
       if(age<=FACE_VISUAL_LOSS_MS) return;
 
@@ -2128,11 +2125,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       faceDetections=mapped;
 
-      // Lifecycle is independent from recognition. Once the physical target has
-      // been gone beyond the reacquisition window, release the identity before
-      // considering any new face as a new target.
+      // Keep v2.83 target lifecycle authority synchronized without changing the proven detector loop.
       enforceTargetLifecycle(performance.now());
-
       renderLiveTargetPanel();
       deriveLiveSocialFromFaces(mapped);
 
@@ -2220,12 +2214,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           }
 
           if(activeFaceTarget.personId && activeFaceTarget.name){
-            /* Existing target identity survives detector/reacquisition churn.
-             * A new name can only be established after releaseActiveFaceTarget(). */
             preserveActiveTargetIdentity(primary, wasReacquired ? 'target-reacquired-same-identity' : 'target-continuity');
           }else if(primary.lastKnownIdentity && primary.lastKnownPersonId){
             primary.identity=primary.lastKnownIdentity;
-            primary.personId=primary.lastKnownPersonId;
+            primary.personId=primary.lastKnownPersonId||null;
             primary.identityConfidence=primary.lastKnownIdentityConfidence||0;
             faceRecognitionIdentity=primary.lastKnownIdentity;
             faceRecognitionStatus='recognized';
@@ -2267,7 +2259,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         if(faceRecognitionAvailable && getStoredFaceProfiles().length && !faceRecognitionInFlight){
           const nowPerf=performance.now();
           const activeRefreshMs=activeFaceTarget.personId ? ACTIVE_IDENTITY_REFRESH_MS : LIVE_IDENTITY_REFRESH_MS;
-      const recognitionDue=
+          const recognitionDue=
             targetChanged ||
             nowPerf-lastLiveIdentitySyncAt>=activeRefreshMs ||
             faceLastRecognitionAt<=0 ||
@@ -2278,12 +2270,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           }
         }
 
-      }else if(faceTarget || activeFaceTarget.personId){
+      }else if(faceTarget){
 
         if(!faceTargetLostAt){
           faceTargetLostAt=
             performance.now();
-          devLog('FACE','target temporarily lost',{identity:activeFaceTarget.name||'UNKNOWN'});
         }
 
         /*
@@ -2292,17 +2283,22 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
          */
         const lostFor=performance.now()-faceTargetLostAt;
         if(lostFor>FACE_TARGET_HOLD_MS){
-          // The physical target is absent from the detector, but identity
-          // remains owned by the target lifecycle until the full release
-          // window expires. Reacquisition within that window keeps the name.
+          // The physical target is temporarily absent, but keep its identity
+          // authority alive long enough for detector reacquisition. Only after
+          // the longer lifecycle window is the person considered gone.
           faceTarget=null;
           faceSmoothBox=null;
-          if(activeFaceTarget.personId){
-            faceRecognitionIdentity=activeFaceTarget.name;
-            faceRecognitionStatus='recognized';
+          if(lostFor>FACE_TARGET_REACQUIRE_WINDOW_MS){
+            releaseActiveFaceTarget('face-target-lost');
+            stableTargetGeneration++;
+            if(roboMemory){ renderMemoryIdentity(); renderMemoryDiagnostics(); }
+          }else{
+            if(activeFaceTarget.personId){
+              faceRecognitionIdentity=activeFaceTarget.name;
+              faceRecognitionStatus='recognized';
+            }
+            updatePerceptionFusion('target-temporarily-lost');
           }
-          updatePerceptionFusion('target-temporarily-lost');
-          enforceTargetLifecycle(performance.now());
         }
       }
 
@@ -5680,7 +5676,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.83 WAKE ENGINE EXPERIMENT · v2.81 PERCEPTION BASELINE",
+    "ROBO AIOS v2.84 WAKE ENGINE EXPERIMENT · v2.81 PERCEPTION BASELINE",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
