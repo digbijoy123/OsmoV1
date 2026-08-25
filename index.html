@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.81 MODULE 6+7+8 PERCEPTION FUSION · CLEAN BASELINE</title>
+<title>ROBO AIOS v2.82 · WAKE ENGINE EXPERIMENT · PERCEPTION BASELINE v2.81</title>
 <style>
 :root{
   --void:#090d15;
@@ -223,11 +223,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.81 · MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.82 · WAKE ENGINE + MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.81</small></div>
+          <div class="brand">ROBO <small>v2.82</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -296,7 +296,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.81 MODULE 7.5 + 6+7+8 · DESCRIPTOR MATCH + PERCEPTION FUSION + FACE TRACKING + MEMORY + IDENTITY</span></h2><div class="devSub">Copy the log and send it to me when something fails.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.82 WAKE ENGINE + v2.81 PERCEPTION · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">WAKE ENGINE EXPERIMENT · v2.81 perception remains the frozen baseline. Copy the log after wake testing.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -308,6 +308,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       <div class="devRow"><span>Speech recognition</span><b id="devStt">—</b></div>
       <div class="devRow"><span>Mic permission</span><b id="devMicPermission">—</b></div>
       <div class="devRow"><span>On-device STT</span><b id="devLocalStt">—</b></div>
+      <div class="devRow"><span>Wake engine</span><b id="devWake">OFF</b></div>
       <div class="devRow"><span>AI brain</span><b id="devAI">—</b></div>
       <div class="devRow"><span>Current stage</span><b id="devStage">IDLE</b></div>
       <div class="devLevel"><span>MIC LEVEL</span><div class="devTrack"><i id="devLevel"></i></div></div>
@@ -3944,6 +3945,254 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
   let sttNoMatch=false;
   let sttWatchdog=null;
 
+  /* ---------- Wake Engine v1 ----------
+     Experimental layer built on the frozen v2.81 perception baseline.
+     One explicit microphone gesture arms the background wake listener.
+     Manual mic remains available as a deterministic fallback.
+  */
+  const WAKE_PHRASE_RE=/\b(?:hey[\s,]+)?robo\b/i;
+  const WAKE_COMMAND_WINDOW_MS=7000;
+  const WAKE_RESTART_DELAY_MS=500;
+  let wakeRecognition=null;
+  let wakeArmed=false;
+  let wakeStarting=false;
+  let wakeSession=0;
+  let wakeCommandArmed=false;
+  let wakeCommandStartedAt=0;
+  let wakeRestartTimer=null;
+  let wakePausedForSpeech=false;
+  let wakeAwaitingCommand=false;
+  let wakeLastPhraseAt=0;
+
+  function wakeEvent(message,data=null){
+    log('WAKE · '+message+(data ? ' · '+JSON.stringify(data) : ''));
+  }
+
+  function parseWakeUtterance(text){
+    const clean=String(text||'').replace(/\s+/g,' ').trim();
+    if(!clean) return {woken:false,command:''};
+    const match=clean.match(WAKE_PHRASE_RE);
+    if(!match) return {woken:false,command:''};
+    const command=clean.slice(match.index+match[0].length)
+      .replace(/^[\s,.:;!?-]+/,'')
+      .trim();
+    return {woken:true,command};
+  }
+
+  function stopWakeEngine(reason='stopped'){
+    wakeSession++;
+    wakeStarting=false;
+    if(wakeRestartTimer){
+      clearTimeout(wakeRestartTimer);
+      wakeRestartTimer=null;
+    }
+    const r=wakeRecognition;
+    wakeRecognition=null;
+    if(r){
+      try{r.stop();}catch(_){}
+    }
+    if(reason) wakeEvent('listener stopped · '+reason);
+  }
+
+  function scheduleWakeEngineRestart(delay=WAKE_RESTART_DELAY_MS){
+    if(!wakeArmed || listening || talking || aiRequestInFlight || wakePausedForSpeech) return;
+    if(wakeRestartTimer) clearTimeout(wakeRestartTimer);
+    wakeRestartTimer=setTimeout(()=>{
+      wakeRestartTimer=null;
+      startWakeEngine();
+    },Math.max(0,delay));
+  }
+
+  function armWakeEngine(reason='manual gesture'){
+    if(!SR){
+      wakeEvent('unavailable · SpeechRecognition not exposed');
+      return false;
+    }
+    if(wakeArmed){
+      scheduleWakeEngineRestart(50);
+      return true;
+    }
+    wakeArmed=true;
+    wakeCommandArmed=false;
+    wakeCommandStartedAt=0;
+    wakeEvent('armed · '+reason);
+    setVoiceStatus('WAKE READY · say “Robo” to talk');
+    scheduleWakeEngineRestart(80);
+    return true;
+  }
+
+  function startWakeEngine(){
+    if(!wakeArmed || !SR || listening || talking || aiRequestInFlight || wakeStarting || wakeRecognition) return;
+
+    if(wakeCommandArmed && performance.now()-wakeCommandStartedAt>WAKE_COMMAND_WINDOW_MS){
+      wakeCommandArmed=false;
+      wakeCommandStartedAt=0;
+      wakeEvent('command window expired');
+    }
+
+    try{
+      const session=++wakeSession;
+      const r=new SR();
+      wakeRecognition=r;
+      wakeStarting=true;
+      r.continuous=true;
+      r.interimResults=true;
+      r.maxAlternatives=3;
+      r.lang=(navigator.language||'en-US').toLowerCase().startsWith('en-')
+        ? (navigator.language||'en-US')
+        : 'en-US';
+
+      r.onstart=()=>{
+        if(session!==wakeSession) return;
+        wakeStarting=false;
+        wakeEvent('listener active');
+        if(!listening && !talking){
+          setVoiceStatus(wakeCommandArmed
+            ? 'WAKE ACTIVE · speak your command'
+            : 'WAKE ACTIVE · say “Robo”');
+        }
+      };
+
+      r.onspeechstart=()=>{
+        if(session!==wakeSession) return;
+        wakeEvent('speech heard · waiting for wake phrase');
+      };
+
+      r.onresult=(e)=>{
+        if(session!==wakeSession) return;
+
+        let finalText='';
+        let interimText='';
+        for(let i=e.resultIndex;i<e.results.length;i++){
+          const result=e.results[i];
+          const alt=result?.[0];
+          const tx=String(alt?.transcript||'').trim();
+          if(!tx) continue;
+          if(result.isFinal) finalText+=(finalText?' ':'')+tx;
+          else interimText+=(interimText?' ':'')+tx;
+        }
+
+        const text=(finalText||interimText).trim();
+        if(!text) return;
+
+        if(!wakeCommandArmed){
+          const parsed=parseWakeUtterance(text);
+          if(!parsed.woken) return;
+
+          wakeLastPhraseAt=Date.now();
+          wakeEvent('wake phrase detected',{
+            text,
+            inlineCommand:Boolean(parsed.command)
+          });
+
+          wakeCommandArmed=true;
+          wakeCommandStartedAt=performance.now();
+          setState('listening','wake · listening for you');
+          setVoiceStatus('WAKE DETECTED · speak now');
+
+          if(parsed.command && finalText){
+            wakeCommandArmed=false;
+            wakeCommandStartedAt=0;
+            stopWakeEngine('inline wake command');
+            setTimeout(()=>respond(parsed.command),60);
+          }else if(finalText){
+            stopWakeEngine('wake phrase handoff');
+            wakePausedForSpeech=true;
+            wakeAwaitingCommand=true;
+            speak('Yes?','en');
+          }
+          return;
+        }
+
+        if(performance.now()-wakeCommandStartedAt>WAKE_COMMAND_WINDOW_MS){
+          wakeCommandArmed=false;
+          wakeCommandStartedAt=0;
+          wakeEvent('command window expired');
+          return;
+        }
+
+        if(finalText){
+          const rawCommand=finalText.trim();
+          const parsedCommand=parseWakeUtterance(rawCommand);
+          const command=parsedCommand.woken ? parsedCommand.command : rawCommand;
+          if(command && command.toLowerCase()!=='robo'){
+            wakeCommandArmed=false;
+            wakeCommandStartedAt=0;
+            stopWakeEngine('command received');
+            setTimeout(()=>respond(command),60);
+          }
+        }
+      };
+
+      r.onerror=(e)=>{
+        if(session!==wakeSession) return;
+        const code=e?.error||'unknown';
+        wakeEvent('listener error',{code});
+        wakeRecognition=null;
+        wakeStarting=false;
+
+        if(code==='not-allowed'||code==='service-not-allowed'){
+          wakeArmed=false;
+          wakeCommandArmed=false;
+          setVoiceStatus('WAKE OFF · microphone permission required');
+          return;
+        }
+
+        scheduleWakeEngineRestart(650);
+      };
+
+      r.onend=()=>{
+        if(session!==wakeSession) return;
+        wakeRecognition=null;
+        wakeStarting=false;
+        wakeEvent('listener ended');
+
+        if(wakeArmed && !listening && !talking && !aiRequestInFlight && !wakePausedForSpeech){
+          scheduleWakeEngineRestart(350);
+        }
+      };
+
+      wakeEvent('starting listener');
+      r.start();
+    }catch(err){
+      wakeRecognition=null;
+      wakeStarting=false;
+      wakeEvent('start failed',{
+        name:err?.name||'unknown',
+        message:err?.message||String(err)
+      });
+
+      if(err?.name==='NotAllowedError'||err?.name==='SecurityError'){
+        wakeArmed=false;
+        setVoiceStatus('WAKE OFF · browser blocked background microphone');
+      }else{
+        scheduleWakeEngineRestart(900);
+      }
+    }
+  }
+
+  function wakeAfterSpeechEnd(){
+    wakePausedForSpeech=false;
+    if(wakeAwaitingCommand){
+      wakeAwaitingCommand=false;
+      wakeCommandArmed=true;
+      wakeCommandStartedAt=performance.now();
+      if(wakeArmed && !listening && !talking && !aiRequestInFlight){
+        setTimeout(()=>startSTT(true),160);
+      }
+      return;
+    }
+    if(wakeArmed && !listening && !talking && !aiRequestInFlight){
+      wakeCommandArmed=false;
+      wakeCommandStartedAt=0;
+      scheduleWakeEngineRestart(400);
+    }
+  }
+
+  function armWakeFromUserGesture(){
+    armWakeEngine('user gesture');
+  }
+
   function sttEventForStart(message){
     log('STT · '+message);
   }
@@ -4080,6 +4329,7 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
       }
       sttRetryUsed=false;
       if(!talking && state==='listening') setState('curious','curious · standing by');
+      if(wakeArmed && !talking && !aiRequestInFlight) scheduleWakeEngineRestart(450);
     };
     return hookRecognitionDiagnostics(r);
   }
@@ -4089,6 +4339,12 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
   async function startSTT(isRetry=false){
     if(!recognition){setVoiceStatus('STT UNAVAILABLE · Chrome SpeechRecognition not exposed');return;}
     if(listening||sttStarting)return;
+
+    stopWakeEngine('manual STT handoff');
+    wakeCommandArmed=false;
+    wakeCommandStartedAt=0;
+    wakePausedForSpeech=false;
+    wakeAwaitingCommand=false;
 
     try{
       sttSession++;
@@ -4129,6 +4385,9 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
         : 'STT START FAILED · '+(e?.message||e?.name||'unknown error');
       setVoiceStatus(msg);
       hideCaption(6000);
+      if(wakeArmed && e?.name!=='NotAllowedError' && e?.name!=='SecurityError'){
+        scheduleWakeEngineRestart(800);
+      }
     }
   }
 
@@ -5050,6 +5309,7 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
       ttsDiag('ElevenLabs speech end');
       talking=false;
       micBtn.classList.remove('talking');
+      wakeAfterSpeechEnd();
       if(roboAudio===audio) roboAudio=null;
       if(roboAudioUrl){
         try{URL.revokeObjectURL(roboAudioUrl);}catch(_){}
@@ -5105,6 +5365,7 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
       log('TTS · browser fallback speech end');
       talking=false;
       micBtn.classList.remove('talking');
+      wakeAfterSpeechEnd();
       setState('curious','curious · standing by');
       hideCaption(1800);
     };
@@ -5114,6 +5375,7 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
       log('TTS ERROR · browser fallback · '+(e&&e.error?e.error:'unknown'));
       talking=false;
       micBtn.classList.remove('talking');
+      wakeAfterSpeechEnd();
       setState('curious','speech stopped');
     };
 
@@ -5155,6 +5417,7 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
 
   micBtn.addEventListener('click',async()=>{
     lastActivity=performance.now();
+    armWakeFromUserGesture();
     if(listening){try{recognition.stop();}catch(_){ }return;}
     if('speechSynthesis' in window) speechSynthesis.cancel();
     await startSTT(false);
@@ -5169,7 +5432,7 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
 
 /* ---------- Developer diagnostics runtime ---------- */
 const devPage=$("#devPage"), devLogs=$("#devLogs"), devTranscript=$("#devTranscript"), devMemoryStatus=$("#devMemoryStatus"), devMemoryIdentity=$("#devMemoryIdentity"), devMemoryCount=$("#devMemoryCount"), devMemoryFacts=$("#devMemoryFacts"), devMemoryProfiles=$("#devMemoryProfiles"), devMemoryActive=$("#devMemoryActive"), devMemoryChange=$("#devMemoryChange");
-const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI");
+const devStage=$("#devStage"), devCamera=$("#devCamera"), devMic=$("#devMic"), devMicPermission=$("#devMicPermission"), devLocalStt=$("#devLocalStt"), devStt=$("#devStt"), devBrowser=$("#devBrowser"), devAI=$("#devAI"), devWake=$("#devWake");
 const devSocialPresence=$("#devSocialPresence"), devSocialCount=$("#devSocialCount"), devSocialInteraction=$("#devSocialInteraction"), devSocialConfidence=$("#devSocialConfidence"), devSocialChange=$("#devSocialChange");
 const devFusionState=$("#devFusionState"), devFusionTarget=$("#devFusionTarget"), devFusionIdentity=$("#devFusionIdentity"), devFusionIdentityConfidence=$("#devFusionIdentityConfidence"), devFusionPosition=$("#devFusionPosition"), devFusionMovement=$("#devFusionMovement"), devFusionConfidence=$("#devFusionConfidence");
 window.__roboStructuredVisionReady=false;
@@ -5191,6 +5454,7 @@ if(devCamera)devCamera.textContent=navigator.mediaDevices?.getUserMedia?"API REA
 if(devMic)devMic.textContent=navigator.mediaDevices?.getUserMedia?"API READY":"UNAVAILABLE";
 if(devMicPermission)devMicPermission.textContent="UNKNOWN · tap CAMERA or MIC";
 if(devLocalStt)devLocalStt.textContent=(window.SpeechRecognition&&"processLocally" in SpeechRecognition.prototype)?"SUPPORTED API":"NOT EXPOSED";
+if(devWake)devWake.textContent=wakeArmed?(wakeRecognition?"LISTENING":"ARMED · STARTING"):"OFF";
 async function refreshMicPermissionDiagnostic(){
   if(!devMicPermission)return;
   try{
@@ -5249,6 +5513,7 @@ function runDevChecks(){
     ["HTTPS / localhost",location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"],
     ["getUserMedia",!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
     ["SpeechRecognition",!!(window.SpeechRecognition||window.webkitSpeechRecognition)],
+    ["Wake engine",!!(window.SpeechRecognition||window.webkitSpeechRecognition) && (wakeArmed || !!wakeRecognition)],
     ["Speech synthesis","speechSynthesis" in window],
     ["Camera",!!$("#camera") && !!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)],
     ["3D emoji canvas",!!$("#face")],
@@ -5303,7 +5568,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.81 MODULE 6+7+8 PERCEPTION FUSION DIAGNOSTICS",
+    "ROBO AIOS v2.82 WAKE ENGINE EXPERIMENT · v2.81 PERCEPTION BASELINE",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
