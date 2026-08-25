@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.84 · WAKE ENGINE + RESTORED HIGH-FREQUENCY FACE TRACKING · v2.81 BASELINE</title>
+<title>ROBO AIOS v2.85 · WAKE ENGINE + RESTORED HIGH-FREQUENCY FACE TRACKING · v2.81 BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -223,11 +223,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.84 · WAKE ENGINE + MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.85 · WAKE ENGINE + MODULES 6+7.5+8 LIVE PERCEPTION</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.84</small></div>
+          <div class="brand">ROBO <small>v2.85</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -296,7 +296,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.84 WAKE ENGINE + RESTORED FACE TRACKING · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">WAKE ENGINE EXPERIMENT · v2.81 perception baseline + restored v2.74 high-frequency tracker. Copy the log after testing.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.85 WAKE ENGINE + RESTORED FACE TRACKING · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">WAKE ENGINE EXPERIMENT · v2.81 perception baseline + restored v2.74 high-frequency tracker. Copy the log after testing.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -502,7 +502,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   const FACE_VISUAL_LOSS_MS = 700;
   const FACE_TARGET_REACQUIRE_WINDOW_MS = 5000;
   const FACE_IDENTITY_RELEASE_MS = FACE_TARGET_REACQUIRE_WINDOW_MS;
-  const FACE_DETECT_INTERVAL_MS = 105;
+  const FACE_DETECT_INTERVAL_MS = 115;
   const FACE_SMOOTH_ALPHA = 0.42;
   const FACE_RECOGNITION_INTERVAL_MS = 1800;
   const LIVE_IDENTITY_REFRESH_MS = 1600;
@@ -511,8 +511,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   const ACTIVE_IDENTITY_REFRESH_MS = 850;
   let lastLiveIdentitySyncAt = 0;
   let liveIdentityGeneration = 0;
-  const FACE_RECOGNITION_INPUT_SIZE = 224;
-  const FACE_RECOGNITION_SCORE_THRESHOLD = 0.06;
+  const FACE_RECOGNITION_INPUT_SIZE = 320;
+  const FACE_RECOGNITION_SCORE_THRESHOLD = 0.045;
 
   function faceDiag(){
     try{
@@ -808,8 +808,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const detectorInput =
       faceapi.TinyFaceDetectorOptions
         ? new faceapi.TinyFaceDetectorOptions({
-            inputSize:192,
-            scoreThreshold:.08
+            inputSize:320,
+            scoreThreshold:.045
           })
         : null;
 
@@ -843,6 +843,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       if(mapped.length){
         faceMisses=0;
+        const best=mapped.slice().sort((a,b)=>Number(b.score||0)-Number(a.score||0))[0];
+        if(performance.now()-(window.__roboLastFaceDetectLog||0)>1200){
+          window.__roboLastFaceDetectLog=performance.now();
+          devLog('FACE','detector pass',{faces:mapped.length,bestScore:Number(best?.score||0).toFixed(3),bestBox:best?.box||null,inputSize:320,threshold:0.045});
+        }
         return mapped;
       }
 
@@ -863,8 +868,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
         const adaptiveOptions =
           new faceapi.TinyFaceDetectorOptions({
-            inputSize:224,
-            scoreThreshold:.05
+            inputSize:416,
+            scoreThreshold:.028
           });
 
         const retry =
@@ -3190,6 +3195,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return {handled:true,reply:'I cleared my persistent multi-person memory.',emotion:'neutral'};
     }
 
+    const flexibleName=raw.match(/^(?:my name is|remember me as|remember my name as|save my name as|remember that my name is|i am|i'm)\s+([A-Za-z][A-Za-z .'-]{1,40})(?:\s+(?:in|to)\s+(?:your\s+)?memory)?[.!?]?$/i);
+    if(flexibleName){
+      const result=await rememberCurrentFaceAs(flexibleName[1]).catch(()=>({ok:false,reason:'error'}));
+      if(!result.ok) return {handled:true,reply:result.reason==='no-face'?'I need your face clearly visible in the camera first.':'I could not save that identity yet.',emotion:'confused'};
+      return {handled:true,reply:`Got it. I am ${result.person.displayName}. I saved your face and identity to memory.`,emotion:'happy'};
+    }
+    const primaryMemorySentence=raw.match(/^(?:i am|i'm)\s+(?:your\s+)?primary\s+user(?:[,.]?\s+)(?:save|remember)\s+(?:my\s+name\s+is|me\s+as|my\s+name\s+as)\s+([A-Za-z][A-Za-z .'-]{1,40})(?:\s+(?:in|to)\s+(?:your\s+)?memory)?[.!?]?$/i);
+    if(primaryMemorySentence){
+      const result=await rememberCurrentFaceAs(primaryMemorySentence[1]).catch(()=>({ok:false,reason:'error'}));
+      if(!result.ok) return {handled:true,reply:result.reason==='no-face'?'I need your face clearly visible in the camera first.':'I could not save that identity yet.',emotion:'confused'};
+      return {handled:true,reply:`Understood. I saved ${result.person.displayName} as my primary user and linked the current face.`,emotion:'happy'};
+    }
     const directFaceName=raw.match(/^remember\s+(?:this\s+face|this\s+person)\s+(?:is|as)\s+([A-Za-z][A-Za-z .'-]{1,40})[.!?]?$/i);
     if(directFaceName){
       const result=await rememberCurrentFaceAs(directFaceName[1]).catch(()=>({ok:false,reason:'error'}));
@@ -4058,7 +4075,16 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
      One explicit microphone gesture arms the background wake listener.
      Manual mic remains available as a deterministic fallback.
   */
-  const WAKE_PHRASE_RE=/\b(?:hey[\s,]+)?robo\b/i;
+  const WAKE_PHRASE_RE=/\b(?:hey[\s,]+)?(?:robo|robot|robu|rubo|roboai|roboaios)\b/i;
+  function normalizeWakeText(text){return String(text||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();}
+  function wakeTokenLooksLikeRobo(token){
+    const t=normalizeWakeText(token); if(!t) return false;
+    if(['robo','robot','robu','rubo','roboai','roboaios'].includes(t)) return true;
+    if(t.length<4||t.length>6) return false;
+    const a='robo'; let prev=[0,1,2,3,4];
+    for(let i=1;i<=t.length;i++){const cur=[i];for(let j=1;j<=a.length;j++)cur[j]=Math.min(cur[j-1]+1,prev[j]+1,prev[j-1]+(t[i-1]===a[j-1]?0:1));prev=cur;}
+    return prev[4]<=1;
+  }
   const WAKE_COMMAND_WINDOW_MS=7000;
   const WAKE_RESTART_DELAY_MS=500;
   let wakeRecognition=null;
@@ -4071,20 +4097,19 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
   let wakePausedForSpeech=false;
   let wakeAwaitingCommand=false;
   let wakeLastPhraseAt=0;
+  let wakeTranscriptBuffer="";
+  let wakeTranscriptBufferAt=0;
 
   function wakeEvent(message,data=null){
     log('WAKE · '+message+(data ? ' · '+JSON.stringify(data) : ''));
   }
 
   function parseWakeUtterance(text){
-    const clean=String(text||'').replace(/\s+/g,' ').trim();
-    if(!clean) return {woken:false,command:''};
-    const match=clean.match(WAKE_PHRASE_RE);
-    if(!match) return {woken:false,command:''};
-    const command=clean.slice(match.index+match[0].length)
-      .replace(/^[\s,.:;!?-]+/,'')
-      .trim();
-    return {woken:true,command};
+    const clean=normalizeWakeText(text); if(!clean) return {woken:false,command:''};
+    const tokens=clean.split(' '); let wakeIndex=-1;
+    for(let i=0;i<tokens.length;i++){if(['hey','hi','hello'].includes(tokens[i])) continue; if(wakeTokenLooksLikeRobo(tokens[i])){wakeIndex=i;break;}}
+    if(wakeIndex<0) return {woken:false,command:''};
+    return {woken:true,command:tokens.slice(wakeIndex+1).join(' ').trim()};
   }
 
   function stopWakeEngine(reason='stopped'){
@@ -4096,6 +4121,8 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
     }
     const r=wakeRecognition;
     wakeRecognition=null;
+    wakeTranscriptBuffer="";
+    wakeTranscriptBufferAt=0;
     if(r){
       try{r.stop();}catch(_){}
     }
@@ -4182,14 +4209,20 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
 
         const text=(finalText||interimText).trim();
         if(!text) return;
+        const nowWake=performance.now();
+        if(nowWake-wakeTranscriptBufferAt>1400) wakeTranscriptBuffer='';
+        wakeTranscriptBuffer=(wakeTranscriptBuffer+' '+text).trim().slice(-180);
+        wakeTranscriptBufferAt=nowWake;
+        const combinedWake=wakeTranscriptBuffer;
 
         if(!wakeCommandArmed){
-          const parsed=parseWakeUtterance(text);
+          const parsed=parseWakeUtterance(combinedWake);
           if(!parsed.woken) return;
 
           wakeLastPhraseAt=Date.now();
           wakeEvent('wake phrase detected',{
             text,
+            normalized:normalizeWakeText(combinedWake),
             inlineCommand:Boolean(parsed.command)
           });
 
@@ -5191,14 +5224,10 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
         (!cameraEnabled && baseVisionQuestion)
       );
 
-      /*
-       * IMPORTANT: when the camera is ON, Robo should actually see the
-       * current frame for every user request. Do not make vision depend on
-       * English-only keyword classification. The classifier is retained for
-       * diagnostics and visual-memory decisions, but it is no longer a gate
-       * for live camera attachment.
-       */
-      if(cameraEnabled && requestCameraSession===cameraSession){
+      /* v2.85: camera may stay live for face tracking, but Gemini gets a frame
+       * only for an explicit vision command or visual-memory follow-up. */
+      const shouldAttachLiveVision=Boolean(wantsVision || (useVisualMemory && !freshVision));
+      if(cameraEnabled && requestCameraSession===cameraSession && shouldAttachLiveVision){
         let attempts=0;
         while(!visionImage && attempts<2){
           attempts++;
@@ -5221,6 +5250,10 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
           latestVision=null;
           devLog('VISION ERROR','camera is ON but no usable frame could be captured',{session:requestCameraSession,videoWidth:$('#camera')?.videoWidth||0,videoHeight:$('#camera')?.videoHeight||0,readyState:$('#camera')?.readyState||0});
         }
+      }else if(cameraEnabled && !shouldAttachLiveVision){
+        devLog('VISION','camera ON · no vision command · frame NOT attached');
+        clearVisionOverlay();
+        latestVision=null;
       }else if(cameraEnabled){
         devLog('VISION','camera changed during request · frame NOT attached');
       }else if(wantsVision && useVisualMemory){
@@ -5335,6 +5368,7 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
   }
 
   let roboAudio=null;
+  let elevenLabsQuotaExhausted=false;
   let roboAudioUrl=null;
   let roboSpeechToken=0;
 
@@ -5508,7 +5542,7 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
     showCaption('ROBO SAYS\n'+clean,true);
 
     try{
-      const played=await speakWithElevenLabs(clean,token,ttsLanguage);
+      const played=elevenLabsQuotaExhausted ? false : await speakWithElevenLabs(clean,token,ttsLanguage);
       if(played){
         log('TTS · ElevenLabs ready');
       ttsDiag('ElevenLabs ready · browser fallback NOT used');
@@ -5516,6 +5550,7 @@ function getUserMediaWithTimeout(constraints, timeoutMs=12000){
       }
     }catch(err){
       if(token!==roboSpeechToken) return;
+      if(err?.code==='ELEVENLABS_API_ERROR' && /0 credits remaining|exceeds your quota/i.test(String(err?.message||''))){elevenLabsQuotaExhausted=true;log('TTS · ElevenLabs quota exhausted · browser fallback will be used directly until quota is restored');}
       log('TTS · ElevenLabs failed · code='+(err?.code||'unknown')+' · http='+(err?.httpStatus||'n/a')+' · '+(err?.message||err?.name||'unknown')+' · BROWSER FALLBACK ACTIVE');
       ttsDiag('ElevenLabs failed · browser fallback ACTIVE', {code:err?.code||'unknown', http:err?.httpStatus||'n/a', message:err?.message||err?.name||'unknown'});
     }
@@ -5676,7 +5711,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.84 WAKE ENGINE EXPERIMENT · v2.81 PERCEPTION BASELINE",
+    "ROBO AIOS v2.85 WAKE ENGINE EXPERIMENT · v2.81 PERCEPTION BASELINE",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
