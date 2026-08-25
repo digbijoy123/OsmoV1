@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.86 · WAKE ENGINE + RESTORED HIGH-FREQUENCY FACE TRACKING · v2.81 BASELINE</title>
+<title>ROBO AIOS v2.87 · TARGET AUTHORITY + FACE IDENTITY · v2.81 BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -223,11 +223,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.85 · WAKE ENGINE + MODULES 6+7.5+8 LIVE PERCEPTION</div>
+      <div id="roboBuildMarker">ROBO v2.87 · TARGET AUTHORITY + FACE IDENTITY · MODULES 6+7.5+8</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.85</small></div>
+          <div class="brand">ROBO <small>v2.87</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -296,7 +296,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.85 WAKE ENGINE + RESTORED FACE TRACKING · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">WAKE ENGINE EXPERIMENT · v2.81 perception baseline + restored v2.74 high-frequency tracker. Copy the log after testing.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.87 TARGET AUTHORITY + FACE IDENTITY · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">TARGET AUTHORITY EXPERIMENT · v2.81 perception baseline + stabilized face identity. Copy the log after testing.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -980,6 +980,97 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(labelEl) labelEl.style.top=top<18?'calc(100% + 4px)':'-24px';
   }
 
+  function getAuthoritativeTargetBox(){
+    if(faceTarget && isValidFaceBox(faceTarget.box)) return cloneBox(faceTarget.box);
+    if(activeFaceTarget?.personId && isValidFaceBox(activeFaceTarget.box)) return cloneBox(activeFaceTarget.box);
+    if(stableTargetPersonId && isValidFaceBox(stableTargetLastBox)) return cloneBox(stableTargetLastBox);
+    if(isValidFaceBox(faceSmoothBox) && faceTarget) return cloneBox(faceSmoothBox);
+    return null;
+  }
+
+  function getAuthoritativeTargetName(){
+    const name=(activeFaceTarget?.personId&&activeFaceTarget?.name)
+      || (faceTarget?.identity&&faceTarget.identity!=='UNKNOWN' ? faceTarget.identity : null)
+      || (faceTarget?.lastKnownIdentity&&faceTarget.lastKnownIdentity!=='UNKNOWN' ? faceTarget.lastKnownIdentity : null)
+      || (faceRecognitionIdentity&&faceRecognitionIdentity!=='UNKNOWN' ? faceRecognitionIdentity : null)
+      || (getActivePerson()?.displayName||null);
+    return name && name!=='UNKNOWN' ? String(name) : 'UNKNOWN';
+  }
+
+  function syncTargetAuthorityUI(reason='ui-sync'){
+    const now=performance.now();
+    const targetBox=getAuthoritativeTargetBox();
+    if(!targetBox) return false;
+    const name=getAuthoritativeTargetName();
+    const targetTrackId=activeFaceTarget?.trackId || faceTarget?.trackId || null;
+
+    if(activeFaceTarget?.personId && faceTarget){
+      faceTarget.personId=activeFaceTarget.personId;
+      faceTarget.identity=activeFaceTarget.name||'UNKNOWN';
+      faceTarget.lastKnownPersonId=activeFaceTarget.personId;
+      faceTarget.lastKnownIdentity=activeFaceTarget.name||'UNKNOWN';
+      faceTarget.identityConfidence=Math.max(60,Number(activeFaceTarget.confidence)||60);
+    }
+
+    // Keep downstream state synchronized with the physical target authority.
+    const targetFaces=Array.isArray(faceDetections)?faceDetections:[];
+    let primary=null;
+    if(activeFaceTarget?.personId){
+      primary=targetFaces.find(f=>f?.personId===activeFaceTarget.personId)||null;
+      if(!primary && faceTarget && targetFaces.includes(faceTarget)) primary=faceTarget;
+      if(!primary && targetFaces.length===1) primary=targetFaces[0];
+    }
+    if(primary && activeFaceTarget?.personId){
+      preserveActiveTargetIdentity(primary, reason+'-propagate');
+    }
+
+    if(now-lastTargetAuthorityUiAt>=350){
+      lastTargetAuthorityUiAt=now;
+      devLog('AUTHORITY','live target authority sync',{
+        trackId:targetTrackId,
+        personId:activeFaceTarget?.personId||faceTarget?.personId||null,
+        name,
+        box:targetBox,
+        reason
+      });
+    }
+    renderFaceTarget();
+    renderMemoryIdentity();
+    renderMemoryDiagnostics();
+    deriveLiveSocialFromFaces(targetFaces.length ? targetFaces : (activeFaceTarget?.personId ? [
+      {box:targetBox,score:Math.max(0.01,Number(activeFaceTarget.confidence||0)/100),identity:name,personId:activeFaceTarget.personId,lastKnownIdentity:name,lastKnownPersonId:activeFaceTarget.personId}
+    ] : []));
+    updatePerceptionFusion('authority-'+reason);
+    return true;
+  }
+
+  function renderLiveTargetPanel(){
+    // v2.81: the camera panel is intentionally clean.
+    // Live identity is shown on the face tracking box itself.
+    const summary=$('#visionSummary');
+    if(!summary) return;
+    summary.innerHTML='';
+    summary.classList.remove('show');
+    summary.setAttribute('aria-hidden','true');
+  }
+
+  function updateFaceVisualElement(el, box, labelEl){
+    if(!el || !isValidFaceBox(box) || !camera.videoWidth || !camera.videoHeight) return;
+    const rawWidthPct=(box.width/camera.videoWidth)*100;
+    const rawHeightPct=(box.height/camera.videoHeight)*100;
+    const squarePct=Math.max(6,Math.min(45,Math.max(rawWidthPct,rawHeightPct)));
+    let centerX=((box.x+box.width/2)/camera.videoWidth)*100;
+    let centerY=((box.y+box.height/2)/camera.videoHeight)*100;
+    if(cameraFacingMode==='user') centerX=100-centerX;
+    const left=Math.max(0,Math.min(100-squarePct,centerX-squarePct/2));
+    const top=Math.max(0,Math.min(100-squarePct,centerY-squarePct/2));
+    el.style.left=left+'%';
+    el.style.top=top+'%';
+    el.style.width=squarePct+'%';
+    el.style.height=squarePct+'%';
+    if(labelEl) labelEl.style.top=top<18?'calc(100% + 4px)':'-24px';
+  }
+
   function renderFaceTarget(){
     const overlay=$('#faceTrackingOverlay');
     if(!overlay) return;
@@ -987,23 +1078,17 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     faceTargetVisualElement=null;
     faceTargetVisualLabel=null;
     if(!camera.videoWidth || !camera.videoHeight) return;
-    if(faceTarget && stableTargetLastSeenAt && performance.now()-stableTargetLastSeenAt>FACE_VISUAL_LOSS_MS){
-      return;
-    }
+
+    const visualAge=stableTargetLastSeenAt ? performance.now()-stableTargetLastSeenAt : Infinity;
+    const allowAuthorityHold=Boolean(activeFaceTarget?.personId && isValidFaceBox(activeFaceTarget.box) && visualAge<=FACE_TARGET_REACQUIRE_WINDOW_MS);
+    if(faceTarget && stableTargetLastSeenAt && visualAge>FACE_VISUAL_LOSS_MS && !allowAuthorityHold) return;
 
     const appendBox=(box,index,isTarget=false,labelText='UNKNOWN')=>{
       if(!isValidFaceBox(box)) return;
       const el=document.createElement('div');
       const targetIdentity=(
         isTarget
-          ? (
-              (activeFaceTarget.trackId===faceTarget?.trackId ? activeFaceTarget.name : null)||
-              faceTarget?.identity||
-              faceTarget?.lastKnownIdentity||
-              faceRecognitionIdentity||
-              getActivePerson()?.displayName||
-              null
-            )
+          ? getAuthoritativeTargetName()
           : (labelText&&labelText!=='FACE'?labelText:null)
       );
       const resolvedLabel=targetIdentity && targetIdentity!=='UNKNOWN' ? targetIdentity : 'UNKNOWN';
@@ -1024,8 +1109,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       if(faceTarget && d===faceTarget) return;
       appendBox(d.box,idx,false,d.identity||d.lastKnownIdentity||'UNKNOWN');
     });
-    if(faceSmoothBox && faceTarget){
-      appendBox(faceSmoothBox,0,true,faceTarget.identity||faceTarget.lastKnownIdentity||faceRecognitionIdentity||'UNKNOWN');
+
+    const authoritativeBox=getAuthoritativeTargetBox();
+    if(authoritativeBox){
+      appendBox(authoritativeBox,0,true,getAuthoritativeTargetName());
     }
     renderLiveTargetPanel();
   }
@@ -1179,10 +1266,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     const candidateId=String(match.personId);
     const candidateName=String(match.displayName||'UNKNOWN').trim() || 'UNKNOWN';
     const distance=Number(match.distance);
-    const second=Number(match.secondDistance);
-    const margin=Number.isFinite(distance) && Number.isFinite(second)
+    const secondRaw=Number(match.secondDistance);
+    const hasSecond=Number.isFinite(secondRaw) && secondRaw>0;
+    const second=hasSecond ? secondRaw : null;
+    const margin=Number.isFinite(distance) && hasSecond
       ? (second-distance)
-      : -Infinity;
+      : null;
 
     const withinWindow=
       pendingIdentityPersonId===candidateId &&
@@ -1950,35 +2039,40 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function deriveLiveSocialFromFaces(faces){
     const detected=Array.isArray(faces)?faces:[];
     const previous=socialAwareness||{};
+    const authoritative=activeFaceTarget?.personId ? {
+      box:activeFaceTarget.box||faceSmoothBox||faceTarget?.box||null,
+      score:Math.max(0.01,Number(activeFaceTarget.confidence||0)/100),
+      identity:activeFaceTarget.name||'UNKNOWN',
+      personId:activeFaceTarget.personId,
+      lastKnownIdentity:activeFaceTarget.name||'UNKNOWN',
+      lastKnownPersonId:activeFaceTarget.personId
+    } : null;
 
-    // Module 8.2 owns physical-target existence. During the short lifecycle
-    // reacquisition window, the detector may temporarily report zero faces,
-    // but Module 6 must not contradict an actively reserved target.
     const targetReserved=Boolean(
-      activeFaceTarget?.personId &&
-      faceTargetLostAt &&
+      authoritative && faceTargetLostAt &&
       (performance.now()-faceTargetLostAt)<=FACE_IDENTITY_RELEASE_MS
     );
-    const list=(detected.length>0 || !targetReserved)
-      ? detected
-      : [{
-          box:activeFaceTarget.box||faceSmoothBox||null,
-          score:Math.max(0.01,Number(activeFaceTarget.confidence||0)/100),
-          identity:activeFaceTarget.name||'UNKNOWN',
-          personId:activeFaceTarget.personId,
-          lastKnownIdentity:activeFaceTarget.name||'UNKNOWN',
-          lastKnownPersonId:activeFaceTarget.personId
-        }];
+    const personCount=detected.length || (targetReserved?1:0);
+    const list=detected.length ? detected.slice() : (targetReserved?[authoritative]:[]);
 
-    const personCount=list.length;
+    // Module 8.2 target authority chooses the primary human even when another
+    // face briefly appears. Module 6 still reports the total number of faces.
+    let primary=authoritative||null;
+    if(!primary && list.length) primary=list[0];
+    if(authoritative && list.length){
+      const same=list.find(f=>f?.personId===authoritative.personId);
+      if(same) primary={...same,...authoritative};
+      else if(list.length===1) primary={...list[0],...authoritative};
+    }
+
     const presence=personCount>0?'present':'no-person';
     let interaction='idle';
     if(listening||talking) interaction=personCount>0?'active-conversation':'voice-active';
     else if(personCount===1) interaction='single-person-present';
     else if(personCount>1) interaction='multiple-people-present';
 
-    const confidence=personCount
-      ? Math.round(list.reduce((sum,f)=>sum+Math.max(0,Math.min(1,Number(f.score||0))),0)/personCount*100)
+    const confidence=primary
+      ? Math.round(Math.max(0,Math.min(100,Number(primary.score||0)*100)))
       : 0;
 
     let lastChange='none';
@@ -1988,15 +2082,13 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         : (personCount===0?'person-left':'person-count-changed');
     }
 
-    const primary=list[0]||null;
-    const activePerson=getActivePerson();
-    const activeName=(activeFaceTarget?.personId && activeFaceTarget?.name)
-      ? activeFaceTarget.name
-      : ((primary?.identity && primary.identity!=='UNKNOWN')
+    const activeName=authoritative?.identity && authoritative.identity!=='UNKNOWN'
+      ? authoritative.identity
+      : ((primary?.identity&&primary.identity!=='UNKNOWN')
           ? primary.identity
-          : ((primary?.lastKnownIdentity && primary.lastKnownIdentity!=='UNKNOWN')
+          : ((primary?.lastKnownIdentity&&primary.lastKnownIdentity!=='UNKNOWN')
               ? primary.lastKnownIdentity
-              : (activePerson?.displayName || faceRecognitionIdentity || 'UNKNOWN')));
+              : (getActivePerson()?.displayName||faceRecognitionIdentity||'UNKNOWN')));
 
     socialAwareness={
       ...previous,
@@ -2012,9 +2104,9 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       }:null,
       people:list.map((f,i)=>({
         id:f.personId||('face-person-'+i),
-        label:(f.identity&&f.identity!=='UNKNOWN')
-          ? f.identity
-          : (f.lastKnownIdentity||'UNKNOWN'),
+        label:(f.personId&&authoritative?.personId===f.personId&&authoritative.name)
+          ? authoritative.name
+          : ((f.identity&&f.identity!=='UNKNOWN')?f.identity:(f.lastKnownIdentity||'UNKNOWN')),
         count:1,
         confidence:Number(f.score||0)*100,
         box:f.box,
@@ -2358,6 +2450,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       renderFaceTarget();
       faceDiag();
+      syncTargetAuthorityUI('face-update');
       syncLiveIdentityAndSocial('face-update');
 
     }catch(err){
@@ -5791,7 +5884,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.86 FACE IDENTITY + GEMINI CONTEXT · v2.81 PERCEPTION BASELINE",
+    "ROBO AIOS v2.87 TARGET AUTHORITY · v2.81 PERCEPTION BASELINE",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -5923,7 +6016,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.81 MODULE 6+7+8 PERCEPTION FUSION · Gemini AI brain");
+  log("ROBO AIOS v2.87 TARGET AUTHORITY · v2.81 PERCEPTION BASELINE · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
