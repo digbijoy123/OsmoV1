@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.91 · FACE FALSE-POSITIVE FIX · v2.81 BASELINE</title>
+<title>ROBO AIOS v2.92 · BALANCED FACE TRACKING · v2.81 BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -223,7 +223,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.91 · TARGET AUTHORITY + FACE IDENTITY · MODULES 6+7.5+8</div>
+      <div id="roboBuildMarker">ROBO v2.94 · TARGET AUTHORITY + FACE IDENTITY · MODULES 6+7.5+8</div>
 
       <header class="hud">
         <div class="hudTop">
@@ -470,6 +470,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let stableTargetLastBox = null;
   let stableTargetLastSeenAt = 0;
   let lastTargetAuthorityUiAt = 0;
+  let lastFaceOverlayRenderAt = 0;
   let faceVisualGuardFrame = 0;
   // v2.81: Module 8.2 owns the physical target. Module 7.5 only establishes
   // or changes identity; recognition refreshes never clear a visible target.
@@ -498,18 +499,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let identityChallengerBestDistance=Infinity;
   let identityChallengerLastMargin=0;
 
-  // v2.91: detector output is now treated as a candidate stream. A new
+  // v2.92: detector output is treated as a balanced candidate stream. A new
   // physical target must survive temporal validation before it can create a
   // visible box. This prevents TinyFaceDetector hallucinations in empty space
   // from becoming targets, especially when the user moves far away.
   let faceCandidateTracks=[];
   let faceCandidateSequence=0;
-  const FACE_NEW_TARGET_CONFIRM_HITS=2;
-  const FACE_CANDIDATE_MAX_GAP_MS=330;
-  const FACE_MIN_DETECT_SCORE=0.14;
-  const FACE_MIN_FAR_SCORE=0.18;
-  const FACE_MAX_ASPECT_RATIO=1.85;
-  const FACE_MIN_ASPECT_RATIO=0.54;
+  const FACE_NEW_TARGET_CONFIRM_HITS=3;
+  const FACE_CANDIDATE_MAX_GAP_MS=800;
+  const FACE_MIN_DETECT_SCORE=0.10;
+  const FACE_MIN_FAR_SCORE=0.12;
+  const FACE_MAX_ASPECT_RATIO=2.15;
+  const FACE_MIN_ASPECT_RATIO=0.46;
 
   const FACE_MODEL_URI = 'https://justadudewhohacks.github.io/face-api.js/models';
   const FACE_TARGET_HOLD_MS = 2800;
@@ -624,37 +625,26 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function choosePrimaryFace(detections){
     if(!Array.isArray(detections) || !detections.length) return null;
 
-    const maxDim=Math.max(camera.videoWidth||1,camera.videoHeight||1);
-
     if(faceTarget && isValidFaceBox(faceTarget.box)){
       let best=null;
       let bestDist=Infinity;
-      let bestIoU=0;
 
       for(const d of detections){
         if(!isValidFaceBox(d?.box)) continue;
         const dist=boxDistance(faceTarget.box,d.box);
-        const iou=boxIoU(faceTarget.box,d.box);
         if(dist<bestDist){
           bestDist=dist;
-          bestIoU=iou;
           best=d;
         }
       }
 
-      // A new unrelated box in empty space is NOT allowed to replace the
-      // physical target. It must overlap or remain spatially close.
       if(
         best &&
-        (
-          bestIoU>=0.06 ||
-          bestDist<=Math.max(120,maxDim*0.18)
-        )
+        bestDist <
+        Math.max(camera.videoWidth||1,camera.videoHeight||1)*0.28
       ){
         return best;
       }
-
-      return null;
     }
 
     const cx=(camera.videoWidth||1)/2;
@@ -664,15 +654,16 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       .filter(d=>isValidFaceBox(d?.box))
       .slice()
       .sort((a,b)=>{
-        const areaA=a.box.width*a.box.height;
-        const areaB=b.box.width*b.box.height;
+        const aa=a.box.width*a.box.height;
+        const ab=b.box.width*b.box.height;
+
         const ac=boxCenter(a.box);
         const bc=boxCenter(b.box);
+
         const da=ac?Math.hypot(ac.x-cx,ac.y-cy):Infinity;
         const db=bc?Math.hypot(bc.x-cx,bc.y-cy):Infinity;
-        const scoreA=Number(a.score)||0;
-        const scoreB=Number(b.score)||0;
-        return ((scoreB-scoreA)*140) + ((areaB-areaA)*0.01) + (da-db);
+
+        return (ab-aa)*0.01 + da-db;
       })[0] || null;
   }
 
@@ -886,11 +877,16 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       for(const c of faceCandidateTracks){
         const iou=boxIoU(c.box,d.box);
         const dist=boxDistance(c.box,d.box);
-        const limit=Math.max(70,Math.min(
+        const scale=Math.max(70,Math.min(
           Number(d.box.width)||120,
           Number(d.box.height)||120
-        )*0.62);
-        if((iou>=0.10 || dist<=limit) && dist<bestDistance){
+        ));
+        const limit=Math.max(90,scale*0.95);
+        const areaNow=Math.max(1,(Number(d.box.width)||1)*(Number(d.box.height)||1));
+        const areaPrev=Math.max(1,(Number(c.box.width)||1)*(Number(c.box.height)||1));
+        const areaRatio=areaNow/areaPrev;
+        const scaleStable=areaRatio>=0.42 && areaRatio<=2.35;
+        if((iou>=0.045 || (dist<=limit && scaleStable)) && dist<bestDistance){
           bestDistance=dist;
           best=c;
         }
@@ -902,14 +898,21 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           box:cloneBox(d.box),
           score:Number(d.score)||0,
           hits:1,
-          lastSeen:now
+          lastSeen:now,
+          prevBox:cloneBox(d.box),
+          velocity:0
         };
         faceCandidateTracks.push(best);
       }else{
-        best.box=lerpBox(best.box,d.box,0.58);
+        const prev=cloneBox(best.box);
+        const stepDist=prev && isValidFaceBox(d.box) ? boxDistance(prev,d.box) : 0;
+        const stepScale=Math.max(70,Math.min(Number(d.box.width)||120,Number(d.box.height)||120));
+        best.velocity=Math.round(stepDist);
+        best.box=lerpBox(best.box,d.box,0.62);
         best.score=Math.max(Number(best.score)||0,Number(d.score)||0);
-        best.hits=Math.min(8,(best.hits||0)+1);
+        best.hits=Math.min(10,(best.hits||0)+1);
         best.lastSeen=now;
+        best.prevBox=prev;
       }
 
       // The currently locked physical target is allowed through immediately
@@ -919,15 +922,24 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         faceTarget &&
         isValidFaceBox(faceTarget.box) &&
         (
-          boxIoU(faceTarget.box,d.box)>=0.04 ||
+          boxIoU(faceTarget.box,d.box)>=0.035 ||
           boxDistance(faceTarget.box,d.box)<=Math.max(
-            120,
-            Math.min(camera.videoWidth||720,camera.videoHeight||1280)*0.18
+            140,
+            Math.min(camera.videoWidth||720,camera.videoHeight||1280)*0.22
           )
         )
       );
 
-      if(continuousKnown || best.hits>=FACE_NEW_TARGET_CONFIRM_HITS){
+      // New targets need 3 temporally coherent detections. A candidate that
+      // jumps wildly between frames is rejected even if the detector score is high.
+      const temporalStable=Boolean(
+        best &&
+        best.hits>=FACE_NEW_TARGET_CONFIRM_HITS &&
+        (!best.velocity || best.velocity<=Math.max(120,
+          Math.min(Number(d.box.width)||180,Number(d.box.height)||180)*1.15))
+      );
+
+      if(continuousKnown || temporalStable){
         validated.push({
           ...d,
           box:cloneBox(d.box),
@@ -960,94 +972,109 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       return [];
     }
 
-    const now=performance.now();
-    const mapDetections=(detections)=>Array.isArray(detections)
-      ? detections.map(d=>{
-          const box=cloneBox(d?.box);
-          if(!box) return null;
-          return {
-            box,
-            score:Number.isFinite(Number(d?.score))?Number(d.score):0
-          };
-        }).filter(Boolean)
-      : [];
+    const detectorInput =
+      faceapi.TinyFaceDetectorOptions
+        ? new faceapi.TinyFaceDetectorOptions({
+            inputSize:192,
+            scoreThreshold:.08
+          })
+        : null;
+
+    if(!detectorInput){
+      return [];
+    }
 
     try{
-      // Fast pass for normal live tracking.
-      const fastInput=new faceapi.TinyFaceDetectorOptions({
-        inputSize:224,
-        scoreThreshold:.12
-      });
-      let mapped=mapDetections(await faceapi.detectAllFaces(camera,fastInput));
+      const detections =
+        await faceapi.detectAllFaces(
+          camera,
+          detectorInput
+        );
 
-      // Far/low-confidence faces need a higher-resolution confirmation even
-      // when the fast detector technically returns a box.
-      const best=mapped.slice().sort((a,b)=>Number(b.score||0)-Number(a.score||0))[0]||null;
-      const needsAdaptive=Boolean(
-        best && (
-          Number(best.score||0)<0.34 ||
-          Number(best.box?.width||0)<220 ||
-          Number(best.box?.height||0)<220
-        )
-      );
+      const mapped=Array.isArray(detections)
+        ? detections
+            .map(d=>{
+              const box=cloneBox(d?.box);
+              if(!box) return null;
 
-      if(
-        (!mapped.length || needsAdaptive) &&
-        now-faceLastAdaptiveAt>=650
-      ){
-        faceLastAdaptiveAt=now;
-        const adaptiveInput=new faceapi.TinyFaceDetectorOptions({
-          inputSize:320,
-          scoreThreshold:.16
-        });
-        const retry=mapDetections(await faceapi.detectAllFaces(camera,adaptiveInput));
-        if(retry.length){
-          // Prefer the higher-confidence/high-resolution result, but do not
-          // discard additional faces discovered by the fast pass.
-          if(!mapped.length){
-            mapped=retry;
-          }else{
-            const currentBest=mapped.slice().sort((a,b)=>Number(b.score||0)-Number(a.score||0))[0];
-            const retryBest=retry.slice().sort((a,b)=>Number(b.score||0)-Number(a.score||0))[0];
-            if(Number(retryBest?.score||0)>=Number(currentBest?.score||0)+0.035){
-              mapped=retry;
-            }
-          }
-        }
-      }
+              return {
+                box,
+                score:
+                  Number.isFinite(Number(d?.score))
+                    ? Number(d.score)
+                    : 0
+              };
+            })
+            .filter(Boolean)
+        : [];
 
-      const validated=validateFaceCandidates(mapped);
-
-      if(mapped.length && !validated.length && now-(window.__roboFaceRejectLog||0)>1200){
-        window.__roboFaceRejectLog=now;
-        devLog('FACE','candidate boxes rejected',{raw:mapped.length,reason:'score/aspect/temporal-validation'});
-      }
-
-      if(validated.length){
+      if(mapped.length){
         faceMisses=0;
-        mapped=validated;
-        const bestNow=mapped.slice().sort((a,b)=>Number(b.score||0)-Number(a.score||0))[0];
-        if(now-(window.__roboLastFaceDetectLog||0)>1200){
-          window.__roboLastFaceDetectLog=now;
-          devLog('FACE','detector pass',{
-            faces:mapped.length,
-            bestScore:Number(bestNow?.score||0).toFixed(3),
-            bestBox:bestNow?.box||null,
-            inputSize:bestNow?.box && Number(bestNow.box.width)<220 ? 320 : 224,
-            threshold:bestNow?.box && Number(bestNow.box.width)<220 ? 0.04 : 0.055
-          });
-        }
         return mapped;
       }
 
+      /*
+       * Adaptive retry:
+       * after repeated misses, give TinyFaceDetector a larger frame and a
+       * slightly more sensitive threshold. This is occasional, not every tick.
+       */
       faceMisses++;
+
+      const now=performance.now();
+
+      if(
+        faceMisses>=3 &&
+        now-faceLastAdaptiveAt>1200
+      ){
+        faceLastAdaptiveAt=now;
+
+        const adaptiveOptions =
+          new faceapi.TinyFaceDetectorOptions({
+            inputSize:224,
+            scoreThreshold:.05
+          });
+
+        const retry =
+          await faceapi.detectAllFaces(
+            camera,
+            adaptiveOptions
+          );
+
+        return Array.isArray(retry)
+          ? retry
+              .map(d=>{
+                const box=cloneBox(d?.box);
+                if(!box) return null;
+
+                return {
+                  box,
+                  score:
+                    Number.isFinite(Number(d?.score))
+                      ? Number(d.score)
+                      : 0
+                };
+              })
+              .filter(Boolean)
+          : [];
+      }
+
       return [];
 
     }catch(err){
-      devLog('FACE ERROR','detector pass failed',{
-        message:err?.message||String(err),
-        video:`${camera.videoWidth}x${camera.videoHeight}`
-      });
+
+      devLog(
+        'FACE ERROR',
+        'detector pass failed',
+        {
+          message:
+            err?.message ||
+            String(err),
+
+          video:
+            `${camera.videoWidth}x${camera.videoHeight}`
+        }
+      );
+
       return [];
     }
   }
@@ -1061,6 +1088,41 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     summary.classList.remove('show');
     summary.setAttribute('aria-hidden','true');
 }
+
+  function mapVideoBoxToOverlay(box){
+    if(!isValidFaceBox(box) || !camera.videoWidth || !camera.videoHeight) return null;
+
+    const shell= camera.closest('.camera') || camera.parentElement;
+    const rect=shell ? shell.getBoundingClientRect() : {
+      width:camera.clientWidth,
+      height:camera.clientHeight
+    };
+    const cw=Math.max(1,rect.width);
+    const ch=Math.max(1,rect.height);
+    const vw=Math.max(1,camera.videoWidth);
+    const vh=Math.max(1,camera.videoHeight);
+
+    // The camera preview uses object-fit: cover. Intrinsic face-api
+    // coordinates therefore cannot be mapped with a simple percentage:
+    // the portrait stream is cropped inside the 16:9 preview. Calculate
+    // the exact scale/crop first, then mirror horizontally for the front camera.
+    const scale=Math.max(cw/vw,ch/vh);
+    const renderedW=vw*scale;
+    const renderedH=vh*scale;
+    const cropX=(cw-renderedW)/2;
+    const cropY=(ch-renderedH)/2;
+
+    let x=Number(box.x)*scale+cropX;
+    let y=Number(box.y)*scale+cropY;
+    const w=Math.max(12,Number(box.width)*scale);
+    const h=Math.max(12,Number(box.height)*scale);
+
+    if(cameraFacingMode==='user'){
+      x=cw-(Number(box.x)+Number(box.width))*scale+cropX;
+    }
+
+    return {x,y,width:w,height:h,containerWidth:cw,containerHeight:ch};
+  }
 
   function updateFaceVisualElement(el, box, labelEl){
     if(!el || !isValidFaceBox(box) || !camera.videoWidth || !camera.videoHeight) return;
@@ -1179,18 +1241,23 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     faceTargetVisualElement=null;
     faceTargetVisualLabel=null;
     if(!camera.videoWidth || !camera.videoHeight) return;
-
-    const visualAge=stableTargetLastSeenAt ? performance.now()-stableTargetLastSeenAt : Infinity;
-    if(!faceTarget && visualAge>FACE_DISPLAY_HOLD_MS) return;
-    const allowAuthorityHold=Boolean(activeFaceTarget?.personId && isValidFaceBox(activeFaceTarget.box) && visualAge<=FACE_DISPLAY_HOLD_MS);
-    if(faceTarget && stableTargetLastSeenAt && visualAge>FACE_VISUAL_LOSS_MS && !allowAuthorityHold) return;
+    if(faceTarget && stableTargetLastSeenAt && performance.now()-stableTargetLastSeenAt>FACE_VISUAL_LOSS_MS){
+      return;
+    }
 
     const appendBox=(box,index,isTarget=false,labelText='UNKNOWN')=>{
       if(!isValidFaceBox(box)) return;
       const el=document.createElement('div');
       const targetIdentity=(
         isTarget
-          ? getAuthoritativeTargetName()
+          ? (
+              (activeFaceTarget.trackId===faceTarget?.trackId ? activeFaceTarget.name : null)||
+              faceTarget?.identity||
+              faceTarget?.lastKnownIdentity||
+              faceRecognitionIdentity||
+              getActivePerson()?.displayName||
+              null
+            )
           : (labelText&&labelText!=='FACE'?labelText:null)
       );
       const resolvedLabel=targetIdentity && targetIdentity!=='UNKNOWN' ? targetIdentity : 'UNKNOWN';
@@ -1211,10 +1278,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       if(faceTarget && d===faceTarget) return;
       appendBox(d.box,idx,false,d.identity||d.lastKnownIdentity||'UNKNOWN');
     });
-
-    const authoritativeBox=getAuthoritativeTargetBox();
-    if(authoritativeBox){
-      appendBox(authoritativeBox,0,true,getAuthoritativeTargetName());
+    if(faceSmoothBox && faceTarget){
+      appendBox(faceSmoothBox,0,true,faceTarget.identity||faceTarget.lastKnownIdentity||faceRecognitionIdentity||'UNKNOWN');
     }
     renderLiveTargetPanel();
   }
@@ -2283,12 +2348,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           // Gentle prediction from the last detector movement, capped tightly
           // so the box follows the real face without drifting.
           const predicted={
-            x:targetBox.x + faceVisualVelocity.x * dt * 0.55,
-            y:targetBox.y + faceVisualVelocity.y * dt * 0.55,
-            width:targetBox.width + faceVisualVelocity.width * dt * 0.25,
-            height:targetBox.height + faceVisualVelocity.height * dt * 0.25
+            x:targetBox.x + faceVisualVelocity.x * dt * 0.9,
+            y:targetBox.y + faceVisualVelocity.y * dt * 0.9,
+            width:targetBox.width + faceVisualVelocity.width * dt * 0.45,
+            height:targetBox.height + faceVisualVelocity.height * dt * 0.45
           };
-          const frameAlpha=0.62;
+          const frameAlpha=0.34;
           faceSmoothBox=lerpBox(faceSmoothBox,predicted,frameAlpha);
         }else{
           faceSmoothBox=targetBox;
@@ -2296,20 +2361,22 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         updateFaceVisualElement(faceTargetVisualElement,faceSmoothBox,faceTargetVisualLabel);
       }
 
-      if(!stableTargetLastSeenAt){ enforceTargetLifecycle(now); return; }
-      const age=now-stableTargetLastSeenAt;
-      if(faceTarget && age<=FACE_VISUAL_LOSS_MS) return;
-
-      // Physical target is visually gone. Clear the rendered target quickly,
-      // but retain identity authority internally for a short reacquisition.
-      if(age>FACE_VISUAL_LOSS_MS){
-        faceTarget=null;
-        faceSmoothBox=null;
-        faceTargetLostAt=faceTargetLostAt||now;
-        renderFaceTarget();
-        deriveLiveSocialFromFaces([]);
-        updatePerceptionFusion('visual-target-lost');
+      if(!faceTarget || !stableTargetLastSeenAt){
+        enforceTargetLifecycle(now);
+        return;
       }
+      const age=now-stableTargetLastSeenAt;
+      if(age<=FACE_VISUAL_LOSS_MS) return;
+
+      // The visible target belongs to the tracker. If no detector update has
+      // confirmed the face for the visual-loss window, clear the box promptly.
+      faceTarget=null;
+      faceSmoothBox=null;
+      faceDetections=[];
+      faceTargetLostAt=faceTargetLostAt||now;
+      renderFaceTarget();
+      deriveLiveSocialFromFaces([]);
+      updatePerceptionFusion('visual-target-lost');
       enforceTargetLifecycle(now);
     };
     faceVisualGuardFrame=requestAnimationFrame(guard);
@@ -2361,13 +2428,16 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       faceDetections=mapped;
 
-      // Keep v2.83 target lifecycle authority synchronized without changing the proven detector loop.
+      // Lifecycle is independent from recognition. Once the physical target has
+      // been gone beyond the reacquisition window, release the identity before
+      // considering any new face as a new target.
       enforceTargetLifecycle(performance.now());
+
       renderLiveTargetPanel();
       deriveLiveSocialFromFaces(mapped);
 
-      let primary=choosePrimaryFace(mapped);
-      primary=stabilizePrimaryFace(primary);
+      const primary=
+        choosePrimaryFace(mapped);
 
       if(primary){
         const detectionNow=performance.now();
@@ -2384,7 +2454,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             height:(primary.box.height-previousTarget.box.height)/dt
           };
           // Hard cap prevents a bad detector jump from creating visual drift.
-          const cap=2200;
+          const cap=1800;
           for(const k of ['x','y','width','height']){
             faceVisualVelocity[k]=Math.max(-cap,Math.min(cap,faceVisualVelocity[k]));
           }
@@ -2413,16 +2483,10 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
         faceTarget=primary;
         faceTargetLostAt=0;
-        // A single visible face is the same physical target unless the prior
-        // target was actually released. Detector box jitter/scale changes are
-        // not allowed to manufacture a new track id.
-        if(sameTrack && previousTarget?.trackId){
-          faceTarget.trackId=previousTarget.trackId;
-        }
         // Reuse the existing track/identity when the same physical target
         // returns inside the reacquire window. A genuine new target gets a
         // new tracking id and must be identified before its name changes.
-        if(sameTargetAfterGap && activeFaceTarget.trackId){
+        if(sameTargetAfterGap){
           faceTarget.trackId=activeFaceTarget.trackId;
           faceTarget.personId=activeFaceTarget.personId;
           faceTarget.identity=activeFaceTarget.name;
@@ -2456,10 +2520,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           }
 
           if(activeFaceTarget.personId && activeFaceTarget.name){
+            /* Existing target identity survives detector/reacquisition churn.
+             * A new name can only be established after releaseActiveFaceTarget(). */
             preserveActiveTargetIdentity(primary, wasReacquired ? 'target-reacquired-same-identity' : 'target-continuity');
           }else if(primary.lastKnownIdentity && primary.lastKnownPersonId){
             primary.identity=primary.lastKnownIdentity;
-            primary.personId=primary.lastKnownPersonId||null;
+            primary.personId=primary.lastKnownPersonId;
             primary.identityConfidence=primary.lastKnownIdentityConfidence||0;
             faceRecognitionIdentity=primary.lastKnownIdentity;
             faceRecognitionStatus='recognized';
@@ -2494,14 +2560,14 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
             lerpBox(
               faceSmoothBox,
               primary.box,
-              Math.min(0.62,FACE_SMOOTH_ALPHA+0.10)
+              FACE_SMOOTH_ALPHA
             );
         }
 
         if(faceRecognitionAvailable && getStoredFaceProfiles().length && !faceRecognitionInFlight){
           const nowPerf=performance.now();
           const activeRefreshMs=activeFaceTarget.personId ? ACTIVE_IDENTITY_REFRESH_MS : LIVE_IDENTITY_REFRESH_MS;
-          const recognitionDue=
+      const recognitionDue=
             targetChanged ||
             nowPerf-lastLiveIdentitySyncAt>=activeRefreshMs ||
             faceLastRecognitionAt<=0 ||
@@ -2512,11 +2578,12 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
           }
         }
 
-      }else if(faceTarget){
+      }else if(faceTarget || activeFaceTarget.personId){
 
         if(!faceTargetLostAt){
           faceTargetLostAt=
             performance.now();
+          devLog('FACE','target temporarily lost',{identity:activeFaceTarget.name||'UNKNOWN'});
         }
 
         /*
@@ -2525,22 +2592,17 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
          */
         const lostFor=performance.now()-faceTargetLostAt;
         if(lostFor>FACE_TARGET_HOLD_MS){
-          // The physical target is temporarily absent, but keep its identity
-          // authority alive long enough for detector reacquisition. Only after
-          // the longer lifecycle window is the person considered gone.
+          // The physical target is absent from the detector, but identity
+          // remains owned by the target lifecycle until the full release
+          // window expires. Reacquisition within that window keeps the name.
           faceTarget=null;
           faceSmoothBox=null;
-          if(lostFor>FACE_TARGET_REACQUIRE_WINDOW_MS){
-            releaseActiveFaceTarget('face-target-lost');
-            stableTargetGeneration++;
-            if(roboMemory){ renderMemoryIdentity(); renderMemoryDiagnostics(); }
-          }else{
-            if(activeFaceTarget.personId){
-              faceRecognitionIdentity=activeFaceTarget.name;
-              faceRecognitionStatus='recognized';
-            }
-            updatePerceptionFusion('target-temporarily-lost');
+          if(activeFaceTarget.personId){
+            faceRecognitionIdentity=activeFaceTarget.name;
+            faceRecognitionStatus='recognized';
           }
+          updatePerceptionFusion('target-temporarily-lost');
+          enforceTargetLifecycle(performance.now());
         }
       }
 
@@ -2559,7 +2621,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
       renderFaceTarget();
       faceDiag();
-      syncTargetAuthorityUI('face-update');
+      if(typeof syncTargetAuthorityUI==='function') syncTargetAuthorityUI('face-update');
       syncLiveIdentityAndSocial('face-update');
 
     }catch(err){
@@ -3250,7 +3312,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }catch(_){ }
     roboMemory=cloneDefaultMemory();
     memoryReady=true;
-    lastMemoryChange='factory-reset-v2.91';
+    lastMemoryChange='factory-reset-v2.92';
     faceRecognitionIdentity=null; faceRecognitionDistance=null; faceRecognitionStatus='not-enrolled';
     lastKnownPersonId=null; lastKnownPersonAt=0;
     stableTargetPersonId=null; stableTargetIdentity=null; stableTargetGeneration++; stableTargetSince=0; stableTargetHoldUntil=0;
@@ -3262,7 +3324,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(typeof faceDetections!=='undefined') faceDetections=[];
     renderMemoryIdentity(); renderMemoryDiagnostics();
     if(typeof renderFaceTarget==='function') renderFaceTarget();
-    devLog('MEMORY','v2.91 factory reset complete',{profiles:0,faceTemplates:0});
+    devLog('MEMORY','v2.92 factory reset complete',{profiles:0,faceTemplates:0});
     return true;
   }
 
@@ -6045,7 +6107,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.91 FACE FALSE-POSITIVE FIX · v2.81 PERCEPTION BASELINE",
+    "ROBO AIOS v2.94 FACE OVERLAY FIX · v2.81 PERCEPTION BASELINE",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -6177,7 +6239,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.91 FACE FALSE-POSITIVE FIX · v2.81 PERCEPTION BASELINE · Gemini AI brain");
+  log("ROBO AIOS v2.94 FACE OVERLAY FIX · v2.81 PERCEPTION BASELINE · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
