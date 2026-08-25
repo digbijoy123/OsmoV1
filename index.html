@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0f18">
-<title>ROBO AIOS v2.90 · CLEAN MEMORY TEST · v2.81 BASELINE</title>
+<title>ROBO AIOS v2.91 · FACE FALSE-POSITIVE FIX · v2.81 BASELINE</title>
 <style>
 :root{
   --void:#090d15;
@@ -223,11 +223,11 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     <div class="notch"></div>
     <section class="screen">
       <div class="scanlines"></div>
-      <div id="roboBuildMarker">ROBO v2.90 · TARGET AUTHORITY + FACE IDENTITY · MODULES 6+7.5+8</div>
+      <div id="roboBuildMarker">ROBO v2.91 · TARGET AUTHORITY + FACE IDENTITY · MODULES 6+7.5+8</div>
 
       <header class="hud">
         <div class="hudTop">
-          <div class="brand">ROBO <small>v2.90</small></div>
+          <div class="brand">ROBO <small>v2.91</small></div>
           <div class="stateChip" id="stateChip">CURIOUS</div>
           <div class="battery" id="battery">82%</div>
         </div>
@@ -296,7 +296,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
 <div class="devPage" id="devPage" aria-hidden="true">
   <div class="devHeader">
-    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.90 CLEAN MEMORY TEST · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">TARGET AUTHORITY EXPERIMENT · v2.81 perception baseline + stabilized face identity. Copy the log after testing.</div></div>
+    <div><div class="devKicker">ROBO AIOS</div><h2>Developer Diagnostics <span>v2.91 FACE FALSE-POSITIVE FIX · MODULE 7.5 + 6+7+8</span></h2><div class="devSub">TARGET AUTHORITY EXPERIMENT · v2.81 perception baseline + stabilized face identity. Copy the log after testing.</div></div>
     <button class="devClose" id="devClose">CLOSE</button>
   </div>
   <div class="devGrid">
@@ -498,6 +498,19 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   let identityChallengerBestDistance=Infinity;
   let identityChallengerLastMargin=0;
 
+  // v2.91: detector output is now treated as a candidate stream. A new
+  // physical target must survive temporal validation before it can create a
+  // visible box. This prevents TinyFaceDetector hallucinations in empty space
+  // from becoming targets, especially when the user moves far away.
+  let faceCandidateTracks=[];
+  let faceCandidateSequence=0;
+  const FACE_NEW_TARGET_CONFIRM_HITS=2;
+  const FACE_CANDIDATE_MAX_GAP_MS=330;
+  const FACE_MIN_DETECT_SCORE=0.14;
+  const FACE_MIN_FAR_SCORE=0.18;
+  const FACE_MAX_ASPECT_RATIO=1.85;
+  const FACE_MIN_ASPECT_RATIO=0.54;
+
   const FACE_MODEL_URI = 'https://justadudewhohacks.github.io/face-api.js/models';
   const FACE_TARGET_HOLD_MS = 2800;
   const FACE_VISUAL_LOSS_MS = 900;
@@ -611,26 +624,37 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
   function choosePrimaryFace(detections){
     if(!Array.isArray(detections) || !detections.length) return null;
 
+    const maxDim=Math.max(camera.videoWidth||1,camera.videoHeight||1);
+
     if(faceTarget && isValidFaceBox(faceTarget.box)){
       let best=null;
       let bestDist=Infinity;
+      let bestIoU=0;
 
       for(const d of detections){
         if(!isValidFaceBox(d?.box)) continue;
         const dist=boxDistance(faceTarget.box,d.box);
+        const iou=boxIoU(faceTarget.box,d.box);
         if(dist<bestDist){
           bestDist=dist;
+          bestIoU=iou;
           best=d;
         }
       }
 
+      // A new unrelated box in empty space is NOT allowed to replace the
+      // physical target. It must overlap or remain spatially close.
       if(
         best &&
-        bestDist <
-        Math.max(camera.videoWidth||1,camera.videoHeight||1)*0.28
+        (
+          bestIoU>=0.06 ||
+          bestDist<=Math.max(120,maxDim*0.18)
+        )
       ){
         return best;
       }
+
+      return null;
     }
 
     const cx=(camera.videoWidth||1)/2;
@@ -640,16 +664,15 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       .filter(d=>isValidFaceBox(d?.box))
       .slice()
       .sort((a,b)=>{
-        const aa=a.box.width*a.box.height;
-        const ab=b.box.width*b.box.height;
-
+        const areaA=a.box.width*a.box.height;
+        const areaB=b.box.width*b.box.height;
         const ac=boxCenter(a.box);
         const bc=boxCenter(b.box);
-
         const da=ac?Math.hypot(ac.x-cx,ac.y-cy):Infinity;
         const db=bc?Math.hypot(bc.x-cx,bc.y-cy):Infinity;
-
-        return (ab-aa)*0.01 + da-db;
+        const scoreA=Number(a.score)||0;
+        const scoreB=Number(b.score)||0;
+        return ((scoreB-scoreA)*140) + ((areaB-areaA)*0.01) + (da-db);
       })[0] || null;
   }
 
@@ -742,8 +765,8 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       faceBadge('FACE TRACKER ONLINE');
       devLog('FACE','tracker ready',{
         detector:'face-api TinyFaceDetector',
-        inputSize:192,
-        scoreThreshold:.08,
+        inputSize:224,
+        scoreThreshold:.12,
         video:
           `${camera.videoWidth||0}x${camera.videoHeight||0}`
       });
@@ -832,6 +855,98 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     }
   }
 
+  function faceBoxLooksPlausible(box,score){
+    if(!isValidFaceBox(box)) return false;
+    const w=Math.max(1,Number(box.width)||0);
+    const h=Math.max(1,Number(box.height)||0);
+    const ratio=w/h;
+    const vw=Math.max(1,Number(camera.videoWidth)||720);
+    const vh=Math.max(1,Number(camera.videoHeight)||1280);
+    const area=(w*h)/(vw*vh);
+    const minScore = Math.min(w,h)<150 ? FACE_MIN_FAR_SCORE : FACE_MIN_DETECT_SCORE;
+    if(!Number.isFinite(Number(score)) || Number(score)<minScore) return false;
+    if(ratio<FACE_MIN_ASPECT_RATIO || ratio>FACE_MAX_ASPECT_RATIO) return false;
+    // Reject detector hallucinations that claim most of the camera as a face.
+    if(area>0.62) return false;
+    return true;
+  }
+
+  function validateFaceCandidates(mapped){
+    const now=performance.now();
+    const source=Array.isArray(mapped)?mapped:[];
+
+    faceCandidateTracks=faceCandidateTracks.filter(c=>now-c.lastSeen<=FACE_CANDIDATE_MAX_GAP_MS);
+
+    const validated=[];
+    for(const d of source){
+      if(!faceBoxLooksPlausible(d.box,d.score)) continue;
+
+      let best=null;
+      let bestDistance=Infinity;
+      for(const c of faceCandidateTracks){
+        const iou=boxIoU(c.box,d.box);
+        const dist=boxDistance(c.box,d.box);
+        const limit=Math.max(70,Math.min(
+          Number(d.box.width)||120,
+          Number(d.box.height)||120
+        )*0.62);
+        if((iou>=0.10 || dist<=limit) && dist<bestDistance){
+          bestDistance=dist;
+          best=c;
+        }
+      }
+
+      if(!best){
+        best={
+          id:`candidate-${++faceCandidateSequence}`,
+          box:cloneBox(d.box),
+          score:Number(d.score)||0,
+          hits:1,
+          lastSeen:now
+        };
+        faceCandidateTracks.push(best);
+      }else{
+        best.box=lerpBox(best.box,d.box,0.58);
+        best.score=Math.max(Number(best.score)||0,Number(d.score)||0);
+        best.hits=Math.min(8,(best.hits||0)+1);
+        best.lastSeen=now;
+      }
+
+      // The currently locked physical target is allowed through immediately
+      // when the candidate is spatially continuous. New targets need two
+      // consecutive confirmations.
+      const continuousKnown=Boolean(
+        faceTarget &&
+        isValidFaceBox(faceTarget.box) &&
+        (
+          boxIoU(faceTarget.box,d.box)>=0.04 ||
+          boxDistance(faceTarget.box,d.box)<=Math.max(
+            120,
+            Math.min(camera.videoWidth||720,camera.videoHeight||1280)*0.18
+          )
+        )
+      );
+
+      if(continuousKnown || best.hits>=FACE_NEW_TARGET_CONFIRM_HITS){
+        validated.push({
+          ...d,
+          box:cloneBox(d.box),
+          candidateId:best.id,
+          detectionHits:best.hits
+        });
+      }
+    }
+
+    // Never expose duplicate overlapping hallucinations as separate people.
+    const deduped=[];
+    for(const d of validated.sort((a,b)=>(Number(b.score)||0)-(Number(a.score)||0))){
+      if(deduped.some(x=>boxIoU(x.box,d.box)>=0.35)) continue;
+      deduped.push(d);
+    }
+
+    return deduped;
+  }
+
   async function detectLocalFaceBoxes(){
     if(
       !faceEngineReady ||
@@ -861,7 +976,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
       // Fast pass for normal live tracking.
       const fastInput=new faceapi.TinyFaceDetectorOptions({
         inputSize:224,
-        scoreThreshold:.055
+        scoreThreshold:.12
       });
       let mapped=mapDetections(await faceapi.detectAllFaces(camera,fastInput));
 
@@ -883,7 +998,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         faceLastAdaptiveAt=now;
         const adaptiveInput=new faceapi.TinyFaceDetectorOptions({
           inputSize:320,
-          scoreThreshold:.04
+          scoreThreshold:.16
         });
         const retry=mapDetections(await faceapi.detectAllFaces(camera,adaptiveInput));
         if(retry.length){
@@ -901,8 +1016,16 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
         }
       }
 
-      if(mapped.length){
+      const validated=validateFaceCandidates(mapped);
+
+      if(mapped.length && !validated.length && now-(window.__roboFaceRejectLog||0)>1200){
+        window.__roboFaceRejectLog=now;
+        devLog('FACE','candidate boxes rejected',{raw:mapped.length,reason:'score/aspect/temporal-validation'});
+      }
+
+      if(validated.length){
         faceMisses=0;
+        mapped=validated;
         const bestNow=mapped.slice().sort((a,b)=>Number(b.score||0)-Number(a.score||0))[0];
         if(now-(window.__roboLastFaceDetectLog||0)>1200){
           window.__roboLastFaceDetectLog=now;
@@ -2532,6 +2655,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
     faceTickInFlight=false;
     faceDetections=[];
+    faceCandidateTracks=[];
     faceTarget=null;
     faceTargetLostAt=0;
     faceSmoothBox=null;
@@ -2731,7 +2855,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
      can create/update the currently visible person's identity without UI enrollment.
   */
   const MEMORY_STORAGE_KEY = 'robo_aios_memory_v2';
-  const FACTORY_RESET_V2_90_KEY = 'robo_aios_v2_90_factory_reset_done';
+  const FACTORY_RESET_V2_91_KEY = 'robo_aios_v2_91_factory_reset_done';
   const MEMORY_SCHEMA_VERSION = 2;
   const DEFAULT_PERSON = () => ({
     personId:'primary-user',
@@ -3115,18 +3239,18 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
 
   function factoryResetMemoryForV290(){
     try{
-      if(localStorage.getItem(FACTORY_RESET_V2_90_KEY)==='1') return false;
+      if(localStorage.getItem(FACTORY_RESET_V2_91_KEY)==='1') return false;
       const keys=[];
       for(let i=0;i<localStorage.length;i++){
         const k=localStorage.key(i);
         if(k && (k.startsWith('robo_aios_') || k.startsWith('robo_aios') || k==='roboMemory')) keys.push(k);
       }
       keys.forEach(k=>{try{localStorage.removeItem(k);}catch(_){}});
-      localStorage.setItem(FACTORY_RESET_V2_90_KEY,'1');
+      localStorage.setItem(FACTORY_RESET_V2_91_KEY,'1');
     }catch(_){ }
     roboMemory=cloneDefaultMemory();
     memoryReady=true;
-    lastMemoryChange='factory-reset-v2.90';
+    lastMemoryChange='factory-reset-v2.91';
     faceRecognitionIdentity=null; faceRecognitionDistance=null; faceRecognitionStatus='not-enrolled';
     lastKnownPersonId=null; lastKnownPersonAt=0;
     stableTargetPersonId=null; stableTargetIdentity=null; stableTargetGeneration++; stableTargetSince=0; stableTargetHoldUntil=0;
@@ -3138,7 +3262,7 @@ box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),inset 0 0 45px rgba(255,255,255,
     if(typeof faceDetections!=='undefined') faceDetections=[];
     renderMemoryIdentity(); renderMemoryDiagnostics();
     if(typeof renderFaceTarget==='function') renderFaceTarget();
-    devLog('MEMORY','v2.90 factory reset complete',{profiles:0,faceTemplates:0});
+    devLog('MEMORY','v2.91 factory reset complete',{profiles:0,faceTemplates:0});
     return true;
   }
 
@@ -5921,7 +6045,7 @@ $("#clearLogs").addEventListener("click",()=>{
 });
 $("#copyLogs").addEventListener("click",async()=>{
   const payload=[
-    "ROBO AIOS v2.90 CLEAN MEMORY TEST · v2.81 PERCEPTION BASELINE",
+    "ROBO AIOS v2.91 FACE FALSE-POSITIVE FIX · v2.81 PERCEPTION BASELINE",
     "Time: "+new Date().toISOString(),
     "URL: "+location.href,
     "User Agent: "+navigator.userAgent,
@@ -6053,7 +6177,7 @@ function hookRecognitionDiagnostics(r){
   /* ---------- Safe startup ---------- */
   setState("curious","curious · standing by");
   $("#battery").textContent="82%";
-  log("ROBO AIOS v2.90 CLEAN MEMORY TEST · v2.81 PERCEPTION BASELINE · Gemini AI brain");
+  log("ROBO AIOS v2.91 FACE FALSE-POSITIVE FIX · v2.81 PERCEPTION BASELINE · Gemini AI brain");
   log("Module 7.5 multi-person identity refresh online · live face-authoritative identity + name tags");
   log("3D floating emoji renderer online");
   log("camera OFF by default · tap starts camera immediately · microphone/STT independent");
